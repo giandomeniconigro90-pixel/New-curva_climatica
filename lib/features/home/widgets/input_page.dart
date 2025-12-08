@@ -1,10 +1,11 @@
 // lib/features/home/widgets/input_page.dart
 
+import 'dart:async'; // Import necessario per il Timer
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
-import '../../../services/weather_service.dart'; // Importa il servizio aggiornato
+import '../../../services/weather_service.dart';
 
 class InputPage extends StatefulWidget {
   final TextEditingController externalTempController;
@@ -47,11 +48,18 @@ class InputPage extends StatefulWidget {
 class _InputPageState extends State<InputPage> {
   String _systemMode = 'heating';
   bool _isLoadingWeather = false;
+  Timer? _longPressTimer;
 
   @override
   void initState() {
     super.initState();
     _loadSystemMode();
+  }
+
+  @override
+  void dispose() {
+    _stopContinuousUpdate(); // Ferma il timer se si chiude la pagina
+    super.dispose();
   }
 
   Future<void> _loadSystemMode() async {
@@ -63,11 +71,8 @@ class _InputPageState extends State<InputPage> {
     }
   }
 
-  // --- LOGICA METEO AGGIORNATA ---
   Future<void> _fetchAutomaticWeather() async {
     setState(() => _isLoadingWeather = true);
-
-    // Ora riceviamo un oggetto WeatherData (temp + cittÃ )
     final WeatherData? data = await WeatherService.getDailyAvgTemp();
 
     if (mounted) {
@@ -75,15 +80,13 @@ class _InputPageState extends State<InputPage> {
         _isLoadingWeather = false;
         if (data != null) {
           widget.externalTempController.text = data.temp.toStringAsFixed(1);
-
-          // Messaggio che include la CITTÃ€
           ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Row(
                   children: [
                     const Icon(Icons.location_on, color: Colors.white, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text("Meteo: ${data.locationName} (${data.temp}Â°C)")),
+                    Expanded(child: Text("Meteo: ${data.locationName} (${data.temp}°C)")),
                   ],
                 ),
                 behavior: SnackBarBehavior.floating,
@@ -157,6 +160,56 @@ class _InputPageState extends State<InputPage> {
     );
   }
 
+  // --- LOGICA AGGIORNAMENTO VALORI (0.1 step) ---
+  void _updateValue(TextEditingController controller, double delta, double min, double max) {
+    double? val = double.tryParse(controller.text.replaceAll(',', '.'));
+    val ??= min;
+    double newVal = val + delta;
+    newVal = newVal.clamp(min, max);
+
+    // Arrotondamento a 1 decimale per evitare imprecisioni float
+    newVal = (newVal * 10).round() / 10;
+
+    controller.text = newVal.toStringAsFixed(1);
+  }
+
+  // --- LOGICA PRESSIONE PROLUNGATA ---
+  void _startContinuousUpdate(TextEditingController controller, double delta, double min, double max) {
+    _updateValue(controller, delta, min, max); // Primo scatto immediato
+
+    // Attesa breve prima di partire veloce
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (_longPressTimer != null) return; // Evita doppi timer se rilasciato subito
+
+      _longPressTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+        _updateValue(controller, delta, min, max);
+      });
+    });
+  }
+
+  void _stopContinuousUpdate() {
+    _longPressTimer?.cancel();
+    _longPressTimer = null;
+  }
+
+  // Helper per creare il bottone smart (Tap & Long Press)
+  Widget _buildSmartButton({required IconData icon, required Color color, required VoidCallback onTap, required VoidCallback onLongPressStart, required VoidCallback onLongPressEnd}) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPressStart: (_) => onLongPressStart(),
+      onLongPressEnd: (_) => onLongPressEnd(),
+      onLongPressUp: onLongPressEnd, // Copre anche il rilascio
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.transparent, // Area cliccabile trasparente ma ampia
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Icon(icon, size: 24, color: color),
+      ),
+    );
+  }
+
   Widget _buildExternalDataCard({
     required String title,
     required IconData icon,
@@ -204,15 +257,39 @@ class _InputPageState extends State<InputPage> {
               ],
             ),
             const SizedBox(height: 4),
+
+            // ROTELLINA (Step 0.5)
             ThermostatDial(
               controller: controller,
               min: min,
               max: max,
-              step: 0.1,
+              step: 0.5,
               size: 130,
               suffix: suffix,
               activeColor: iconColor,
               useDynamicColor: false,
+            ),
+
+            // PULSANTI SMART (+/- 0.1 e Long Press)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildSmartButton(
+                  icon: Icons.remove,
+                  color: Colors.grey.shade400,
+                  onTap: () => _updateValue(controller, -0.1, min, max),
+                  onLongPressStart: () => _startContinuousUpdate(controller, -0.1, min, max),
+                  onLongPressEnd: _stopContinuousUpdate,
+                ),
+                const SizedBox(width: 40),
+                _buildSmartButton(
+                  icon: Icons.add,
+                  color: iconColor,
+                  onTap: () => _updateValue(controller, 0.1, min, max),
+                  onLongPressStart: () => _startContinuousUpdate(controller, 0.1, min, max),
+                  onLongPressEnd: _stopContinuousUpdate,
+                ),
+              ],
             ),
           ],
         ),
@@ -239,16 +316,40 @@ class _InputPageState extends State<InputPage> {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 6),
+
           ThermostatDial(
             controller: controller,
             min: 0,
             max: 45,
-            step: 0.1,
+            step: 0.5,
             size: 145,
-            suffix: 'Â°C',
+            suffix: '°C',
             useDynamicColor: true,
           ),
-          const SizedBox(height: 12),
+
+          // PULSANTI SMART
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildSmartButton(
+                icon: Icons.remove,
+                color: Colors.grey.shade400,
+                onTap: () => _updateValue(controller, -0.1, 0, 45),
+                onLongPressStart: () => _startContinuousUpdate(controller, -0.1, 0, 45),
+                onLongPressEnd: _stopContinuousUpdate,
+              ),
+              const SizedBox(width: 40),
+              _buildSmartButton(
+                icon: Icons.add,
+                color: Colors.blue,
+                onTap: () => _updateValue(controller, 0.1, 0, 45),
+                onLongPressStart: () => _startContinuousUpdate(controller, 0.1, 0, 45),
+                onLongPressEnd: _stopContinuousUpdate,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: Row(
@@ -286,7 +387,7 @@ class _InputPageState extends State<InputPage> {
                     icon: Icons.wb_sunny_rounded,
                     iconColor: Colors.orange,
                     controller: widget.externalTempController,
-                    suffix: 'Â°C',
+                    suffix: '°C',
                     min: -20,
                     max: 45,
                   ),
@@ -422,7 +523,7 @@ class ThermostatDial extends StatefulWidget {
     required this.controller,
     this.min = 0,
     this.max = 100,
-    this.step = 1,
+    this.step = 0.5,
     this.size = 150,
     this.suffix = '',
     this.activeColor = Colors.blue,

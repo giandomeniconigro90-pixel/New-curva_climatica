@@ -19,30 +19,36 @@ class AppStorage {
   static const String _modeKey = 'systemMode'; // 'heating' o 'cooling'
   static const String _costKey = 'costPerKwh';
 
-  // NUOVA CHIAVE AGGIUNTA
+  // Chiave orario notifica giornaliera
+  static const String _notificationTimeKey = 'notificationTime';
+
+  // Chiave inizializzazione app
   static const String _initKey = 'isInitialized';
 
-  static Future<void> init() async {
+  static Future init() async {
     await Hive.initFlutter();
     await Hive.openBox(_boxName);
-    // Registra l'adapter se necessario, ma qui stiamo usando un approccio ibrido Map/Object
   }
+
+  // === RECORDS ===
 
   static Future<List<DailyRecordDTO>> loadRecords() async {
     final box = await Hive.openBox(_boxName);
     final List stored = box.get(_recordsKey, defaultValue: []) as List;
-    // Ora DailyRecordDTO ha il metodo fromMap
-    return stored.map((e) => DailyRecordDTO.fromMap(Map<String, dynamic>.from(e as Map))).toList();
+    return stored
+        .map((e) => DailyRecordDTO.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList();
   }
 
-  static Future<void> saveRecords(List<DailyRecordDTO> records) async {
+  static Future saveRecords(List<DailyRecordDTO> records) async {
     final box = await Hive.openBox(_boxName);
-    // Ora DailyRecordDTO ha il metodo toMap
-    final List<Map<dynamic, dynamic>> data = records.map((r) => r.toMap()).toList();
+    final List<Map<String, dynamic>> data =
+    records.map((r) => Map<String, dynamic>.from(r.toMap())).toList();
     await box.put(_recordsKey, data);
   }
 
-  // --- GETTERS & SETTERS RISCALDAMENTO ---
+  // === RISCALDAMENTO ===
+
   static Future<double> getSlope({double defaultValue = 1.2}) async {
     final box = await Hive.openBox(_boxName);
     final value = box.get(_slopeKey);
@@ -57,17 +63,18 @@ class AppStorage {
     return (value as num).toDouble();
   }
 
-  static Future<void> saveSlope(double slope) async {
+  static Future saveSlope(double slope) async {
     final box = await Hive.openBox(_boxName);
     await box.put(_slopeKey, slope);
   }
 
-  static Future<void> saveOffset(double offset) async {
+  static Future saveOffset(double offset) async {
     final box = await Hive.openBox(_boxName);
     await box.put(_offsetKey, offset);
   }
 
-  // --- GETTERS & SETTERS RAFFRESCAMENTO ---
+  // === RAFFRESCAMENTO ===
+
   static Future<double> getCoolingSlope({double defaultValue = 0.5}) async {
     final box = await Hive.openBox(_boxName);
     final value = box.get(_coolingSlopeKey);
@@ -82,28 +89,30 @@ class AppStorage {
     return (value as num).toDouble();
   }
 
-  static Future<void> saveCoolingSlope(double slope) async {
+  static Future saveCoolingSlope(double slope) async {
     final box = await Hive.openBox(_boxName);
     await box.put(_coolingSlopeKey, slope);
   }
 
-  static Future<void> saveCoolingOffset(double offset) async {
+  static Future saveCoolingOffset(double offset) async {
     final box = await Hive.openBox(_boxName);
     await box.put(_coolingOffsetKey, offset);
   }
 
-  // --- GESTIONE MODALITA' ---
+  // === MODALITÀ SISTEMA ===
+
   static Future<String> getSystemMode() async {
     final box = await Hive.openBox(_boxName);
     return box.get(_modeKey, defaultValue: 'heating') as String;
   }
 
-  static Future<void> saveSystemMode(String mode) async {
+  static Future saveSystemMode(String mode) async {
     final box = await Hive.openBox(_boxName);
     await box.put(_modeKey, mode);
   }
 
-  // --- COSTO ENERGIA ---
+  // === COSTO ENERGIA ===
+
   static Future<double> getCostPerKwh({double defaultValue = 0.25}) async {
     final box = await Hive.openBox(_boxName);
     final value = box.get(_costKey);
@@ -111,13 +120,26 @@ class AppStorage {
     return (value as num).toDouble();
   }
 
-  static Future<void> saveCostPerKwh(double cost) async {
+  static Future saveCostPerKwh(double cost) async {
     final box = await Hive.openBox(_boxName);
     await box.put(_costKey, cost);
   }
 
-  // --- METODO MANCANTE AGGIUNTO ---
-  static Future<void> setAppInitialized() async {
+  // === NOTIFICHE ===
+
+  static Future<String?> getNotificationTime() async {
+    final box = await Hive.openBox(_boxName);
+    return box.get(_notificationTimeKey) as String?;
+  }
+
+  static Future saveNotificationTime(String time) async {
+    final box = await Hive.openBox(_boxName);
+    await box.put(_notificationTimeKey, time);
+  }
+
+  // === INIZIALIZZAZIONE APP ===
+
+  static Future setAppInitialized() async {
     final box = await Hive.openBox(_boxName);
     await box.put(_initKey, true);
   }
@@ -127,12 +149,12 @@ class AppStorage {
     return box.get(_initKey, defaultValue: false) as bool;
   }
 
-  static Future<void> resetCalibration() async {
+  static Future resetCalibration() async {
     final box = await Hive.openBox(_boxName);
     await box.delete(_slopeKey);
     await box.delete(_offsetKey);
     await box.delete(_coolingSlopeKey);
     await box.delete(_coolingOffsetKey);
-    await box.delete(_initKey); // Resettiamo anche l'inizializzazione
+    await box.delete(_initKey);
   }
 }

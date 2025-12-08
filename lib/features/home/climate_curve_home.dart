@@ -17,6 +17,8 @@ import 'utils/export_utils.dart';
 import 'widgets/input_page.dart';
 import 'widgets/results_page.dart';
 import 'widgets/help_page.dart';
+import '../../services/notification_service.dart';
+
 
 class ClimateCurveOfflineHome extends StatefulWidget {
   final double initialSlope;
@@ -71,6 +73,33 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     _loadFromHive();
   }
+
+  Future<void> _setNotificationTime() async {
+    final now = TimeOfDay.now();
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: now,
+    );
+    if (picked != null) {
+      final hh = picked.hour.toString().padLeft(2, '0');
+      final mm = picked.minute.toString().padLeft(2, '0');
+      final timeString = '$hh:$mm';
+
+      await AppStorage.saveNotificationTime(timeString);
+      await NotificationService.cancelAll();
+      await NotificationService.scheduleDailyReminder();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Notifica impostata alle $timeString'),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
 
   @override
   void dispose() {
@@ -713,42 +742,41 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
             Icon(isCooling ? Icons.ac_unit : Icons.local_fire_department, size: 18, color: Colors.white70),
             Switch(value: isCooling, activeColor: Colors.white, activeTrackColor: Colors.white24, inactiveThumbColor: Colors.white70, inactiveTrackColor: Colors.white10, trackOutlineColor: MaterialStateProperty.all(Colors.transparent), onChanged: (val) => _toggleMode(val)),
           ]),
+
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
             tooltip: 'Opzioni',
-            onSelected: (value) async { // Aggiunto async qui
+            onSelected: (value) async {
               if (value == 'csv') {
                 _exportCsv();
               } else if (value == 'pdf') {
                 _exportPdf();
               } else if (value == 'help') {
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HelpPage()));
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const HelpPage()),
+                );
               } else if (value == 'backup') {
                 _doBackup();
               } else if (value == 'restore') {
                 _doRestore();
-              } else if (value == 'test_notifica') {
-                // TEST NOTIFICA IMMEDIATO
-                await NotificationService.showImmediateTestNotification();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test notifica inviato!')));
-                }
+              } else if (value == 'notif_time') {
+                await _setNotificationTime();
               }
             },
+
             itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              // NUOVA VOCE TEST
+
               const PopupMenuItem(
-                value: 'test_notifica',
+                value: 'notif_time',
                 child: Row(
                   children: [
-                    Icon(Icons.notifications_active, size: 20, color: Colors.purple),
+                    Icon(Icons.alarm, size: 20, color: Colors.deepOrange),
                     SizedBox(width: 12),
-                    Text('Test Notifica Subito'),
+                    Text('Orario Notifica'),
                   ],
                 ),
               ),
               const PopupMenuDivider(),
-              // ...
               const PopupMenuItem(value: 'help', child: Row(children: [Icon(Icons.help_outline_rounded, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Guida Utente')])),
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_rounded, size: 20, color: Colors.red), SizedBox(width: 12), Text('Report PDF')])),
