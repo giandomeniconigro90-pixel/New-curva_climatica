@@ -1,18 +1,22 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.climasense">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- PERMESSI AGGIUNTI PER IL METEO / GEOLOCALIZZAZIONE -->
+    <!-- 🌐 INTERNET & GPS -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- (Se hai altri uses-permission, lasciali qui sopra o sotto, non cambia) -->
+    <!-- 🔔 NOTIFICHE OBBLIGATORIE -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
+        android:label="ClimaSense"
         android:name="${applicationName}"
-        android:label="climasense"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- Mantieni eventuali meta-data o activity che avevi già -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -22,17 +26,18 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
 
-            <!-- Questa intent-filter è quella classica Flutter -->
-            <intent-filter>
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <!-- Necessario per embedding v2 di Flutter -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-
 </manifest>

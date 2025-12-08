@@ -1,109 +1,147 @@
 // lib/services/notification_service.dart
-
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
-import 'hive_storage.dart'; // Import Hive
+import 'package:permission_handler/permission_handler.dart';
+import '../services/hive_storage.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
   FlutterLocalNotificationsPlugin();
 
-  static Future<void> init() async {
+  /// ✅ FIX DEFINITIVO ANDROID 13+
+  static Future init() async {
+    // Evita notifiche su desktop
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
     try {
+      // Timezone
       tz.initializeTimeZones();
-
-      // Fuso orario Italia (evita l'ora indietro di 1h)
-      try {
-        tz.setLocalLocation(tz.getLocation('Europe/Rome'));
-      } catch (_) {}
 
       const AndroidInitializationSettings androidSettings =
       AndroidInitializationSettings('@mipmap/ic_launcher');
-
       const InitializationSettings settings = InitializationSettings(
         android: androidSettings,
       );
+      await _notifications.initialize(settings);
 
-      await _notifications.initialize(
-        settings,
-        onDidReceiveNotificationResponse: (NotificationResponse response) {},
-      );
-
+      // ✅ PERMESSO ROBUSTO Android 13+
       if (Platform.isAndroid) {
-        final androidImpl = _notifications
-            .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-        await androidImpl?.requestNotificationsPermission();
+        final PermissionStatus status = await Permission.notification.request();
+        print('🔔 Permesso notifica: $status');
+        if (status.isGranted) {
+          print('✅ Permesso NOTIFICHE CONCESSO');
+        } else {
+          print('❌ Permesso NOTIFICHE NEGATO - Vai in Impostazioni > App > ClimaSense > Notifiche');
+        }
       }
+
+      print('🔔 Notifiche inizializzate ✅');
     } catch (e) {
-      print("⚠️ Errore Inizializzazione Notifiche: $e");
+      print('⚠️ Errore init notifiche: $e');
     }
   }
 
-  // === SCHEDULAZIONE CON ORA DA HIVE ===
-  static Future<void> scheduleDailyReminder() async {
+  /// Programma: TEST tra 2 minuti + giornaliero
+  static Future scheduleDailyReminder() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
     try {
-      final now = tz.TZDateTime.now(tz.local);
-
-      // Legge l'orario salvato, default 21:00
       final stored = await AppStorage.getNotificationTime();
-      final parts = (stored ?? '21:00').split(':');
-      final hour = int.parse(parts[0]);
-      final minute = int.parse(parts[1]);
+      final timeStr = stored ?? '21:00';
+      final parts = timeStr.split(':');
+      final hh = int.parse(parts[0]);
+      final mm = int.parse(parts[1]);
 
-      var scheduledDate = tz.TZDateTime(
-        tz.local,
-        now.year,
-        now.month,
-        now.day,
-        hour,
-        minute,
-      );
+      final now = tz.TZDateTime.now(tz.local);
+      print('🕐 Orario Hive: $timeStr - now: ${now.hour}:${now.minute}');
 
-      if (scheduledDate.isBefore(now)) {
-        scheduledDate = scheduledDate.add(const Duration(days: 1));
-      }
-
-      print('🔔 Ora locale: $now');
-      print('🔔 Notifica programmata per: $scheduledDate');
+      // TEST tra 2 minuti
+      final testTime = now.add(const Duration(minutes: 2));
+      print('🧪 TEST programmato per ${testTime.hour}:${testTime.minute}:${testTime.second}');
 
       const AndroidNotificationDetails androidDetails =
       AndroidNotificationDetails(
         'daily_reminder_channel',
-        'Promemoria Giornaliero',
-        channelDescription:
-        'Ti ricorda di inserire i dati della Pompa di Calore',
+        'Promemoria ClimaSense',
+        channelDescription: 'Ti ricorda di inserire i dati PdC',
         importance: Importance.max,
         priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+        enableVibration: true,
+        playSound: true,
+      );
+      const NotificationDetails details = NotificationDetails(android: androidDetails);
+
+      // Pulisci precedenti
+      await _notifications.cancelAll();
+
+      // 1) Test dopo 2 minuti
+      await _notifications.zonedSchedule(
+        999,
+        '🧪 PROVA 2 MINUTI',
+        'Se vedi questa notifica, lo scheduling funziona!',
+        testTime,
+        details,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+        UILocalNotificationDateInterpretation.absoluteTime,
       );
 
-      const NotificationDetails details =
-      NotificationDetails(android: androidDetails);
+      // 2) Notifica giornaliera
+      var dailyDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hh, mm);
+      if (dailyDate.isBefore(now)) {
+        dailyDate = dailyDate.add(const Duration(days: 1));
+      }
 
       await _notifications.zonedSchedule(
         0,
-        'ClimaSense ti aspetta 🌡️',
-        'Ricordati di registrare i dati di oggi per ottimizzare la curva!',
-        scheduledDate,
+        'ClimaSense 🌡️ $timeStr',
+        'Ricordati di inserire i dati di oggi!',
+        dailyDate,
         details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
         UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
+
+      print(
+          '✅ Programmate: TEST @ ${testTime.hour}:${testTime.minute}, DAILY @ ${dailyDate.day}/${dailyDate.month} ${dailyDate.hour}:${dailyDate.minute}');
     } catch (e) {
-      print("⚠️ Errore Schedulazione Notifiche: $e");
+      print('❌ Errore scheduleDailyReminder: $e');
     }
   }
 
-  static Future<void> cancelAll() async {
-    if (Platform.isWindows) return;
+  /// Test immediato (Menu → "TEST Notifica ORA")
+  static Future testNotification() async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'test_channel',
+      'Test ClimaSense',
+      channelDescription: 'Test notifiche',
+      importance: Importance.max,
+      priority: Priority.high,
+      icon: '@mipmap/ic_launcher',
+      enableVibration: true,
+      playSound: true,
+    );
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
+
+    await _notifications.show(
+      1,
+      '🧪 TEST NOTIFICA',
+      'Se vedi questa, tutto è configurato correttamente.',
+      details,
+    );
+    print('🔔 TEST immediato inviato ✅');
+  }
+
+  static Future cancelAll() async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
     await _notifications.cancelAll();
+    print('🔔 Tutte le notifiche cancellate');
   }
 }

@@ -1,57 +1,57 @@
 name: climasense
-description: App per l'ottimizzazione della curva climatica.
+description: App per l'ottimizzazione automatica della curva climatica Pompa di Calore.
 publish_to: 'none'
+
 version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
 
 dependencies:
   flutter:
     sdk: flutter
+  cupertino_icons: ^1.0.8
 
-  # --- CORE ---
-  cupertino_icons: ^1.0.2
+  # GRAFICI
+  fl_chart: ^0.69.0
 
-  # --- DATABASE & STORAGE ---
+  # DATABASE
   hive: ^2.2.3
   hive_flutter: ^1.1.0
-  path_provider: ^2.1.1
-  file_picker: ^8.1.4     # Per selezionare file (Restore)
-  share_plus: ^10.0.0    # Per "Salva dove vuoi" (Backup/Export)
 
-  # --- UI & GRAFICI ---
-  fl_chart: ^0.66.0
-  intl: ^0.19.0
+  # FILE SYSTEM
+  path_provider: ^2.1.4
+  file_picker: ^8.1.3
+  share_plus: ^10.0.3
 
-  # --- EXPORT & FILES ---
-  pdf: ^3.10.4
-  printing: ^5.11.0
+  # PDF EXPORT
+  pdf: ^3.11.1
+  printing: ^5.13.3
 
-  # --- METEO AUTOMATICO ---
-  geolocator: ^13.0.1
+  # METEO GPS
+  geolocator: ^13.0.2
   geocoding: ^3.0.0
-  http: ^1.2.0
+  http: ^1.2.2
 
-  # --- NOTIFICHE ---
-  flutter_local_notifications: ^17.2.2
-  timezone: ^0.9.2
-  # RIMOSSO: flutter_timezone (causa errori di compilazione con Android v2)
-
-  # --- PERMESSI ---
+  # ✅ NOTIFICHE COMPLETE
+  flutter_local_notifications: ^17.2.3
+  timezone: ^0.9.4
   permission_handler: ^11.3.1
+
+  # UTILITY
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-
-  # --- CODE GENERATION ---
-  build_runner: ^2.4.8
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.12
   hive_generator: ^2.0.1
 
 flutter:
   uses-material-design: true
 
   assets:
+    - assets/images/
     - assets/images/logo.png

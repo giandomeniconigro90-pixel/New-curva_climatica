@@ -2,11 +2,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import 'services/hive_storage.dart';
 import 'services/notification_service.dart'; // <--- IMPORT NOTIFICHE
 import 'features/splash/splash_screen.dart';
 
-Future<void> main() async {
+Future main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Inizializza Database
@@ -53,9 +54,22 @@ class OfflineClimateCurveApp extends StatelessWidget {
 
         // Font Theme Moderno
         textTheme: const TextTheme(
-          displayLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: -0.5, color: Color(0xFF1A1A1A)),
-          titleMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF263238)),
-          bodyMedium: TextStyle(fontSize: 15, color: Color(0xFF455A64), height: 1.5),
+          displayLarge: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -0.5,
+            color: Color(0xFF1A1A1A),
+          ),
+          titleMedium: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF263238),
+          ),
+          bodyMedium: TextStyle(
+            fontSize: 15,
+            color: Color(0xFF455A64),
+            height: 1.5,
+          ),
         ),
 
         // AppBar "Glassy" Flat
@@ -90,11 +104,24 @@ class OfflineClimateCurveApp extends StatelessWidget {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide(color: Colors.grey.withOpacity(0.1))),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: secondaryColor, width: 2)),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          floatingLabelStyle: const TextStyle(color: primaryColor, fontWeight: FontWeight.bold),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: Colors.grey.withOpacity(0.1)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: secondaryColor, width: 2),
+          ),
+          contentPadding:
+          const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          floatingLabelStyle: const TextStyle(
+            color: primaryColor,
+            fontWeight: FontWeight.bold,
+          ),
         ),
 
         // Button Theme
@@ -103,9 +130,15 @@ class OfflineClimateCurveApp extends StatelessWidget {
             backgroundColor: primaryColor,
             foregroundColor: Colors.white,
             elevation: 6,
-            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            padding:
+            const EdgeInsets.symmetric(horizontal: 32, vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 16,
+            ),
           ),
         ),
 
@@ -117,8 +150,13 @@ class OfflineClimateCurveApp extends StatelessWidget {
           shadowColor: Colors.black.withOpacity(0.1),
           indicatorColor: secondaryColor.withOpacity(0.2),
           iconTheme: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.selected)) return const IconThemeData(color: primaryColor, size: 26);
-            return IconThemeData(color: Colors.grey.shade400, size: 24);
+            if (states.contains(MaterialState.selected)) {
+              return const IconThemeData(color: primaryColor, size: 26);
+            }
+            return IconThemeData(
+              color: Colors.grey.shade400,
+              size: 24,
+            );
           }),
         ),
       ),
