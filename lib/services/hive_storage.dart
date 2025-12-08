@@ -17,7 +17,6 @@ class AppStorage {
 
   // Chiave Modalità Sistema
   static const String _modeKey = 'systemMode'; // 'heating' o 'cooling'
-
   static const String _costKey = 'costPerKwh';
 
   // NUOVA CHIAVE AGGIUNTA
@@ -25,40 +24,25 @@ class AppStorage {
 
   static Future<void> init() async {
     await Hive.initFlutter();
-
-    // REGISTRAZIONE ADAPTER FONDAMENTALE
-    Hive.registerAdapter(DailyRecordDTOAdapter());
-
     await Hive.openBox(_boxName);
+    // Registra l'adapter se necessario, ma qui stiamo usando un approccio ibrido Map/Object
   }
 
   static Future<List<DailyRecordDTO>> loadRecords() async {
     final box = await Hive.openBox(_boxName);
-    final List<dynamic> stored = box.get(_recordsKey, defaultValue: []) as List<dynamic>;
-
-    // Conversione sicura da Map a Oggetto
-    return stored.map((e) {
-      // Se per caso è stato salvato come oggetto Hive diretto
-      if (e is DailyRecordDTO) return e;
-      // Se è salvato come mappa (vecchie versioni o fallback)
-      return DailyRecordDTO.fromMap(Map<String, dynamic>.from(e as Map));
-    }).toList();
+    final List stored = box.get(_recordsKey, defaultValue: []) as List;
+    // Ora DailyRecordDTO ha il metodo fromMap
+    return stored.map((e) => DailyRecordDTO.fromMap(Map<String, dynamic>.from(e as Map))).toList();
   }
 
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = await Hive.openBox(_boxName);
-
-    // Salviamo direttamente gli oggetti ora che l'adapter è registrato
-    // (Oppure mantieni .map(r => r.toMap()).toList() se preferisci salvare JSON puro,
-    // ma con l'adapter registrato puoi salvare direttamente la lista 'records')
-
-    // Opzione A (Più robusta se hai usato toMap prima): Continua a salvare come Map
+    // Ora DailyRecordDTO ha il metodo toMap
     final List<Map<String, dynamic>> data = records.map((r) => r.toMap()).toList();
     await box.put(_recordsKey, data);
   }
 
   // --- GETTERS & SETTERS RISCALDAMENTO ---
-
   static Future<double> getSlope({double defaultValue = 1.2}) async {
     final box = await Hive.openBox(_boxName);
     final value = box.get(_slopeKey);
@@ -84,7 +68,6 @@ class AppStorage {
   }
 
   // --- GETTERS & SETTERS RAFFRESCAMENTO ---
-
   static Future<double> getCoolingSlope({double defaultValue = 0.5}) async {
     final box = await Hive.openBox(_boxName);
     final value = box.get(_coolingSlopeKey);
@@ -110,7 +93,6 @@ class AppStorage {
   }
 
   // --- GESTIONE MODALITA' ---
-
   static Future<String> getSystemMode() async {
     final box = await Hive.openBox(_boxName);
     return box.get(_modeKey, defaultValue: 'heating') as String;
@@ -122,7 +104,6 @@ class AppStorage {
   }
 
   // --- COSTO ENERGIA ---
-
   static Future<double> getCostPerKwh({double defaultValue = 0.25}) async {
     final box = await Hive.openBox(_boxName);
     final value = box.get(_costKey);
@@ -136,7 +117,6 @@ class AppStorage {
   }
 
   // --- METODO MANCANTE AGGIUNTO ---
-
   static Future<void> setAppInitialized() async {
     final box = await Hive.openBox(_boxName);
     await box.put(_initKey, true);

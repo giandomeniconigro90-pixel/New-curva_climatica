@@ -17,6 +17,8 @@ dependencies:
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path_provider: ^2.1.1
+  file_picker: ^8.0.0  # <--- NUOVO: Per selezionare il file di backup
+  share_plus: ^9.0.0   # <--- NUOVO: Per condividere il file JSON creato
 
   # --- UI & GRAFICI ---
   fl_chart: ^0.66.0
@@ -31,7 +33,7 @@ dependencies:
   geocoding: ^3.0.0
   http: ^1.2.0
 
-  # --- NOTIFICHE (Versione con fix per Android SDK recenti) ---
+  # --- NOTIFICHE ---
   flutter_local_notifications: ^17.2.2
   timezone: ^0.9.2
 
@@ -46,7 +48,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-  # --- ASSETS ---
   assets:
     - assets/images/logo.png
