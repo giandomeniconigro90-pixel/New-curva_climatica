@@ -14,6 +14,7 @@ Future<void> main() async {
 
   // Inizializza e programma Notifiche
   await NotificationService.init();
+  await NotificationService.showImmediateTestNotification();
   await NotificationService.scheduleDailyReminder();
 
   // Configura Stile Status Bar

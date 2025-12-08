@@ -38,7 +38,7 @@ class AppStorage {
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = await Hive.openBox(_boxName);
     // Ora DailyRecordDTO ha il metodo toMap
-    final List<Map<String, dynamic>> data = records.map((r) => r.toMap()).toList();
+    final List<Map<dynamic, dynamic>> data = records.map((r) => r.toMap()).toList();
     await box.put(_recordsKey, data);
   }
 

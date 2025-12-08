@@ -1,6 +1,7 @@
 // lib/models/daily_record_dto.dart
 
 import 'package:hive/hive.dart';
+import 'dart:convert';
 
 // NOTA: Rimuovi "part 'daily_record_dto.g.dart';" se presente
 
@@ -13,13 +14,13 @@ class DailyRecordDTO extends HiveObject {
   final double externalTemp;
 
   @HiveField(2)
-  final Map<String, double> internalTemps;
+  final Map internalTemps;
 
   @HiveField(3)
   final double consumption;
 
   @HiveField(4)
-  final Map<String, String> comfortRatings; // 'freddo', 'ok', 'caldo'
+  final Map comfortRatings; // 'freddo', 'ok', 'caldo'
 
   @HiveField(5)
   final String note;
@@ -36,19 +37,42 @@ class DailyRecordDTO extends HiveObject {
   // --- METODI MANCANTI AGGIUNTI ---
 
   // Converte da Mappa a Oggetto (per loadRecords)
-  factory DailyRecordDTO.fromMap(Map<String, dynamic> map) {
+  factory DailyRecordDTO.fromMap(Map map) {
     return DailyRecordDTO(
       dateIso: map['dateIso'] as String,
       externalTemp: (map['externalTemp'] as num).toDouble(),
-      internalTemps: Map<String, double>.from(map['internalTemps'] ?? {}),
+      internalTemps: Map.from(map['internalTemps'] ?? {}),
       consumption: (map['consumption'] as num).toDouble(),
-      comfortRatings: Map<String, String>.from(map['comfortRatings'] ?? {}),
+      comfortRatings: Map.from(map['comfortRatings'] ?? {}),
       note: map['note'] as String? ?? '',
     );
   }
 
   // Converte da Oggetto a Mappa (per saveRecords)
-  Map<String, dynamic> toMap() {
+  Map toMap() {
+    return {
+      'dateIso': dateIso,
+      'externalTemp': externalTemp,
+      'internalTemps': internalTemps,
+      'consumption': consumption,
+      'comfortRatings': comfortRatings,
+      'note': note,
+    };
+  }
+
+  // === NUOVI METODI PER BACKUP JSON ===
+  factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
+    return DailyRecordDTO(
+      dateIso: json['dateIso'] as String,
+      externalTemp: (json['externalTemp'] as num).toDouble(),
+      internalTemps: Map.from(json['internalTemps'] ?? {}),
+      consumption: (json['consumption'] as num).toDouble(),
+      comfortRatings: Map.from(json['comfortRatings'] ?? {}),
+      note: json['note'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
     return {
       'dateIso': dateIso,
       'externalTemp': externalTemp,

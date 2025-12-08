@@ -67,7 +67,7 @@ class _InputPageState extends State<InputPage> {
   Future<void> _fetchAutomaticWeather() async {
     setState(() => _isLoadingWeather = true);
 
-    // Ora riceviamo un oggetto WeatherData (temp + città)
+    // Ora riceviamo un oggetto WeatherData (temp + cittÃ )
     final WeatherData? data = await WeatherService.getDailyAvgTemp();
 
     if (mounted) {
@@ -76,14 +76,14 @@ class _InputPageState extends State<InputPage> {
         if (data != null) {
           widget.externalTempController.text = data.temp.toStringAsFixed(1);
 
-          // Messaggio che include la CITTÀ
+          // Messaggio che include la CITTÃ€
           ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Row(
                   children: [
                     const Icon(Icons.location_on, color: Colors.white, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text("Meteo: ${data.locationName} (${data.temp}°C)")),
+                    Expanded(child: Text("Meteo: ${data.locationName} (${data.temp}Â°C)")),
                   ],
                 ),
                 behavior: SnackBarBehavior.floating,
@@ -245,7 +245,7 @@ class _InputPageState extends State<InputPage> {
             max: 45,
             step: 0.1,
             size: 145,
-            suffix: '°C',
+            suffix: 'Â°C',
             useDynamicColor: true,
           ),
           const SizedBox(height: 12),
@@ -286,7 +286,7 @@ class _InputPageState extends State<InputPage> {
                     icon: Icons.wb_sunny_rounded,
                     iconColor: Colors.orange,
                     controller: widget.externalTempController,
-                    suffix: '°C',
+                    suffix: 'Â°C',
                     min: -20,
                     max: 45,
                   ),

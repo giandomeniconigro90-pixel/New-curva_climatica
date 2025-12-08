@@ -2,13 +2,16 @@
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:fl_chart/fl_chart.dart';
-
+import 'package:file_picker/file_picker.dart';
 import '../../models/daily_record_dto.dart';
 import '../../services/hive_storage.dart';
+import '../../services/notification_service.dart'; // IMPORT FONDAMENTALE PER NOTIFICHE
 import 'logic/curve_logic.dart';
 import 'utils/export_utils.dart';
 import 'widgets/input_page.dart';
@@ -32,7 +35,7 @@ class ClimateCurveOfflineHome extends StatefulWidget {
 class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   late PageController _pageController;
 
-  // Controllers per InputPage
+  // Controllers
   final TextEditingController _externalTempController = TextEditingController();
   final TextEditingController _consumptionController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
@@ -40,7 +43,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   final Map<String, String> _comfortRatings = {};
 
   List<DailyRecordDTO> _records = [];
-
   late double slope;
   late double offset;
   SystemMode _currentMode = SystemMode.heating;
@@ -53,18 +55,15 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
   int _currentPage = 0;
   int? _editingIndex;
-
   final GlobalKey _chartKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: _currentPage);
-
     slope = widget.initialSlope;
     offset = widget.initialOffset;
 
-    // Inizializza controllers stanze
     for (final room in ['Soggiorno/Cucina', 'Bagno PT', 'Cameretta Stefano', 'Camera Giochi', 'Camera Mamma e Papà', 'Bagno 1P']) {
       _internalTempControllers[room] = TextEditingController();
       _comfortRatings[room] = 'ok';
@@ -97,13 +96,11 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     final storedRecords = results[0] as List<DailyRecordDTO>;
     final modeStr = results[1] as String;
-
     _cachedHeatingSlope = results[2] as double;
     _cachedHeatingOffset = results[3] as double;
     _cachedCoolingSlope = results[4] as double;
     _cachedCoolingOffset = results[5] as double;
 
-    // FIX SICUREZZA: Reset offset estate se corrotto
     if (_cachedCoolingOffset >= 15.0) {
       _cachedCoolingOffset = 0.0;
       await AppStorage.saveCoolingOffset(0.0);
@@ -136,7 +133,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final Color color = _currentMode == SystemMode.heating
         ? Colors.orange.shade900.withOpacity(opacity)
         : Colors.lightBlue.shade800.withOpacity(opacity);
-
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
       statusBarColor: color,
       statusBarIconBrightness: Brightness.light,
@@ -145,8 +141,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
   void _toggleMode(bool value) {
     final newMode = value ? SystemMode.cooling : SystemMode.heating;
-
-    // Salva lo stato corrente prima di cambiare
     if (_currentMode == SystemMode.heating) {
       _cachedHeatingSlope = slope;
       _cachedHeatingOffset = offset;
@@ -181,10 +175,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   String _formatItalianDate(DateTime dt) {
-    final String day = dt.day.toString().padLeft(2, '0');
-    final String month = dt.month.toString().padLeft(2, '0');
-    final String year = dt.year.toString();
-    return '$day/$month/$year';
+    return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
   }
 
   void _clearFields({bool preFillFromLast = false}) {
@@ -207,7 +198,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     final DailyRecordDTO r = _records[index];
     _editingIndex = index;
-
     _externalTempController.text = r.externalTemp.toString();
     _consumptionController.text = r.consumption.toString();
     _noteController.text = r.note;
@@ -252,7 +242,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       externalTemp: double.tryParse(_externalTempController.text) ?? 0,
       internalTemps: internalTemps,
       consumption: double.tryParse(_consumptionController.text) ?? 0,
-      comfortRatings: Map.from(_comfortRatings),
+      comfortRatings: Map<String, String>.from(_comfortRatings),
       note: _noteController.text.trim(),
     );
 
@@ -264,8 +254,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       }
       _clearFields(preFillFromLast: true);
     });
-    _saveToHive();
 
+    _saveToHive();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dati salvati con successo!'), behavior: SnackBarBehavior.floating));
   }
 
@@ -281,7 +271,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   void _duplicateFromYesterday() {
     if (_records.isEmpty) return;
     final DailyRecordDTO last = _records.last;
-
     _externalTempController.text = last.externalTemp.toStringAsFixed(1);
     _consumptionController.text = last.consumption.toStringAsFixed(1);
     _noteController.text = last.note;
@@ -291,8 +280,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         _internalTempControllers[room]!.text = (value as num).toStringAsFixed(1);
       }
     });
-    _comfortRatings..clear()..addAll(last.comfortRatings.cast<String, String>());
 
+    _comfortRatings..clear()..addAll(last.comfortRatings.cast<String, String>());
     setState(() {
       _editingIndex = null;
       _currentPage = 0;
@@ -325,6 +314,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nessun dato da esportare!")));
       return;
     }
+
     try {
       final csv = ExportUtils.generateCsv(
         _records,
@@ -332,10 +322,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         offset: offset,
         mode: _currentMode,
       );
-      await ExportUtils.saveCsv(csv, 'ClimaSense_${DateTime.now().toString().split(' ')[0]}.csv');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("CSV esportato con successo!")));
-      }
+      // Salva dove vuoi via Share
+      await ExportUtils.shareCsv(csv, 'ClimaSense_${DateTime.now().toString().split(' ')[0]}.csv');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Errore export: $e")));
@@ -343,14 +331,13 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     }
   }
 
-  // === EXPORT PDF CON AUTOSCATTO GRAFICO ===
+  // === EXPORT PDF ===
   Future<void> _exportPdf() async {
     if (_records.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Nessun dato da esportare!")));
       return;
     }
 
-    // 1. Salva pagina attuale e vai al grafico
     final int originalPage = _currentPage;
     if (_currentPage != 2) {
       setState(() => _currentPage = 2);
@@ -363,8 +350,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     try {
       final chartImage = await _captureChart();
-      final finalImage = chartImage ?? await _captureChart(); // Riprova se nullo
-
+      final finalImage = chartImage ?? await _captureChart();
       final suggestion = computeOptimalCurveSuggestion(_records, slope, offset, _currentMode);
       final stats = computeCurveStats(_records);
 
@@ -377,11 +363,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         chartImage: finalImage,
         currentMode: _currentMode,
       );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).hideCurrentSnackBar();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("PDF generato con successo!")));
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Errore export PDF: $e")));
@@ -406,7 +387,93 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     }
   }
 
-  // === COSTRUZIONE PAGINA GRAFICO ===
+  // === BACKUP ===
+  Future<void> _doBackup() async {
+    try {
+      final backupJson = ExportUtils.generateBackupJson(
+        records: _records,
+        mode: _currentMode,
+        heatingSlope: _cachedHeatingSlope,
+        heatingOffset: _cachedHeatingOffset,
+        coolingSlope: _cachedCoolingSlope,
+        coolingOffset: _cachedCoolingOffset,
+      );
+
+      final date = DateTime.now().toIso8601String().split('T').first;
+      // Salva dove vuoi via Share
+      await ExportUtils.shareBackupJson(backupJson, 'ClimaSense_Backup_$date');
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore durante il backup: $e')));
+      }
+    }
+  }
+
+  Future<void> _doRestore() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+
+      if (result == null || result.files.single.path == null) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nessun file selezionato.')));
+        return;
+      }
+
+      final file = File(result.files.single.path!);
+      final jsonString = await file.readAsString();
+      final backupData = jsonDecode(jsonString);
+
+      if (backupData['metadata'] == null ||
+          backupData['metadata']['appName'] != 'ClimaSense' ||
+          backupData['settings'] == null ||
+          backupData['records'] == null) {
+        throw Exception("File di backup non valido o corrotto.");
+      }
+
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text("Conferma Ripristino"),
+          content: const Text("Sei sicuro di voler ripristinare i dati? L'operazione è irreversibile e sovrascriverà tutti i dati attuali."),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text("Annulla")),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text("CONFERMA", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true || !mounted) return;
+
+      final settings = backupData['settings'];
+      final recordsData = backupData['records'] as List;
+      final newRecords = recordsData.map((jsonData) => DailyRecordDTO.fromJson(jsonData)).toList();
+
+      await AppStorage.saveRecords(newRecords);
+      await AppStorage.saveSystemMode(settings['systemMode']);
+      await AppStorage.saveSlope((settings['heatingSlope'] as num).toDouble());
+      await AppStorage.saveOffset((settings['heatingOffset'] as num).toDouble());
+      await AppStorage.saveCoolingSlope((settings['coolingSlope'] as num).toDouble());
+      await AppStorage.saveCoolingOffset((settings['coolingOffset'] as num).toDouble());
+
+      await _loadFromHive();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Dati ripristinati con successo!')));
+      }
+
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore durante il ripristino: $e')));
+      }
+    }
+  }
+
   Widget _buildCurvePage(BuildContext context) {
     final suggestion = computeOptimalCurveSuggestion(_records, slope, offset, _currentMode);
     final isHeating = _currentMode == SystemMode.heating;
@@ -415,7 +482,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     double maxExt = isHeating ? 20 : 40;
     double minY = isHeating ? 25.0 : 5.0;
     double maxY = isHeating ? 65.0 : 25.0;
-
     final double unsafeZoneLimit = isHeating ? 35.0 : 15.0;
 
     final List<FlSpot> currentSpots = buildCurveSpots(
@@ -448,8 +514,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 16),
-
-              // WRAPPER PER SCREENSHOT
               RepaintBoundary(
                 key: _chartKey,
                 child: Container(
@@ -462,7 +526,6 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // TITOLO E LEGENDA
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -470,13 +533,9 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text('Curva Climatica', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
-                              Text(
-                                isHeating ? 'Inverno (Riscaldamento)' : 'Estate (Raffrescamento)',
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                              ),
+                              Text(isHeating ? 'Inverno (Riscaldamento)' : 'Estate (Raffrescamento)', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
                             ],
                           ),
-                          // Legenda compatta
                           Row(
                             children: [
                               _buildLegendItem('Attuale', Colors.blue.shade700, false),
@@ -489,47 +548,29 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                         ],
                       ),
                       const SizedBox(height: 24),
-
-                      // GRAFICO INTERATTIVO
                       AspectRatio(
                         aspectRatio: 1.4,
                         child: LineChart(
                           LineChartData(
-                            minX: minExt,
-                            maxX: maxExt,
-                            minY: minY,
-                            maxY: maxY,
-                            // 1. GESTIONE TOUCH E TOOLTIP AGGIORNATA (FIXED)
+                            minX: minExt, maxX: maxExt, minY: minY, maxY: maxY,
                             lineTouchData: LineTouchData(
                               handleBuiltInTouches: true,
                               touchTooltipData: LineTouchTooltipData(
-                                tooltipBgColor: Colors.blueGrey.shade800, // <--- NUOVA PROPRIETÀ
+                                tooltipBgColor: Colors.blueGrey.shade800,
                                 getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
                                   return touchedBarSpots.map((barSpot) {
-                                    final flSpot = barSpot;
-                                    return LineTooltipItem(
-                                      'Est: ${flSpot.x.toInt()}°C \nMandata: ${flSpot.y.toStringAsFixed(1)}°C',
-                                      const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                                    );
+                                    return LineTooltipItem('Est: ${barSpot.x.toInt()}°C \nMandata: ${barSpot.y.toStringAsFixed(1)}°C', const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12));
                                   }).toList();
                                 },
                               ),
                             ),
-                            // 2. ZONE DI SFONDO (PERICOLO/LIMITI)
                             rangeAnnotations: RangeAnnotations(
                               horizontalRangeAnnotations: [
-                                HorizontalRangeAnnotation(
-                                  y1: minY, // Parte dal basso
-                                  y2: unsafeZoneLimit,
-                                  color: Colors.red.withOpacity(0.10),
-                                ),
+                                HorizontalRangeAnnotation(y1: minY, y2: unsafeZoneLimit, color: Colors.red.withOpacity(0.10)),
                               ],
                             ),
                             gridData: FlGridData(
-                              show: true,
-                              drawVerticalLine: true,
-                              horizontalInterval: 5,
-                              verticalInterval: 5,
+                              show: true, drawVerticalLine: true, horizontalInterval: 5, verticalInterval: 5,
                               getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.1), strokeWidth: 1),
                               getDrawingVerticalLine: (value) => FlLine(color: Colors.grey.withOpacity(0.1), strokeWidth: 1),
                             ),
@@ -537,67 +578,36 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                               leftTitles: AxisTitles(
                                 axisNameWidget: const Text("Temp. Mandata Acqua (°C)", style: TextStyle(fontSize: 10, color: Colors.grey)),
                                 axisNameSize: 20,
-                                sideTitles: SideTitles(
-                                    showTitles: true,
-                                    reservedSize: 35,
-                                    interval: 5,
-                                    getTitlesWidget: (value, meta) => Text('${value.toInt()}', style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))
-                                ),
+                                sideTitles: SideTitles(showTitles: true, reservedSize: 35, interval: 5, getTitlesWidget: (value, meta) => Text('${value.toInt()}', style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))),
                               ),
                               bottomTitles: AxisTitles(
                                 axisNameWidget: const Text("Temp. Esterna (°C)", style: TextStyle(fontSize: 10, color: Colors.grey)),
                                 axisNameSize: 20,
-                                sideTitles: SideTitles(
-                                  showTitles: true,
-                                  interval: 5,
-                                  getTitlesWidget: (value, meta) => Padding(
-                                      padding: const EdgeInsets.only(top: 6.0),
-                                      child: Text('${value.toInt()}', style: const TextStyle(fontSize: 11, color: Colors.grey))
-                                  ),
-                                ),
+                                sideTitles: SideTitles(showTitles: true, interval: 5, getTitlesWidget: (value, meta) => Padding(padding: const EdgeInsets.only(top: 6.0), child: Text('${value.toInt()}', style: const TextStyle(fontSize: 11, color: Colors.grey)))),
                               ),
                               topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                               rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                             ),
                             borderData: FlBorderData(show: true, border: Border.all(color: Colors.grey.shade300)),
                             lineBarsData: [
-                              // Linea Attuale
                               LineChartBarData(
-                                spots: currentSpots,
-                                isCurved: true,
-                                color: Colors.blue.shade700,
-                                barWidth: 4,
-                                isStrokeCapRound: true,
-                                dotData: const FlDotData(show: false),
-                                belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.05)),
+                                spots: currentSpots, isCurved: true, color: Colors.blue.shade700, barWidth: 4, isStrokeCapRound: true, dotData: const FlDotData(show: false), belowBarData: BarAreaData(show: true, color: Colors.blue.withOpacity(0.05)),
                               ),
-                              // Linea AI (se esiste)
                               if (suggestedSpots != null)
                                 LineChartBarData(
-                                  spots: suggestedSpots,
-                                  isCurved: true,
-                                  color: Colors.green,
-                                  barWidth: 3,
-                                  dashArray: [6, 6],
-                                  dotData: const FlDotData(show: false),
+                                  spots: suggestedSpots, isCurved: true, color: Colors.green, barWidth: 3, dashArray: [6, 6], dotData: const FlDotData(show: false),
                                 ),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 16),
-                      // TESTO ESPLICATIVO ZONA ROSSA
                       Row(
                         children: [
                           Container(width: 12, height: 12, color: Colors.red.withOpacity(0.1)),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              isHeating
-                                  ? "Zona Rossa (<35°C): Efficienza ridotta per Ventilconvettori."
-                                  : "Zona Rossa (<15°C): Alto rischio condensa sui pavimenti.",
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
-                            ),
+                            child: Text(isHeating ? "Zona Rossa (<35°C): Efficienza ridotta per Ventilconvettori." : "Zona Rossa (<15°C): Alto rischio condensa sui pavimenti.", style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic)),
                           ),
                         ],
                       ),
@@ -616,14 +626,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   Widget _buildLegendItem(String text, Color color, bool isDashed) {
     return Row(
       children: [
-        if (isDashed)
-          Row(children: [
-            Container(width: 6, height: 3, color: color),
-            const SizedBox(width: 2),
-            Container(width: 6, height: 3, color: color),
-          ])
-        else
-          Container(width: 14, height: 3, color: color),
+        if (isDashed) Row(children: [Container(width: 6, height: 3, color: color), const SizedBox(width: 2), Container(width: 6, height: 3, color: color)]) else Container(width: 14, height: 3, color: color),
         const SizedBox(width: 6),
         Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade700)),
       ],
@@ -636,9 +639,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final stats = computeCurveStats(_records);
     final bool isCooling = _currentMode == SystemMode.cooling;
     final double opacity = 0.5;
-    final Color targetColor = isCooling
-        ? Colors.lightBlue.shade800.withOpacity(opacity)
-        : Colors.orange.shade900.withOpacity(opacity);
+    final Color targetColor = isCooling ? Colors.lightBlue.shade800.withOpacity(opacity) : Colors.orange.shade900.withOpacity(opacity);
 
     final List<Widget> pages = [
       InputPage(
@@ -694,147 +695,84 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-            child: Container(color: Colors.transparent),
-          ),
-        ),
+        flexibleSpace: ClipRect(child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5), child: Container(color: Colors.transparent))),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // LOGO DEL BRAND
             Container(
-              width: 34,
-              height: 34,
-              margin: const EdgeInsets.only(right: 10),
-              decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 6, offset: const Offset(0, 2))
-                  ]
-              ),
+              width: 34, height: 34, margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(color: Colors.white, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 6, offset: const Offset(0, 2))]),
               padding: const EdgeInsets.all(2),
-              child: ClipOval(
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Icon(Icons.thermostat_rounded, color: targetColor, size: 20);
-                  },
-                ),
-              ),
+              child: ClipOval(child: Image.asset('assets/images/logo.png', fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => Icon(Icons.thermostat_rounded, color: targetColor, size: 20))),
             ),
-            Text(
-              isCooling ? 'ClimaSense Estate' : 'ClimaSense Inverno',
-              style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5
-              ),
-            ),
+            Text(isCooling ? 'ClimaSense Estate' : 'ClimaSense Inverno', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
           ],
         ),
         actions: [
-          Row(
-            children: [
-              Icon(isCooling ? Icons.ac_unit : Icons.local_fire_department, size: 18, color: Colors.white70),
-              Switch(
-                value: isCooling,
-                activeColor: Colors.white,
-                activeTrackColor: Colors.white24,
-                inactiveThumbColor: Colors.white70,
-                inactiveTrackColor: Colors.white10,
-                trackOutlineColor: MaterialStateProperty.all(Colors.transparent),
-                onChanged: (val) => _toggleMode(val),
-              ),
-            ],
-          ),
+          Row(children: [
+            Icon(isCooling ? Icons.ac_unit : Icons.local_fire_department, size: 18, color: Colors.white70),
+            Switch(value: isCooling, activeColor: Colors.white, activeTrackColor: Colors.white24, inactiveThumbColor: Colors.white70, inactiveTrackColor: Colors.white10, trackOutlineColor: MaterialStateProperty.all(Colors.transparent), onChanged: (val) => _toggleMode(val)),
+          ]),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded),
             tooltip: 'Opzioni',
-            onSelected: (value) {
+            onSelected: (value) async { // Aggiunto async qui
               if (value == 'csv') {
                 _exportCsv();
               } else if (value == 'pdf') {
                 _exportPdf();
               } else if (value == 'help') {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HelpPage()));
+              } else if (value == 'backup') {
+                _doBackup();
+              } else if (value == 'restore') {
+                _doRestore();
+              } else if (value == 'test_notifica') {
+                // TEST NOTIFICA IMMEDIATO
+                await NotificationService.showImmediateTestNotification();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Test notifica inviato!')));
+                }
               }
             },
-            itemBuilder: (BuildContext context) => [
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              // NUOVA VOCE TEST
               const PopupMenuItem(
-                value: 'help',
+                value: 'test_notifica',
                 child: Row(
                   children: [
-                    Icon(Icons.help_outline_rounded, size: 20, color: Colors.blueGrey),
+                    Icon(Icons.notifications_active, size: 20, color: Colors.purple),
                     SizedBox(width: 12),
-                    Text('Guida Utente'),
+                    Text('Test Notifica Subito'),
                   ],
                 ),
               ),
               const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'pdf',
-                child: Row(
-                  children: [
-                    Icon(Icons.picture_as_pdf_rounded, size: 20, color: Colors.red),
-                    SizedBox(width: 12),
-                    Text('Report PDF'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'csv',
-                child: Row(
-                  children: [
-                    Icon(Icons.table_chart_rounded, size: 20, color: Colors.green),
-                    SizedBox(width: 12),
-                    Text('Esporta CSV'),
-                  ],
-                ),
-              ),
+              // ...
+              const PopupMenuItem(value: 'help', child: Row(children: [Icon(Icons.help_outline_rounded, size: 20, color: Colors.blueGrey), SizedBox(width: 12), Text('Guida Utente')])),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'pdf', child: Row(children: [Icon(Icons.picture_as_pdf_rounded, size: 20, color: Colors.red), SizedBox(width: 12), Text('Report PDF')])),
+              const PopupMenuItem(value: 'csv', child: Row(children: [Icon(Icons.table_chart_rounded, size: 20, color: Colors.green), SizedBox(width: 12), Text('Esporta CSV')])),
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'backup', child: Row(children: [Icon(Icons.backup_rounded, size: 20, color: Colors.blueAccent), SizedBox(width: 12), Text('Esegui Backup')])),
+              const PopupMenuItem(value: 'restore', child: Row(children: [Icon(Icons.restore_page_rounded, size: 20, color: Colors.orangeAccent), SizedBox(width: 12), Text('Ripristina da Backup')])),
             ],
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isCooling
-                ? [Colors.lightBlue.shade50, Colors.white]
-                : [const Color(0xFFFFF3E0), Colors.white],
-          ),
-        ),
-        child: SafeArea(
-          child: PageView(
-            controller: _pageController,
-            onPageChanged: _onPageChanged,
-            children: pages,
-          ),
-        ),
+        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: isCooling ? [Colors.lightBlue.shade50, Colors.white] : [const Color(0xFFFFF3E0), Colors.white])),
+        child: SafeArea(child: PageView(controller: _pageController, onPageChanged: _onPageChanged, children: pages)),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentPage,
         onDestinationSelected: _onNavDestinationSelected,
         backgroundColor: Colors.white.withOpacity(0.9),
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.edit_calendar_rounded),
-            label: 'Registra',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_rounded),
-            label: 'AI & Storico',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.show_chart_rounded),
-            label: 'Grafico',
-          ),
+          NavigationDestination(icon: Icon(Icons.edit_calendar_rounded), label: 'Registra'),
+          NavigationDestination(icon: Icon(Icons.auto_awesome_rounded), label: 'AI & Storico'),
+          NavigationDestination(icon: Icon(Icons.show_chart_rounded), label: 'Grafico'),
         ],
       ),
     );
