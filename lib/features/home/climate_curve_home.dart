@@ -192,6 +192,12 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final Color color = _currentMode == SystemMode.heating
         ? Colors.orange.shade900.withOpacity(opacity)
         : Colors.lightBlue.shade800.withOpacity(opacity);
+
+    // ✅ FIX: Switch pulito solo inverno
+    final Color switchTrackColor = _currentMode == SystemMode.heating
+        ? Colors.transparent
+        : Colors.white.withOpacity(0.3);
+
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
       statusBarColor: color,
       statusBarIconBrightness: Brightness.light,
@@ -837,6 +843,9 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final Color targetColor = isCooling
         ? Colors.lightBlue.shade800.withOpacity(opacity)
         : Colors.orange.shade900.withOpacity(opacity);
+    final Color appBarColor = isCooling
+        ? Colors.lightBlue.shade700.withOpacity(0.85)
+        : Colors.orange.shade400.withOpacity(0.85);
 
     final List<Widget> pages = [
       InputPage(
@@ -890,7 +899,7 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: targetColor,
+        backgroundColor: appBarColor,
         foregroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
@@ -937,17 +946,43 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         actions: [
           Row(
             children: [
-              Icon(isCooling ? Icons.ac_unit : Icons.local_fire_department,
-                  size: 18, color: Colors.white70),
-              Switch(
-                value: isCooling,
-                activeColor: Colors.white,
-                activeTrackColor: Colors.white24,
-                inactiveThumbColor: Colors.white70,
-                inactiveTrackColor: Colors.white10,
-                onChanged: _toggleMode,
+              Icon(
+                isCooling ? Icons.ac_unit : Icons.local_fire_department,
+                size: 29
+                ,
+                color: Colors.white70,
               ),
-              PopupMenuButton(
+              const SizedBox(width: 6),
+              // Fake switch custom
+              GestureDetector(
+                onTap: () => _toggleMode(!isCooling),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 54,
+                  height: 25,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: isCooling
+                        ? Colors.white.withOpacity(0.35)
+                        : Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Align(
+                    alignment:
+                    isCooling ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert_rounded),
                 tooltip: 'Opzioni',
                 onSelected: (value) async {
@@ -980,7 +1015,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'test_notification',
                     child: Row(
                       children: [
-                        Icon(Icons.notifications_active, color: Colors.green, size: 20),
+                        Icon(Icons.notifications_active,
+                            color: Colors.green, size: 20),
                         SizedBox(width: 12),
                         Text('TEST Notifica ORA'),
                       ],
@@ -990,7 +1026,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'notif_time',
                     child: Row(
                       children: [
-                        Icon(Icons.alarm, color: Colors.deepOrange, size: 20),
+                        Icon(Icons.alarm,
+                            color: Colors.deepOrange, size: 20),
                         SizedBox(width: 12),
                         Text('Orario Notifica'),
                       ],
@@ -1001,7 +1038,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'help',
                     child: Row(
                       children: [
-                        Icon(Icons.help_outline_rounded, color: Colors.blueGrey, size: 20),
+                        Icon(Icons.help_outline_rounded,
+                            color: Colors.blueGrey, size: 20),
                         SizedBox(width: 12),
                         Text('Guida Utente'),
                       ],
@@ -1012,7 +1050,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'pdf',
                     child: Row(
                       children: [
-                        Icon(Icons.picture_as_pdf_rounded, color: Colors.red, size: 20),
+                        Icon(Icons.picture_as_pdf_rounded,
+                            color: Colors.red, size: 20),
                         SizedBox(width: 12),
                         Text('Report PDF'),
                       ],
@@ -1022,7 +1061,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'csv',
                     child: Row(
                       children: [
-                        Icon(Icons.table_chart_rounded, color: Colors.green, size: 20),
+                        Icon(Icons.table_chart_rounded,
+                            color: Colors.green, size: 20),
                         SizedBox(width: 12),
                         Text('Esporta CSV'),
                       ],
@@ -1033,7 +1073,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'backup',
                     child: Row(
                       children: [
-                        Icon(Icons.backup_rounded, color: Colors.blueAccent, size: 20),
+                        Icon(Icons.backup_rounded,
+                            color: Colors.blueAccent, size: 20),
                         SizedBox(width: 12),
                         Text('Esegui Backup'),
                       ],
@@ -1043,7 +1084,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     value: 'restore',
                     child: Row(
                       children: [
-                        Icon(Icons.restore_page_rounded, color: Colors.orangeAccent, size: 20),
+                        Icon(Icons.restore_page_rounded,
+                            color: Colors.orangeAccent, size: 20),
                         SizedBox(width: 12),
                         Text('Ripristina da Backup'),
                       ],
@@ -1055,6 +1097,8 @@ class _ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
             ],
           ),
         ],
+
+
       ),
       body: Container(
         decoration: BoxDecoration(
