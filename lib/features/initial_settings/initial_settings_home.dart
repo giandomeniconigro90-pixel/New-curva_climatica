@@ -9,7 +9,7 @@ class InitialSettingsHome extends StatefulWidget {
   const InitialSettingsHome({super.key});
 
   @override
-  State createState() => _InitialSettingsHomeState();
+  State<InitialSettingsHome> createState() => _InitialSettingsHomeState();
 }
 
 class _InitialSettingsHomeState extends State<InitialSettingsHome> {
@@ -81,7 +81,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
                   child: const Icon(Icons.tune_rounded, size: 48, color: Colors.teal),
                 ),
                 const SizedBox(height: 24),
-
                 const Text(
                   'Calibrazione Impianto',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
@@ -231,7 +230,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
 }
 
 // --- WIDGET MANOPOLA (Copiato da input_page.dart per indipendenza) ---
-
 class ThermostatDial extends StatefulWidget {
   final TextEditingController controller;
   final double min;
@@ -285,8 +283,9 @@ class _ThermostatDialState extends State<ThermostatDial> {
     if (val == null) {
       val = widget.min; // Default safe
     }
+
     // Clamp value
-    val = val!.clamp(widget.min, widget.max);
+    val = val.clamp(widget.min, widget.max); // ! rimosso per evitare warning
 
     setState(() {
       _currentValue = val!;
@@ -308,6 +307,7 @@ class _ThermostatDialState extends State<ThermostatDial> {
     Offset position = box.globalToLocal(details.globalPosition);
 
     double angle = math.atan2(position.dy - center.dy, position.dx - center.dx);
+
     // Normalize angle [0, 2pi]
     if (angle < 0) angle += 2 * math.pi;
 
@@ -414,15 +414,15 @@ class _ThermostatDialState extends State<ThermostatDial> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                      color: currentColor,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                            color: currentColor.withOpacity(0.4),
-                            blurRadius: 6,
-                            offset: const Offset(0, 3)
-                        )
-                      ]
+                    color: currentColor,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                          color: currentColor.withOpacity(0.4),
+                          blurRadius: 6,
+                          offset: const Offset(0, 3)
+                      )
+                    ],
                   ),
                   child: Text(
                     '${_currentValue.toStringAsFixed(1)}${widget.suffix}',
@@ -458,7 +458,7 @@ class _DialPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = math.min(size.width, size.height) / 2 - 10;
-    final strokeWidth = 14.0; // Leggermente più sottile per la config
+    final strokeWidth = 14.0;
 
     // Sfondo arco
     final bgPaint = Paint()

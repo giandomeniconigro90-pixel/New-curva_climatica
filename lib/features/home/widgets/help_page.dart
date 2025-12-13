@@ -3,88 +3,80 @@
 import 'package:flutter/material.dart';
 
 class HelpPage extends StatelessWidget {
-  const HelpPage({super.key});
+  // Aggiungiamo i callback necessari
+  final VoidCallback? onResetCalibration;
+  final VoidCallback? onBackup;
+  final VoidCallback? onRestore;
+
+  const HelpPage({
+    super.key,
+    this.onResetCalibration,
+    this.onBackup,
+    this.onRestore,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        title: const Text(
-          'Guida & Supporto',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-        ),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        foregroundColor: Colors.black87,
-      ),
+      backgroundColor: Colors.grey[50],
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         children: [
           _buildHeader(),
+          const SizedBox(height: 20),
+          _buildSectionTitle('Come Funziona'),
+          _buildCard(
+            icon: Icons.thermostat,
+            title: 'Curva Climatica',
+            content:
+            'La curva climatica regola la temperatura di mandata dell\'acqua in base alla temperatura esterna. Più fa freddo fuori, più calda sarà l\'acqua nei termosifoni/pavimento.',
+          ),
+          const SizedBox(height: 12),
+          _buildCard(
+            icon: Icons.auto_graph,
+            title: 'Pendenza (Slope) & Offset',
+            content:
+            '• Pendenza: Quanto aggressivamente aumenta la temperatura di mandata al calare di quella esterna.\n• Offset: Sposta l\'intera curva su o giù (parallela) per correggere la temperatura interna media.',
+          ),
           const SizedBox(height: 24),
+          _buildSectionTitle('Strumenti Avanzati'),
 
-          const Text(
-            "ISTRUZIONI RAPIDE",
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
+          // Sezione Backup & Ripristino
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.cloud_upload_outlined, color: Colors.blue),
+                  title: const Text('Backup Dati'),
+                  subtitle: const Text('Salva tutto lo storico e le impostazioni'),
+                  onTap: onBackup,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.cloud_download_outlined, color: Colors.orange),
+                  title: const Text('Ripristina Backup'),
+                  subtitle: const Text('Carica un file di backup salvato'),
+                  onTap: onRestore,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever, color: Colors.red),
+                  title: const Text('Reset Calibrazione'),
+                  subtitle: const Text('Cancella solo le impostazioni della curva'),
+                  onTap: onResetCalibration,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-
-          _buildSection(
-            title: '1. Inserimento Dati',
-            icon: Icons.edit_note_rounded,
-            color: Colors.blue,
-            content: """
-• TEMPERATURA ESTERNA: Ruota la manopola arancione. Più dati inserisci (mattina, sera), più preciso sarà il risultato.
-• METEO AUTOMATICO: Usa il tasto ☁️ per scaricare la media reale di oggi (richiede GPS attivo).
-• CONSUMO: Inserisci i kWh consumati dalla Pompa di Calore nelle ultime 24h (leggili dal contatore o dall'app della PdC).
-• COMFORT: Per ogni stanza, sii onesto: se hai avuto freddo, segna 'Freddo'. L'AI userà questo dato per alzare la curva.""",
-          ),
-
-          _buildSection(
-            title: '2. Interpretare la Curva',
-            icon: Icons.show_chart_rounded,
-            color: Colors.purple,
-            content: """
-Il grafico ti mostra la tua "firma termica":
-• Punti Verdi: La tua casa è in equilibrio (comfort OK).
-• Punti Rossi: Hai sprecato energia (troppo caldo).
-• Punti Blu: La PdC ha lavorato poco (troppo freddo).
-• LINEA GIALLA: È l'obiettivo. Prova a impostare la tua Pompa di Calore seguendo questa linea per risparmiare senza perdere comfort.""",
-          ),
-
-          _buildSection(
-            title: '3. Esportazione e Notifiche',
-            icon: Icons.settings_suggest_rounded,
-            color: Colors.orange,
-            content: """
-• PDF/CSV: Salva i report mensili da inviare al tuo termotecnico o per il tuo archivio (cartella Documenti).
-• NOTIFICHE: L'app ti ricorda alle 21:00 di registrare i dati. La costanza è il segreto per un'ottimizzazione perfetta.""",
-          ),
-
-          const SizedBox(height: 30),
-          const Text(
-            "DOMANDE FREQUENTI (FAQ)",
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2),
-          ),
-          const SizedBox(height: 10),
-
-          _buildFaqItem(
-            question: "Perché la posizione GPS non è precisa?",
-            answer: "Su PC Windows non c'è un chip GPS vero e proprio, quindi la posizione è stimata tramite Internet. Su Tablet e Telefono è precisa al metro.",
-          ),
-          _buildFaqItem(
-            question: "Quanti giorni di dati servono?",
-            answer: "L'AI inizia a dare suggerimenti utili dopo circa 5-7 giorni di registrazioni con temperature esterne diverse (giorni freddi e giorni miti).",
-          ),
-          _buildFaqItem(
-            question: "Posso modificare un dato sbagliato?",
-            answer: "Sì. Vai nella sezione 'Storico Dati' (icona lista in alto), tocca la matita accanto al giorno sbagliato e correggi.",
-          ),
-
           const SizedBox(height: 40),
-          _buildFooter(),
+          Center(
+            child: Text(
+              'ClimaSense v1.0.0',
+              style: TextStyle(color: Colors.grey[400], fontSize: 12),
+            ),
+          ),
           const SizedBox(height: 20),
         ],
       ),
@@ -92,137 +84,71 @@ Il grafico ti mostra la tua "firma termica":
   }
 
   Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.blue.shade100),
-        boxShadow: [
-          BoxShadow(color: Colors.blue.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.tips_and_updates_rounded, size: 36, color: Colors.amber),
-          const SizedBox(width: 16),
-          const Expanded(
-            child: Text(
-              "Benvenuto in ClimaSense!\nQui impari a far lavorare la tua casa per te, non viceversa.",
-              style: TextStyle(fontSize: 15, height: 1.4, color: Colors.black87, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSection({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required String content,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Theme(
-        data: ThemeData().copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          leading: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 22),
-          ),
-          title: Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          children: [
-            Text(
-              content,
-              style: TextStyle(fontSize: 14, height: 1.5, color: Colors.grey.shade700),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFaqItem({required String question, required String answer}) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Theme(
-        data: ThemeData().copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          title: Text(
-            question,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14.5, color: Colors.black87),
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          children: [
-            Text(
-              answer,
-              style: TextStyle(fontSize: 14, height: 1.5, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFooter() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // LOGO DELL'APP
-        Container(
-          width: 70,
-          height: 70,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.grey.withOpacity(0.15),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4)
-              )
-            ],
-            // Assicurati che l'immagine 'assets/images/logo.png' esista!
-            // Se non esiste, l'app mostrerà uno spazio vuoto o un errore in console, ma non crasherà.
-            image: const DecorationImage(
-              image: AssetImage('assets/images/logo.png'),
-              fit: BoxFit.contain,
-            ),
+        Text(
+          'Guida & Supporto',
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Colors.blueGrey[900],
           ),
-        ),
-        const SizedBox(height: 16),
-        const Text(
-          "ClimaSense v1.0",
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 16),
         ),
         const SizedBox(height: 8),
         Text(
-          "Sviluppata da\nNigro Giandomenico",
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13, height: 1.4),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          "Ottimizza il comfort, riduci gli sprechi.",
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+          'Qui trovi spiegazioni su come interpretare i dati e gestire l\'app.',
+          style: TextStyle(fontSize: 14, color: Colors.grey[600]),
         ),
       ],
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[500],
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCard({required IconData icon, required String title, required String content}) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: Colors.blue[700], size: 24),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              content,
+              style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.5),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

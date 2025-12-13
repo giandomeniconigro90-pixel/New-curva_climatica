@@ -1,12 +1,9 @@
 // lib/features/home/widgets/input_page.dart
 
-import 'dart:async'; // Import necessario per il Timer
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../../models/daily_record_dto.dart';
-import '../../../services/hive_storage.dart';
-import '../../../services/weather_service.dart';
+import '../../../../models/daily_record_dto.dart';
 
+// --- INPUT PAGE: TADO STYLE (FINAL) ---
 class InputPage extends StatefulWidget {
   final TextEditingController externalTempController;
   final TextEditingController consumptionController;
@@ -15,8 +12,8 @@ class InputPage extends StatefulWidget {
   final Map<String, String> comfortRatings;
   final List<DailyRecordDTO> records;
   final VoidCallback onAddRecord;
-  final void Function(int index) onDeleteRecord;
-  final void Function(int index) onEditRecord;
+  final Function(int) onDeleteRecord;
+  final Function(int) onEditRecord;
   final bool isEditing;
   final VoidCallback onDuplicateFromYesterday;
   final VoidCallback onExportCsv;
@@ -46,669 +43,537 @@ class InputPage extends StatefulWidget {
 }
 
 class _InputPageState extends State<InputPage> {
-  String _systemMode = 'heating';
-  bool _isLoadingWeather = false;
-  Timer? _longPressTimer;
+  // Ordine personalizzato delle stanze
+  final List<String> orderedRooms = [
+    'Soggiorno/Cucina',
+    'Bagno PT',
+    'Cameretta Stefano',
+    'Camera Giochi',
+    'Camera Mamma e Papà',
+    'Bagno 1P'
+  ];
 
   @override
-  void initState() {
-    super.initState();
-    _loadSystemMode();
-  }
+  Widget build(BuildContext context) {
+    List<Widget> gridItems = [];
 
-  @override
-  void dispose() {
-    _stopContinuousUpdate(); // Ferma il timer se si chiude la pagina
-    super.dispose();
-  }
+    // 1. Esterna
+    gridItems.add(_buildTadoTile(
+      title: "Esterna",
+      subtitle: "Benessere",
+      controller: widget.externalTempController,
+      icon: Icons.wb_sunny_outlined,
+      color: const Color(0xFF4DB6AC), // Ciano
+      isRoom: false,
+      suffix: "°",
+    ));
 
-  Future<void> _loadSystemMode() async {
-    final mode = await AppStorage.getSystemMode();
-    if (mounted) {
-      setState(() {
-        _systemMode = mode;
-      });
-    }
-  }
+    // 2. Consumo
+    gridItems.add(_buildTadoTile(
+      title: "Consumo",
+      subtitle: "Energy Cockpit",
+      controller: widget.consumptionController,
+      icon: Icons.eco_outlined,
+      color: const Color(0xFF66BB6A), // Verde
+      isRoom: false,
+      suffix: "kWh",
+    ));
 
-  Future<void> _fetchAutomaticWeather() async {
-    setState(() => _isLoadingWeather = true);
-    final WeatherData? data = await WeatherService.getDailyAvgTemp();
-
-    if (mounted) {
-      setState(() {
-        _isLoadingWeather = false;
-        if (data != null) {
-          widget.externalTempController.text = data.temp.toStringAsFixed(1);
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Row(
-                  children: [
-                    const Icon(Icons.location_on, color: Colors.white, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text("Meteo: ${data.locationName} (${data.temp}°C)")),
-                  ],
-                ),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.green.shade700,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              )
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Impossibile trovare posizione o meteo."),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.red,
-              )
-          );
-        }
-      });
-    }
-  }
-
-  void _validateAndSubmit() {
-    final double? extTemp = double.tryParse(widget.externalTempController.text.replaceAll(',', '.'));
-    if (extTemp == null || extTemp < -20 || extTemp > 45) {
-      _showError('Temperatura esterna non valida (-20 a 45)');
-      return;
+    // 3. Stanze (generate dinamicamente in base all'ordine)
+    for (var room in orderedRooms) {
+      var ctrl = widget.internalTempControllers[room];
+      if (ctrl == null) {
+        ctrl = TextEditingController();
+        widget.internalTempControllers[room] = ctrl;
+      }
+      gridItems.add(_buildTadoTile(
+        title: room,
+        subtitle: "Riscaldamento",
+        controller: ctrl,
+        icon: null,
+        color: const Color(0xFFFFB74D), // Arancione
+        isRoom: true,
+        suffix: "°",
+      ));
     }
 
-    final double? cons = double.tryParse(widget.consumptionController.text.replaceAll(',', '.'));
-    if (cons == null || cons < 0) {
-      _showError('Consumo non valido');
-      return;
-    }
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bool isPhone = screenWidth < 600;
 
-    widget.onAddRecord();
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  Color _getSeasonalColor() {
-    if (widget.isEditing) return Colors.amber.shade900;
-    return _systemMode == 'heating'
-        ? const Color(0xFFE65100)
-        : const Color(0xFF00695C);
-  }
-
-  Widget _buildComfortIcon(String room, String value, IconData icon, Color color) {
-    final isSelected = widget.comfortRatings[room] == value;
-    return GestureDetector(
-      onTap: () => setState(() => widget.comfortRatings[room] = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.grey.shade100,
-          shape: BoxShape.circle,
-          boxShadow: isSelected
-              ? [BoxShadow(color: color.withOpacity(0.4), blurRadius: 4, offset: const Offset(0, 2))]
-              : [],
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F7),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: widget.onAddRecord,
+        backgroundColor: Colors.black87,
+        icon: Icon(widget.isEditing ? Icons.save_as : Icons.check, color: Colors.white),
+        label: Text(
+          widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        child: Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 18),
       ),
-    );
-  }
-
-  // --- LOGICA AGGIORNAMENTO VALORI (0.1 step) ---
-  void _updateValue(TextEditingController controller, double delta, double min, double max) {
-    double? val = double.tryParse(controller.text.replaceAll(',', '.'));
-    val ??= min;
-    double newVal = val + delta;
-    newVal = newVal.clamp(min, max);
-
-    // Arrotondamento a 1 decimale per evitare imprecisioni float
-    newVal = (newVal * 10).round() / 10;
-
-    controller.text = newVal.toStringAsFixed(1);
-  }
-
-  // --- LOGICA PRESSIONE PROLUNGATA ---
-  void _startContinuousUpdate(TextEditingController controller, double delta, double min, double max) {
-    _updateValue(controller, delta, min, max); // Primo scatto immediato
-
-    // Attesa breve prima di partire veloce
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (_longPressTimer != null) return; // Evita doppi timer se rilasciato subito
-
-      _longPressTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-        _updateValue(controller, delta, min, max);
-      });
-    });
-  }
-
-  void _stopContinuousUpdate() {
-    _longPressTimer?.cancel();
-    _longPressTimer = null;
-  }
-
-  // Helper per creare il bottone smart (Tap & Long Press)
-  Widget _buildSmartButton({required IconData icon, required Color color, required VoidCallback onTap, required VoidCallback onLongPressStart, required VoidCallback onLongPressEnd}) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPressStart: (_) => onLongPressStart(),
-      onLongPressEnd: (_) => onLongPressEnd(),
-      onLongPressUp: onLongPressEnd, // Copre anche il rilascio
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.transparent, // Area cliccabile trasparente ma ampia
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Icon(icon, size: 24, color: color),
-      ),
-    );
-  }
-
-  Widget _buildExternalDataCard({
-    required String title,
-    required IconData icon,
-    required Color iconColor,
-    required TextEditingController controller,
-    required String suffix,
-    double min = -50,
-    double max = 100,
-  }) {
-    final bool isTempCard = title == 'ESTERNA';
-
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 3))],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 18, color: iconColor),
-                const SizedBox(width: 6),
-                Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
-
-                if (isTempCard) ...[
-                  const SizedBox(width: 8),
-                  if (_isLoadingWeather)
-                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue))
-                  else
-                    InkWell(
-                      onTap: _fetchAutomaticWeather,
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: Colors.blue.shade50, shape: BoxShape.circle),
-                        child: const Icon(Icons.cloud_download_rounded, size: 16, color: Colors.blue),
-                      ),
+      body: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Home",
+                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF263238)),
+                  ),
+                  // Mostra bottone copia solo se non siamo in modifica
+                  if (!widget.isEditing)
+                    IconButton(
+                      onPressed: widget.onDuplicateFromYesterday,
+                      icon: const Icon(Icons.copy_all, color: Colors.grey),
+                      tooltip: "Copia da ieri",
                     )
-                ]
-              ],
-            ),
-            const SizedBox(height: 4),
-
-            // ROTELLINA (Step 0.5)
-            ThermostatDial(
-              controller: controller,
-              min: min,
-              max: max,
-              step: 0.5,
-              size: 130,
-              suffix: suffix,
-              activeColor: iconColor,
-              useDynamicColor: false,
-            ),
-
-            // PULSANTI SMART (+/- 0.1 e Long Press)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildSmartButton(
-                  icon: Icons.remove,
-                  color: Colors.grey.shade400,
-                  onTap: () => _updateValue(controller, -0.1, min, max),
-                  onLongPressStart: () => _startContinuousUpdate(controller, -0.1, min, max),
-                  onLongPressEnd: _stopContinuousUpdate,
-                ),
-                const SizedBox(width: 40),
-                _buildSmartButton(
-                  icon: Icons.add,
-                  color: iconColor,
-                  onTap: () => _updateValue(controller, 0.1, min, max),
-                  onLongPressStart: () => _startContinuousUpdate(controller, 0.1, min, max),
-                  onLongPressEnd: _stopContinuousUpdate,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoomTile(String room, TextEditingController controller) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            room,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Color(0xFF455A64)),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 6),
-
-          ThermostatDial(
-            controller: controller,
-            min: 0,
-            max: 45,
-            step: 0.5,
-            size: 145,
-            suffix: '°C',
-            useDynamicColor: true,
-          ),
-
-          // PULSANTI SMART
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildSmartButton(
-                icon: Icons.remove,
-                color: Colors.grey.shade400,
-                onTap: () => _updateValue(controller, -0.1, 0, 45),
-                onLongPressStart: () => _startContinuousUpdate(controller, -0.1, 0, 45),
-                onLongPressEnd: _stopContinuousUpdate,
+                ],
               ),
-              const SizedBox(width: 40),
-              _buildSmartButton(
-                icon: Icons.add,
-                color: Colors.blue,
-                onTap: () => _updateValue(controller, 0.1, 0, 45),
-                onLongPressStart: () => _startContinuousUpdate(controller, 0.1, 0, 45),
-                onLongPressEnd: _stopContinuousUpdate,
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildComfortIcon(room, 'freddo', Icons.ac_unit_rounded, Colors.blue),
-                _buildComfortIcon(room, 'ok', Icons.check, Colors.green),
-                _buildComfortIcon(room, 'caldo', Icons.local_fire_department_rounded, Colors.orange),
-              ],
             ),
           ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: SliverGrid(
+              gridDelegate: isPhone
+                  ? const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.35,
+              )
+                  : const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 1.1,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                    (context, index) => gridItems[index],
+                childCount: gridItems.length,
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final orderedRooms = widget.internalTempControllers.keys.toList()..sort();
-    final buttonColor = _getSeasonalColor();
+  Widget _buildTadoTile({
+    required String title,
+    required String subtitle,
+    required TextEditingController controller,
+    required IconData? icon,
+    required Color color,
+    required bool isRoom,
+    required String suffix,
+  }) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        double? val = double.tryParse(controller.text.replaceAll(',', '.'));
+        String displayVal = val != null ? val.toStringAsFixed(1) : "--";
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(12, 16, 12, 120),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // SEZIONE ESTERNA
-              Row(
-                children: [
-                  _buildExternalDataCard(
-                    title: 'ESTERNA',
-                    icon: Icons.wb_sunny_rounded,
-                    iconColor: Colors.orange,
-                    controller: widget.externalTempController,
-                    suffix: '°C',
-                    min: -20,
-                    max: 45,
+        return GestureDetector(
+          onTap: () => _openControlPage(title, controller, suffix == 'kWh', isRoom),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (isRoom || val != null)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayVal,
+                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2, left: 2),
+                        child: Text(
+                          suffix,
+                          style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
                   ),
-                  const SizedBox(width: 12),
-                  _buildExternalDataCard(
-                    title: 'CONSUMO',
-                    icon: Icons.flash_on_rounded,
-                    iconColor: Colors.blue,
-                    controller: widget.consumptionController,
-                    suffix: 'kWh',
-                    min: 0,
-                    max: 25,
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-              const Padding(
-                padding: EdgeInsets.only(left: 6, bottom: 8),
-                child: Text(
-                  'TEMPERATURE INTERNE',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1),
-                ),
-              ),
-
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: orderedRooms.map((room) {
-                  return LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width = (constraints.maxWidth - 12) / 2;
-                      return SizedBox(
-                        width: width,
-                        child: _buildRoomTile(room, widget.internalTempControllers[room]!),
-                      );
-                    },
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 24),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 3))],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: TextField(
-                  controller: widget.noteController,
-                  decoration: const InputDecoration(
-                    hintText: 'Note opzionali...',
-                    hintStyle: TextStyle(color: Colors.grey, fontSize: 15),
-                    border: InputBorder.none,
-                    icon: Icon(Icons.notes_rounded, color: Colors.grey, size: 22),
-                  ),
-                  maxLines: 1,
-                ),
-              ),
-
-              const SizedBox(height: 30),
-
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _validateAndSubmit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: buttonColor,
-                    foregroundColor: Colors.white,
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                  ),
-                  child: Text(
-                    widget.isEditing ? 'SALVA MODIFICHE' : 'AGGIUNGI REGISTRAZIONE',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              if (!widget.isEditing)
-                Row(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: TextButton.icon(
-                        onPressed: widget.onDuplicateFromYesterday,
-                        icon: const Icon(Icons.copy_rounded, size: 18),
-                        label: const Text('Copia da Ieri', style: TextStyle(fontSize: 14)),
-                        style: TextButton.styleFrom(foregroundColor: Colors.grey.shade700),
-                      ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 9, fontWeight: FontWeight.w500),
                     ),
-                    Container(width: 1, height: 16, color: Colors.grey.shade300),
-                    Expanded(
-                      child: TextButton.icon(
-                        onPressed: widget.onDeleteToday,
-                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                        label: const Text('Elimina Oggi', style: TextStyle(fontSize: 14)),
-                        style: TextButton.styleFrom(foregroundColor: Colors.red.shade400),
-                      ),
+                    const SizedBox(height: 1),
+                    Text(
+                      title,
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-            ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openControlPage(String title, TextEditingController controller, bool isConsumption, bool isRoom) {
+    final shortestSide = MediaQuery.of(context).size.shortestSide;
+    final bool isTablet = shortestSide >= 550;
+
+    if (isTablet) {
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(10),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Container(
+              width: 450,
+              constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.98
+              ),
+              color: Colors.white,
+              child: RoomControlPage(
+                title: title,
+                controller: controller,
+                isConsumption: isConsumption,
+                isRoom: isRoom,
+                comfortRatings: widget.comfortRatings,
+                onSave: () => setState(() {}),
+              ),
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } else {
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => RoomControlPage(
+            title: title,
+            controller: controller,
+            isConsumption: isConsumption,
+            isRoom: isRoom,
+            comfortRatings: widget.comfortRatings,
+            onSave: () => setState(() {}),
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(0.0, 1.0);
+            const end = Offset.zero;
+            const curve = Curves.easeOutQuint;
+            var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            return SlideTransition(position: animation.drive(tween), child: child);
+          },
+        ),
+      );
+    }
   }
 }
 
-// --- WIDGET MANOPOLA (Resta invariato) ---
-class ThermostatDial extends StatefulWidget {
-  final TextEditingController controller;
-  final double min;
-  final double max;
-  final double step;
-  final double size;
-  final String suffix;
-  final Color activeColor;
-  final bool useDynamicColor;
+// --- PAINTER PER IL CERCHIO GRADO ---
+// Questo painter disegna il cerchietto ° sopra il widget, permettendo un posizionamento
+// libero rispetto alla baseline del testo.
+class DegreePainter extends CustomPainter {
+  final Color color;
 
-  const ThermostatDial({
+  DegreePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    const double radius = 5.0;
+    // X=6.0 sposta il cerchio a destra
+    // Y=-8.0 lo sposta in alto
+    final center = Offset(10 + radius, -9.0);
+
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+
+// --- PAGINA CONTROLLO ---
+class RoomControlPage extends StatefulWidget {
+  final String title;
+  final TextEditingController controller;
+  final bool isConsumption;
+  final bool isRoom;
+  final Map<String, String>? comfortRatings;
+  final VoidCallback onSave;
+
+  const RoomControlPage({
     super.key,
+    required this.title,
     required this.controller,
-    this.min = 0,
-    this.max = 100,
-    this.step = 0.5,
-    this.size = 150,
-    this.suffix = '',
-    this.activeColor = Colors.blue,
-    this.useDynamicColor = false,
+    required this.isConsumption,
+    required this.isRoom,
+    this.comfortRatings,
+    required this.onSave,
   });
 
   @override
-  State<ThermostatDial> createState() => _ThermostatDialState();
+  State<RoomControlPage> createState() => _RoomControlPageState();
 }
 
-class _ThermostatDialState extends State<ThermostatDial> {
-  static const double _startAngle = 2.35619;
-  static const double _sweepAngle = 4.71239;
+class _RoomControlPageState extends State<RoomControlPage> {
+  late double _currentValue;
+  late String _currentComfort;
+  late double _min, _max;
+  late Color _mainColor;
+  late String _headerText;
 
-  double _currentValue = 0.0;
-  double _currentAngle = _startAngle;
-  bool _isDragging = false;
+  final double _sliderHeight = 380.0;
 
   @override
   void initState() {
     super.initState();
-    _updateFromController();
-    widget.controller.addListener(_updateFromController);
-  }
+    // Inizializza con valore esistente o default se vuoto
+    _currentValue = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
+        (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
 
-  @override
-  void dispose() {
-    widget.controller.removeListener(_updateFromController);
-    super.dispose();
-  }
-
-  void _updateFromController() {
-    if (_isDragging) return;
-    double? val = double.tryParse(widget.controller.text.replaceAll(',', '.'));
-    if (val == null) val = widget.min;
-    val = val!.clamp(widget.min, widget.max);
-
-    setState(() {
-      _currentValue = val!;
-      double t = (val! - widget.min) / (widget.max - widget.min);
-      _currentAngle = _startAngle + (t * _sweepAngle);
-    });
-  }
-
-  Color _getDynamicColor(double t) {
-    if (!widget.useDynamicColor) return widget.activeColor;
-    if (t < 0.5) return Color.lerp(Colors.lightBlueAccent, Colors.green, t * 2)!;
-    return Color.lerp(Colors.green, Colors.orangeAccent, (t - 0.5) * 2)!;
-  }
-
-  void _handlePan(DragUpdateDetails details) {
-    RenderBox box = context.findRenderObject() as RenderBox;
-    Offset center = box.size.center(Offset.zero);
-    Offset position = box.globalToLocal(details.globalPosition);
-
-    double angle = math.atan2(position.dy - center.dy, position.dx - center.dx);
-    if (angle < 0) angle += 2 * math.pi;
-
-    double relativeAngle = angle - _startAngle;
-    if (relativeAngle < 0) relativeAngle += 2 * math.pi;
-
-    if (relativeAngle > _sweepAngle) {
-      double deadZoneCenter = _sweepAngle + (2 * math.pi - _sweepAngle) / 2;
-      if (relativeAngle < deadZoneCenter) relativeAngle = _sweepAngle;
-      else relativeAngle = 0;
+    if (widget.isRoom && widget.comfortRatings != null) {
+      _currentComfort = widget.comfortRatings![widget.title] ?? 'ok';
+    } else {
+      _currentComfort = 'ok';
     }
 
-    relativeAngle = relativeAngle.clamp(0.0, _sweepAngle);
-
-    setState(() => _currentAngle = _startAngle + relativeAngle);
-
-    double t = relativeAngle / _sweepAngle;
-    double rawValue = widget.min + (t * (widget.max - widget.min));
-    double steppedValue = ((rawValue / widget.step).round() * widget.step);
-    steppedValue = steppedValue.clamp(widget.min, widget.max);
-
-    if ((steppedValue - _currentValue).abs() >= 0.001) {
-      _currentValue = steppedValue;
-      widget.controller.text = steppedValue.toStringAsFixed(1);
+    // --- RANGE E COLORI CONFIGURATI ---
+    if (widget.isConsumption) {
+      _min = 0; _max = 25; // Range consumo
+      _mainColor = const Color(0xFF66BB6A);
+      _headerText = "CONSUMO GIORNALIERO";
+    } else if (widget.isRoom) {
+      _min = 10; _max = 45; // Range stanze
+      _mainColor = const Color(0xFFFFB74D);
+      _headerText = "TEMPERATURA INTERNA";
+    } else {
+      _min = -10; _max = 40; // Range esterna
+      _mainColor = const Color(0xFF4DB6AC);
+      _headerText = "TEMPERATURA ESTERNA";
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    double t = (_currentValue - widget.min) / (widget.max - widget.min);
-    if (widget.max == widget.min) t = 0.0;
-    Color currentColor = _getDynamicColor(t);
+    double percentage = (_currentValue - _min) / (_max - _min);
+    percentage = percentage.clamp(0.0, 1.0);
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onPanStart: (d) {
-        _isDragging = true;
-        _handlePan(DragUpdateDetails(globalPosition: d.globalPosition, delta: Offset.zero));
-      },
-      onPanUpdate: _handlePan,
-      onPanEnd: (_) => setState(() => _isDragging = false),
-      onVerticalDragStart: (d) {
-        _isDragging = true;
-        _handlePan(DragUpdateDetails(globalPosition: d.globalPosition, delta: Offset.zero));
-      },
-      onVerticalDragUpdate: _handlePan,
-      onVerticalDragEnd: (_) => setState(() => _isDragging = false),
+    String fullText = _currentValue.toStringAsFixed(1);
+    List<String> parts = fullText.split('.');
+    String integerPart = parts[0];
+    String decimalPart = parts.length > 1 ? parts[1] : "0";
 
-      child: SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
+    return Scaffold(
+      backgroundColor: _mainColor,
+      body: SafeArea(
+        child: Column(
           children: [
-            CustomPaint(
-              size: Size(widget.size, widget.size),
-              painter: _DialPainter(
-                angle: _currentAngle,
-                activeColor: currentColor,
-                startAngle: _startAngle,
-                sweepAngle: _sweepAngle,
+            // Header con pulsanti
+            Padding(
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                  IconButton(
+                    icon: const Icon(Icons.check, color: Colors.white, size: 28),
+                    onPressed: _saveAndExit,
+                  ),
+                ],
               ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+            ),
+
+            const Spacer(flex: 1),
+
+            // Display Valore
+            Column(
+              children: [
+                Text(_headerText, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      _currentValue.toStringAsFixed(1),
-                      style: TextStyle(fontSize: widget.size * 0.24, fontWeight: FontWeight.bold, color: currentColor),
+                        integerPart,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 50,
+                            fontWeight: FontWeight.bold,
+                            height: 1.0
+                        )
                     ),
-                    Text(widget.suffix, style: TextStyle(fontSize: widget.size * 0.12, color: Colors.grey)),
+
+                    if (widget.isConsumption)
+                    // Layout per Consumo (kWh)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 25),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              ".$decimalPart",
+                              style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "kWh",
+                              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 18, fontWeight: FontWeight.bold),
+                            )
+                          ],
+                        ),
+                      )
+                    else
+                    // Layout per Temperature (Gradi °)
+                      Transform.translate(
+                        offset: const Offset(-1.0, 0.0), // Avvicina il punto al numero
+                        child: CustomPaint(
+                          foregroundPainter: DegreePainter(color: Colors.white),
+                          child: Text(
+                            ".$decimalPart",
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 25,
+                                fontWeight: FontWeight.bold,
+                                height: 1.0
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
+                ),
+              ],
+            ),
+
+            const Spacer(flex: 1),
+
+            // Slider Verticale Custom
+            Center(
+              child: Container(
+                width: 220,
+                height: _sliderHeight,
+                decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(40)
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(40),
+                  child: Stack(
+                    alignment: Alignment.bottomCenter,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        height: _sliderHeight * percentage,
+                        color: Colors.white,
+                      ),
+                      RotatedBox(
+                          quarterTurns: 3,
+                          child: SliderTheme(
+                              data: SliderThemeData(
+                                  trackHeight: 220,
+                                  thumbShape: SliderComponentShape.noThumb,
+                                  overlayShape: SliderComponentShape.noOverlay,
+                                  activeTrackColor: Colors.transparent,
+                                  inactiveTrackColor: Colors.transparent
+                              ),
+                              child: Slider(
+                                  value: _currentValue,
+                                  min: _min,
+                                  max: _max,
+                                  onChanged: (val) {
+                                    setState(() { _currentValue = val; });
+                                  }
+                              )
+                          )
+                      ),
+                      Positioned(
+                          bottom: (_sliderHeight * percentage) - 10,
+                          child: Container(
+                              width: 40,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                  color: _mainColor.withOpacity(0.8),
+                                  borderRadius: BorderRadius.circular(5)
+                              )
+                          )
+                      )
+                    ],
+                  ),
                 ),
               ),
             ),
-            if (_isDragging)
-              Positioned(
-                top: -20,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                      color: currentColor,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [BoxShadow(color: currentColor.withOpacity(0.4), blurRadius: 6, offset: const Offset(0, 3))]
-                  ),
-                  child: Text('${_currentValue.toStringAsFixed(1)}${widget.suffix}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                ),
-              ),
+
+            const Spacer(flex: 5),
+
+            // Opzioni Comfort (solo stanze)
+            if (widget.isRoom)
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildComfortOption('freddo', Icons.ac_unit),
+                        const SizedBox(width: 40),
+                        _buildComfortOption('ok', Icons.sentiment_satisfied_alt),
+                        const SizedBox(width: 40),
+                        _buildComfortOption('caldo', Icons.local_fire_department)
+                      ]
+                  )
+              )
+            else const SizedBox(height: 50),
           ],
         ),
       ),
     );
   }
-}
 
-class _DialPainter extends CustomPainter {
-  final double angle;
-  final Color activeColor;
-  final double startAngle;
-  final double sweepAngle;
-
-  _DialPainter({required this.angle, required this.activeColor, required this.startAngle, required this.sweepAngle});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = math.min(size.width, size.height) / 2 - 10;
-    final strokeWidth = 18.0;
-
-    final bgPaint = Paint()..color = Colors.grey.shade200..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeWidth = strokeWidth;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, sweepAngle, false, bgPaint);
-
-    final activePaint = Paint()..color = activeColor..style = PaintingStyle.stroke..strokeCap = StrokeCap.round..strokeWidth = strokeWidth;
-    double currentSweep = angle - startAngle;
-    if (currentSweep < 0) currentSweep = 0;
-    if (currentSweep > sweepAngle) currentSweep = sweepAngle;
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, currentSweep, false, activePaint);
-
-    final knobRadius = 12.0;
-    final knobCenter = Offset(center.dx + radius * math.cos(angle), center.dy + radius * math.sin(angle));
-    final knobPaint = Paint()..color = Colors.white;
-    final knobBorder = Paint()..color = activeColor..style = PaintingStyle.stroke..strokeWidth = 3.0;
-    final knobShadow = Paint()..color = Colors.black.withOpacity(0.2)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-
-    canvas.drawCircle(knobCenter, knobRadius, knobShadow);
-    canvas.drawCircle(knobCenter, knobRadius, knobPaint);
-    canvas.drawCircle(knobCenter, knobRadius, knobBorder);
+  Widget _buildComfortOption(String value, IconData icon) {
+    final isSelected = _currentComfort == value;
+    return GestureDetector(
+      onTap: () => setState(() => _currentComfort = value),
+      child: Column(children: [Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: isSelected ? Colors.white : Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: Icon(icon, color: isSelected ? _mainColor : Colors.white, size: 24)), const SizedBox(height: 8), Text(value.toUpperCase(), style: TextStyle(color: isSelected ? Colors.white : Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold))]),
+    );
   }
 
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+  void _saveAndExit() {
+    widget.controller.text = _currentValue.toStringAsFixed(1);
+    if (widget.isRoom && widget.comfortRatings != null) {
+      widget.comfortRatings![widget.title] = _currentComfort;
+    }
+    widget.onSave();
+    Navigator.pop(context);
+  }
 }

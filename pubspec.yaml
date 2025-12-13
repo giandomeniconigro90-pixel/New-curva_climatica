@@ -1,7 +1,6 @@
 name: climasense
 description: App per l'ottimizzazione automatica della curva climatica Pompa di Calore.
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
@@ -41,6 +40,7 @@ dependencies:
 
   # UTILITY
   intl: ^0.19.0
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

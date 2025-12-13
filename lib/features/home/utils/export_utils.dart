@@ -10,10 +10,12 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../../models/daily_record_dto.dart';
 import '../logic/curve_logic.dart';
 
 class ExportUtils {
+
   // === GENERAZIONE CSV ===
   static String generateCsv(List<DailyRecordDTO> records, {
     double slope = 0.0,
@@ -36,16 +38,26 @@ class ExportUtils {
     return buffer.toString();
   }
 
-  // === CONDIVISIONE CSV (Salva dove vuoi) ===
+  // === CONDIVISIONE CSV ===
   static Future<void> shareCsv(String csvData, String fileName) async {
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/$fileName');
     await file.writeAsString(csvData);
 
-    // Apre il pannello: su iOS "Salva su File", su Android condivisione generica
     await Share.shareXFiles(
         [XFile(file.path)],
         text: 'File CSV esportato da ClimaSense'
+    );
+  }
+
+  // === WRAPPER PDF SEMPLIFICATO (Per compatibilità) ===
+  static Future<void> generatePdf(List<DailyRecordDTO> records) async {
+    await generateAndSavePdf(
+        slope: 1.2,
+        offset: 0.0,
+        records: records,
+        chartImage: null,
+        currentMode: SystemMode.heating
     );
   }
 
@@ -62,6 +74,7 @@ class ExportUtils {
     final pdf = pw.Document();
     final bool isHeating = currentMode == SystemMode.heating;
     final String modeLabel = isHeating ? 'RISCALDAMENTO' : 'RAFFRESCAMENTO';
+
     final PdfColor primaryColor = isHeating ? PdfColor.fromInt(0xFFD84315) : PdfColor.fromInt(0xFF0277BD);
     final PdfColor accentColor = isHeating ? PdfColor.fromInt(0xFFFF7043) : PdfColor.fromInt(0xFF29B6F6);
 
@@ -119,6 +132,7 @@ class ExportUtils {
             ),
           ),
           pw.SizedBox(height: 30),
+
           _buildSectionTitle('PARAMETRI ATTUALI', primaryColor),
           pw.SizedBox(height: 10),
           pw.Row(
@@ -129,6 +143,7 @@ class ExportUtils {
               _buildStatCard('Record', '${filteredRecords.length}', accentColor),
             ],
           ),
+
           pw.SizedBox(height: 20),
           _buildSectionTitle('STATISTICHE', primaryColor),
           pw.SizedBox(height: 10),
@@ -140,6 +155,7 @@ class ExportUtils {
               _buildStatCard('Temp Max', '${activeStats.maxExternalTemp.toStringAsFixed(1)}°', accentColor),
             ],
           ),
+
           pw.SizedBox(height: 30),
           if (chartImage != null) ...[
             _buildSectionTitle('ANALISI VISIVA', primaryColor),
@@ -165,10 +181,12 @@ class ExportUtils {
             _buildSectionTitle('TABELLA DI RIFERIMENTO', primaryColor),
             pw.SizedBox(height: 8),
             _buildCurveReferenceTableCompact(slope, offset, currentMode, accentColor, primaryColor),
+
             pw.SizedBox(height: 20),
             _buildSectionTitle('STORICO RILEVAZIONI', primaryColor),
             pw.SizedBox(height: 8),
             _buildRecordsTableCompact(filteredRecords.take(20).toList(), slope, offset, currentMode, accentColor, primaryColor),
+
             pw.SizedBox(height: 40),
             pw.Align(
               alignment: pw.Alignment.center,
@@ -212,8 +230,9 @@ class ExportUtils {
     final List<int> temps = mode == SystemMode.heating ? [-5, 0, 5, 10, 15] : [25, 28, 30, 35, 40];
     final rows = [['T Est. (°C)', 'T Mandata (°C)'], ...temps.map((t) {
       final mandata = computeMandata(t.toDouble(), slope, offset, mode);
-      return ['$t', '${mandata.toStringAsFixed(1)}'];
+      return ['$t', mandata.toStringAsFixed(1)];
     })];
+
     return pw.Table(
       border: pw.TableBorder.all(color: accentColor, width: 0.5),
       columnWidths: {0: const pw.FlexColumnWidth(1), 1: const pw.FlexColumnWidth(1)},
@@ -236,6 +255,7 @@ class ExportUtils {
       final mandata = computeMandata(r.externalTemp, slope, offset, mode);
       return [r.dateIso, '${r.externalTemp.toInt()}°', '${mandata.toStringAsFixed(1)}°', '${r.consumption}'];
     }).toList();
+
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
       children: [
@@ -250,8 +270,7 @@ class ExportUtils {
     );
   }
 
-  // === BACKUP CON SELEZIONE DESTINAZIONE ===
-
+  // === BACKUP JSON ===
   static String generateBackupJson({
     required List<DailyRecordDTO> records,
     required SystemMode mode,
@@ -278,13 +297,11 @@ class ExportUtils {
     return jsonEncode(backupData);
   }
 
-  /// Salva il JSON e chiede all'utente dove metterlo (Drive, Files, Share...)
   static Future<void> shareBackupJson(String json, String fileName) async {
     final directory = await getTemporaryDirectory();
     final file = File('${directory.path}/$fileName.json');
     await file.writeAsString(json);
 
-    // Apriamo il dialog nativo
     await Share.shareXFiles(
       [XFile(file.path)],
       text: 'Backup ClimaSense del ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
