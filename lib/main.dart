@@ -48,7 +48,7 @@ class ClimaSenseApp extends StatelessWidget {
         // Impostazioni tema base
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF263238)),
         useMaterial3: true,
-        scaffoldBackgroundColor: Colors.white,
+        scaffoldBackgroundColor: const Color(0xFFF5F5F7),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,

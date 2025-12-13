@@ -61,9 +61,6 @@ class _InputPageState extends State<InputPage> {
   @override
   void initState() {
     super.initState();
-    if (!widget.isEditing && widget.externalTempController.text.isEmpty) {
-      _fetchWeather();
-    }
   }
 
   Future<void> _fetchWeather() async {
@@ -159,24 +156,23 @@ class _InputPageState extends State<InputPage> {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), // ancora più in alto
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
+                mainAxisAlignment: MainAxisAlignment.start, // sempre a sinistra
+                children: const [
+                  Text(
                     "Home",
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF263238)),
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF263238),
+                    ),
                   ),
-                  if (!widget.isEditing)
-                    IconButton(
-                      onPressed: widget.onDuplicateFromYesterday,
-                      icon: const Icon(Icons.copy_all, color: Colors.grey),
-                      tooltip: "Copia da ieri",
-                    )
                 ],
               ),
             ),
           ),
+
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverGrid(

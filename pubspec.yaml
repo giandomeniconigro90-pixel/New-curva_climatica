@@ -11,6 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
+  fluttertoast: ^8.2.8
+
+  # AGGIUNGI QUESTA RIGA:
+  csv: ^6.0.0
 
   # GRAFICI
   fl_chart: ^0.69.0
@@ -33,7 +37,7 @@ dependencies:
   geocoding: ^3.0.0
   http: ^1.2.2
 
-  # ✅ NOTIFICHE COMPLETE
+  # NOTIFICHE COMPLETE
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
   permission_handler: ^11.3.1
