@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../models/daily_record_dto.dart';
+import '../../../../services/weather_service.dart';
 
 // --- INPUT PAGE: TADO STYLE (FINAL) ---
 class InputPage extends StatefulWidget {
@@ -53,6 +54,48 @@ class _InputPageState extends State<InputPage> {
     'Bagno 1P'
   ];
 
+  // -- LOGICA METEO --
+  bool _isLoadingWeather = false;
+  String? _weatherLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!widget.isEditing && widget.externalTempController.text.isEmpty) {
+      _fetchWeather();
+    }
+  }
+
+  Future<void> _fetchWeather() async {
+    setState(() => _isLoadingWeather = true);
+    try {
+      // Usiamo 'final' o 'var' invece del tipo esplicito WeatherData per evitare errori di import
+      final result = await WeatherService.getDailyAvgTemp();
+
+      // Controllo di sicurezza se il risultato è valido
+      if (result != null && mounted) {
+        setState(() {
+          // Accesso dinamico alle proprietà
+          widget.externalTempController.text = (result.temp as double).toStringAsFixed(1);
+          _weatherLocation = result.locationName.toString();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Meteo aggiornato da $_weatherLocation')),
+        );
+      }
+    } catch (e) {
+      debugPrint("Errore meteo: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Errore recupero meteo')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingWeather = false);
+    }
+  }
+  // ---------------------------
+
   @override
   Widget build(BuildContext context) {
     List<Widget> gridItems = [];
@@ -60,11 +103,12 @@ class _InputPageState extends State<InputPage> {
     // 1. Esterna
     gridItems.add(_buildTadoTile(
       title: "Esterna",
-      subtitle: "Benessere",
+      subtitle: _weatherLocation ?? "Benessere",
       controller: widget.externalTempController,
-      icon: Icons.wb_sunny_outlined,
+      icon: Icons.cloud_sync,
       color: const Color(0xFF4DB6AC), // Ciano
       isRoom: false,
+      isWeatherTile: true,
       suffix: "°",
     ));
 
@@ -79,7 +123,7 @@ class _InputPageState extends State<InputPage> {
       suffix: "kWh",
     ));
 
-    // 3. Stanze (generate dinamicamente in base all'ordine)
+    // 3. Stanze
     for (var room in orderedRooms) {
       var ctrl = widget.internalTempControllers[room];
       if (ctrl == null) {
@@ -123,7 +167,6 @@ class _InputPageState extends State<InputPage> {
                     "Home",
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF263238)),
                   ),
-                  // Mostra bottone copia solo se non siamo in modifica
                   if (!widget.isEditing)
                     IconButton(
                       onPressed: widget.onDuplicateFromYesterday,
@@ -170,6 +213,7 @@ class _InputPageState extends State<InputPage> {
     required Color color,
     required bool isRoom,
     required String suffix,
+    bool isWeatherTile = false,
   }) {
     return ListenableBuilder(
       listenable: controller,
@@ -190,28 +234,51 @@ class _InputPageState extends State<InputPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (isRoom || val != null)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        displayVal,
-                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2, left: 2),
-                        child: Text(
-                          suffix,
-                          style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isRoom || val != null)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayVal,
+                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2, left: 2),
+                            child: Text(
+                              suffix,
+                              style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      const SizedBox(),
+
+                    if (isWeatherTile)
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _isLoadingWeather ? null : _fetchWeather,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: _isLoadingWeather
+                                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : Icon(Icons.cloud_sync, size: 28, color: Colors.white.withOpacity(0.8)),
+                          ),
                         ),
+                      )
+                    else if (!isRoom && val == null)
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
                       ),
-                    ],
-                  )
-                else
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
-                  ),
+                  ],
+                ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -291,8 +358,6 @@ class _InputPageState extends State<InputPage> {
 }
 
 // --- PAINTER PER IL CERCHIO GRADO ---
-// Questo painter disegna il cerchietto ° sopra il widget, permettendo un posizionamento
-// libero rispetto alla baseline del testo.
 class DegreePainter extends CustomPainter {
   final Color color;
 
@@ -306,8 +371,6 @@ class DegreePainter extends CustomPainter {
       ..strokeWidth = 2.5;
 
     const double radius = 5.0;
-    // X=6.0 sposta il cerchio a destra
-    // Y=-8.0 lo sposta in alto
     final center = Offset(10 + radius, -9.0);
 
     canvas.drawCircle(center, radius, paint);
@@ -353,7 +416,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
   @override
   void initState() {
     super.initState();
-    // Inizializza con valore esistente o default se vuoto
     _currentValue = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
         (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
 
@@ -363,17 +425,16 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _currentComfort = 'ok';
     }
 
-    // --- RANGE E COLORI CONFIGURATI ---
     if (widget.isConsumption) {
-      _min = 0; _max = 25; // Range consumo
+      _min = 0; _max = 25;
       _mainColor = const Color(0xFF66BB6A);
       _headerText = "CONSUMO GIORNALIERO";
     } else if (widget.isRoom) {
-      _min = 10; _max = 45; // Range stanze
+      _min = 10; _max = 45;
       _mainColor = const Color(0xFFFFB74D);
       _headerText = "TEMPERATURA INTERNA";
     } else {
-      _min = -10; _max = 40; // Range esterna
+      _min = -10; _max = 40;
       _mainColor = const Color(0xFF4DB6AC);
       _headerText = "TEMPERATURA ESTERNA";
     }
@@ -394,7 +455,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header con pulsanti
             Padding(
               padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
               child: Row(
@@ -415,7 +475,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
 
             const Spacer(flex: 1),
 
-            // Display Valore
             Column(
               children: [
                 Text(_headerText, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
@@ -437,7 +496,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
                     ),
 
                     if (widget.isConsumption)
-                    // Layout per Consumo (kWh)
                       Padding(
                         padding: const EdgeInsets.only(top: 25),
                         child: Row(
@@ -457,9 +515,8 @@ class _RoomControlPageState extends State<RoomControlPage> {
                         ),
                       )
                     else
-                    // Layout per Temperature (Gradi °)
                       Transform.translate(
-                        offset: const Offset(-1.0, 0.0), // Avvicina il punto al numero
+                        offset: const Offset(-1.0, 0.0),
                         child: CustomPaint(
                           foregroundPainter: DegreePainter(color: Colors.white),
                           child: Text(
@@ -480,7 +537,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
 
             const Spacer(flex: 1),
 
-            // Slider Verticale Custom
             Center(
               child: Container(
                 width: 220,
@@ -538,7 +594,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
 
             const Spacer(flex: 5),
 
-            // Opzioni Comfort (solo stanze)
             if (widget.isRoom)
               Padding(
                   padding: const EdgeInsets.only(bottom: 24),
