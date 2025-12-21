@@ -951,8 +951,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
   @override
   Widget build(BuildContext context) {
-    final DateTime? lastAppliedDate = currentMode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
-    final suggestion = computeOptimalCurveSuggestion(records, slope, offset, currentMode, lastAppliedDate);
+    final DateTime? lastAppliedDate =
+    currentMode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
+    final suggestion =
+    computeOptimalCurveSuggestion(records, slope, offset, currentMode, lastAppliedDate);
     final windowRecords = recordsSinceLastApply(currentMode);
     final stats = computeCurveStats(windowRecords);
 
@@ -960,7 +962,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final Color appBarColor = isCooling
         ? Colors.blueGrey.shade900
         : Colors.deepOrange.shade800;
-
 
     final List<Widget> pages = [
       InputPage(
@@ -974,6 +975,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         onDeleteRecord: deleteRecord,
         onEditRecord: startEditRecord,
         isEditing: editingIndex != null,
+        isCooling: isCooling,                 // <--- AGGIUNGI QUESTA RIGA
         onDuplicateFromYesterday: duplicateFromYesterday,
         onExportCsv: exportCsv,
         onExportPdf: exportPdf,
@@ -1005,13 +1007,24 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
           );
           if (confirm == true) {
             await AppStorage.resetCalibration();
-            if (mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (ctx) => const InitialSettingsHome()), (route) => false);
+            if (mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (ctx) => const InitialSettingsHome()),
+                    (route) => false,
+              );
+            }
           }
         },
         onBackup: doBackup,
         onRestore: doRestore,
       ),
     ];
+
+    // COLORE DELLA MODALITÀ (una sola volta)
+    final Color modeColor = isCooling
+        ? const Color(0xFF4DB6AC) // azzurro raffrescamento
+        : const Color(0xFFFFB74D); // arancione riscaldamento
+
 
     return Scaffold(
       bottomNavigationBar: PreferredSize(
@@ -1034,20 +1047,57 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       body: SafeArea(
         child: Column(
           children: [
+
             // Riga in alto solo con switch + notifiche, senza barra
             Padding(
               padding: const EdgeInsets.only(top: 8, right: 8, left: 8),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  const Spacer(),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        currentMode == SystemMode.heating
+                            ? 'Riscaldamento'
+                            : 'Raffrescamento',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF263238),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Cambia modalità',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+
                   Switch(
                     value: currentMode == SystemMode.cooling,
                     onChanged: toggleMode,
-                    activeColor: Colors.blue.shade100,
-                    activeTrackColor: Colors.blue.shade900,
-                    inactiveThumbColor: Colors.orange.shade100,
-                    inactiveTrackColor: Colors.orange.shade900,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    splashRadius: 18,
+
+                    // --- STATO ON: RAFFRESCAMENTO (Azzurro) ---
+                    activeColor: const Color(0xFF4DB6AC),      // Pallino
+                    activeTrackColor: const Color(0xFF4DB6AC), // Sfondo (niente bordo)
+
+                    // --- STATO OFF: RISCALDAMENTO (Arancione) ---
+                    inactiveThumbColor: const Color(0xFFFFB74D), // Pallino
+                    inactiveTrackColor: const Color(0xFFFFB74D), // Sfondo (niente bordo)
+
+                    // Rimuove eventuale bordo sottile grigio (su versioni recenti di Flutter)
+                    trackOutlineColor: MaterialStateProperty.all(Colors.transparent),
                   ),
+
+
                   IconButton(
                     icon: const Icon(Icons.notifications_outlined),
                     onPressed: setNotificationTime,
@@ -1055,6 +1105,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                 ],
               ),
             ),
+
+
             // Nessun Container colorato, si passa direttamente al contenuto
             Expanded(
               child: PageView(

@@ -214,6 +214,7 @@ class _DashboardHomeState extends State<DashboardHome> {
           setState(() {}); // Aggiorna il flag isEditing
         },
         isEditing: _isEditingToday,
+        isCooling: false,
         onDuplicateFromYesterday: _duplicateYesterday,
         onExportCsv: _exportCsv,
         onExportPdf: _exportPdf,

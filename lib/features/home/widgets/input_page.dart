@@ -16,6 +16,7 @@ class InputPage extends StatefulWidget {
   final Function(int) onDeleteRecord;
   final Function(int) onEditRecord;
   final bool isEditing;
+  final bool isCooling;
   final VoidCallback onDuplicateFromYesterday;
   final VoidCallback onExportCsv;
   final VoidCallback onExportPdf;
@@ -33,11 +34,13 @@ class InputPage extends StatefulWidget {
     required this.onDeleteRecord,
     required this.onEditRecord,
     required this.isEditing,
+    required this.isCooling,              // <--- NUOVO
     required this.onDuplicateFromYesterday,
     required this.onExportCsv,
     required this.onExportPdf,
     required this.onDeleteToday,
   });
+
 
   @override
   State<InputPage> createState() => _InputPageState();
@@ -103,7 +106,7 @@ class _InputPageState extends State<InputPage> {
       subtitle: _weatherLocation ?? "Benessere",
       controller: widget.externalTempController,
       icon: Icons.cloud_sync,
-      color: const Color(0xFF4DB6AC), // Ciano
+      color: const Color(0xFF1976D2), // Ciano
       isRoom: false,
       isWeatherTile: true,
       suffix: "°",
@@ -129,10 +132,12 @@ class _InputPageState extends State<InputPage> {
       }
       gridItems.add(_buildTadoTile(
         title: room,
-        subtitle: "Riscaldamento",
+        subtitle: widget.isCooling ? "Raffrescamento" : "Riscaldamento",
         controller: ctrl,
         icon: null,
-        color: const Color(0xFFFFB74D), // Arancione
+        color: widget.isCooling
+            ? const Color(0xFF4DB6AC) // azzurro (come switch in raffrescamento)
+            : const Color(0xFFFFB74D), // arancione (riscaldamento)
         isRoom: true,
         suffix: "°",
       ));
@@ -143,15 +148,23 @@ class _InputPageState extends State<InputPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F7),
+
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddRecord,
-        backgroundColor: Colors.black87,
-        icon: Icon(widget.isEditing ? Icons.save_as : Icons.check, color: Colors.white),
+        backgroundColor: Colors.blue.shade900, // nuovo colore
+        icon: Icon(
+          widget.isEditing ? Icons.save_as : Icons.check,
+          color: Colors.white,
+        ),
         label: Text(
           widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
+
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -324,6 +337,7 @@ class _InputPageState extends State<InputPage> {
                 isRoom: isRoom,
                 comfortRatings: widget.comfortRatings,
                 onSave: () => setState(() {}),
+                isCooling: widget.isCooling,
               ),
             ),
           ),
@@ -339,6 +353,7 @@ class _InputPageState extends State<InputPage> {
             isRoom: isRoom,
             comfortRatings: widget.comfortRatings,
             onSave: () => setState(() {}),
+            isCooling: widget.isCooling,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const begin = Offset(0.0, 1.0);
@@ -385,6 +400,7 @@ class RoomControlPage extends StatefulWidget {
   final bool isRoom;
   final Map<String, String>? comfortRatings;
   final VoidCallback onSave;
+  final bool isCooling;
 
   const RoomControlPage({
     super.key,
@@ -394,6 +410,7 @@ class RoomControlPage extends StatefulWidget {
     required this.isRoom,
     this.comfortRatings,
     required this.onSave,
+    required this.isCooling,
   });
 
   @override
@@ -427,14 +444,15 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _headerText = "CONSUMO GIORNALIERO";
     } else if (widget.isRoom) {
       _min = 10; _max = 45;
-      _mainColor = const Color(0xFFFFB74D);
+      _mainColor = widget.isCooling
+          ? const Color(0xFF4DB6AC) // azzurro raffrescamento
+          : const Color(0xFFFFB74D); // arancione riscaldamento
       _headerText = "TEMPERATURA INTERNA";
     } else {
       _min = -10; _max = 40;
-      _mainColor = const Color(0xFF4DB6AC);
+      _mainColor = const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
-    }
-  }
+    }}
 
   @override
   Widget build(BuildContext context) {
@@ -628,3 +646,4 @@ class _RoomControlPageState extends State<RoomControlPage> {
     Navigator.pop(context);
   }
 }
+
