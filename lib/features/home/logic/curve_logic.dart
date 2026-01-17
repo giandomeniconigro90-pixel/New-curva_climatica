@@ -41,33 +41,25 @@ class CurveSuggestion {
 }
 
 /// Calcola la temperatura di mandata target basata sulla curva climatica
-/// IMPORTANTE: Offset deve essere inteso come correzione relativa (es. 0.0, +2.0, -1.5)
 double computeMandata(double tExt, double slope, double offset, SystemMode mode) {
   if (mode == SystemMode.heating) {
-    // Heating (Inverno)
-    // Target ambiente fittizio 20°C.
+    // Heating (Inverno) Target ambiente fittizio 20°C.
     double targetAmbiente = 20.0;
     double rawMandata = targetAmbiente + (targetAmbiente - tExt) * slope + offset;
 
     // LIMITI RISCALDAMENTO (Fan Coil)
-    if (rawMandata < 35.0) rawMandata = 35.0; // Minimo per ventilazione
-    if (rawMandata > 60.0) rawMandata = 60.0; // Massimo sicurezza
+    if (rawMandata < 35.0) rawMandata = 35.0;
+    if (rawMandata > 60.0) rawMandata = 60.0;
 
     return rawMandata;
   } else {
-    // Cooling (Estate)
-    // Target ambiente fittizio 26°C. Base mandata 18°C.
-    // Formula: 18 + (T_est - 26) * Slope + Offset
-    // Più fa caldo fuori, più l'acqua deve essere fredda?
-    // NO, attenzione: La curva standard raffrescamento abbassa la mandata se fa caldo.
-    // Formula tipica: 18 - (Text - 26) * Slope
-
+    // Cooling (Estate) Target ambiente fittizio 26°C. Base mandata 18°C.
     double targetAmbiente = 26.0;
     double rawMandata = 18.0 - (tExt - targetAmbiente) * slope + offset;
 
     // LIMITI RAFFRESCAMENTO
-    if (rawMandata < 7.0) rawMandata = 7.0; // Minimo anti-condensa
-    if (rawMandata > 25.0) rawMandata = 25.0; // Massimo inutile
+    if (rawMandata < 7.0) rawMandata = 7.0;
+    if (rawMandata > 25.0) rawMandata = 25.0;
 
     return rawMandata;
   }
@@ -104,29 +96,51 @@ List<DailyRecordDTO> filterRecordsByMode(List<DailyRecordDTO> records, SystemMod
   }
 }
 
-/// CORE LOGIC: Calcola il suggerimento "Prudente"
+/// CORE LOGIC AGGIORNATA: Filtra i dati in base all'ultima modifica
 CurveSuggestion computeOptimalCurveSuggestion(
     List<DailyRecordDTO> allRecords,
     double currentSlope,
     double currentOffset,
     SystemMode mode,
+    [DateTime? lastAppliedDate] // Parametro opzionale aggiunto
     ) {
-  final records = filterRecordsByMode(allRecords, mode);
 
-  // FASE 1: APPRENDIMENTO
+  // 1. Filtra per modo (Heating/Cooling)
+  var records = filterRecordsByMode(allRecords, mode);
+
+  // 2. Filtra per DATA (Tieni solo quelli dopo l'ultima modifica)
+  if (lastAppliedDate != null) {
+    records = records.where((r) {
+      try {
+        final rDate = DateTime.parse(r.dateIso);
+        return rDate.isAfter(lastAppliedDate);
+      } catch (e) {
+        return false;
+      }
+    }).toList();
+  }
+
+  // FASE 1: APPRENDIMENTO (Ora conta solo i giorni NUOVI)
   if (records.length < 5) {
+    String message;
+    if (lastAppliedDate == null) {
+      message = "Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - records.length} giorni.";
+    } else {
+      message = "Hai modificato la curva di recente. Attendo 5 giorni di NUOVI dati per valutare le modifiche. (Giorni validi: ${records.length}/5)";
+    }
+
     return CurveSuggestion(
       suggestedSlope: currentSlope,
       suggestedOffset: currentOffset,
       comfortScore: 0.5,
       energyScore: 1.0,
-      smartTip: "Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - records.length} giorni.",
+      smartTip: message,
       isLearning: true,
       learningProgress: records.length,
     );
   }
 
-  // FASE 2: ANALISI
+  // FASE 2: ANALISI (Identica a prima, ma lavora sui dati filtrati)
   int coldComplaints = 0;
   int hotComplaints = 0;
   int okDays = 0;
@@ -141,38 +155,29 @@ CurveSuggestion computeOptimalCurveSuggestion(
   }
 
   double comfortScore = okDays / records.length;
-
   double targetSlope = currentSlope;
   double targetOffset = currentOffset;
   String tip = "";
 
   if (coldComplaints > hotComplaints) {
-    // Fa freddo -> Alziamo la temperatura (Offset +)
     targetOffset += 1.0;
     if (coldComplaints > records.length * 0.3) {
-      if (mode == SystemMode.heating) targetSlope += 0.1;
-      // In estate, slope alto = acqua più fredda col caldo, quindi slope+ ok
-      else targetSlope += 0.1;
+      targetSlope += 0.1;
     }
-    tip = "Rilevati giorni con comfort insufficiente (freddo/caldo). Aumento la potenza.";
-
+    tip = "Rilevati giorni con comfort insufficiente (freddo). Aumento la potenza.";
   } else if (hotComplaints > coldComplaints) {
-    // Fa caldo -> Abbassiamo la temperatura (Offset -)
     targetOffset -= 1.0;
     if (hotComplaints > records.length * 0.3) {
-      if (mode == SystemMode.heating) targetSlope -= 0.1;
-      else targetSlope -= 0.1;
+      targetSlope -= 0.1;
     }
-    tip = "Rilevato eccesso di calore/freddo. Riduco la potenza per risparmiare.";
-
+    tip = "Rilevato eccesso di calore. Riduco la potenza per risparmiare.";
   } else {
-    // Comfort OK -> Fine Tuning per risparmio
-    if (mode == SystemMode.heating) targetOffset -= 0.5; // Inverno: abbassa T
-    else targetOffset += 0.5; // Estate: alza T (acqua meno gelida)
+    if (mode == SystemMode.heating) targetOffset -= 0.5;
+    else targetOffset += 0.5;
     tip = "Comfort ottimale! Ottimizzo i consumi.";
   }
 
-  // FASE 3: PRUDENZA (Damping)
+  // FASE 3: PRUDENZA
   const double MAX_SLOPE_STEP = 0.1;
   const double MAX_OFFSET_STEP = 1.0;
 
@@ -186,15 +191,13 @@ CurveSuggestion computeOptimalCurveSuggestion(
     targetOffset = currentOffset + (diffOffset.sign * MAX_OFFSET_STEP);
   }
 
-  // Arrotondamento
   targetSlope = (targetSlope * 100).round() / 100.0;
   targetOffset = (targetOffset * 10).round() / 10.0;
 
-  // FASE 4: CHECK INUTILITÀ
   if ((targetSlope - currentSlope).abs() < 0.01 && (targetOffset - currentOffset).abs() < 0.1) {
     targetSlope = currentSlope;
     targetOffset = currentOffset;
-    tip = "Parametri attuali ottimali. Nessuna modifica necessaria al momento.";
+    tip = "Parametri attuali ottimali con i nuovi dati. Mantieni così.";
   }
 
   return CurveSuggestion(
@@ -208,7 +211,6 @@ CurveSuggestion computeOptimalCurveSuggestion(
   );
 }
 
-// Genera i punti per il grafico (LineChart)
 List<FlSpot> buildCurveSpots({
   required double slope,
   required double offset,

@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import '../../../../models/daily_record_dto.dart';
+import '../../../../services/weather_service.dart';
 
 // --- INPUT PAGE: TADO STYLE (FINAL) ---
 class InputPage extends StatefulWidget {
@@ -15,6 +16,7 @@ class InputPage extends StatefulWidget {
   final Function(int) onDeleteRecord;
   final Function(int) onEditRecord;
   final bool isEditing;
+  final bool isCooling;
   final VoidCallback onDuplicateFromYesterday;
   final VoidCallback onExportCsv;
   final VoidCallback onExportPdf;
@@ -32,17 +34,20 @@ class InputPage extends StatefulWidget {
     required this.onDeleteRecord,
     required this.onEditRecord,
     required this.isEditing,
+    required this.isCooling,              // <--- NUOVO
     required this.onDuplicateFromYesterday,
     required this.onExportCsv,
     required this.onExportPdf,
     required this.onDeleteToday,
   });
 
+
   @override
   State<InputPage> createState() => _InputPageState();
 }
 
 class _InputPageState extends State<InputPage> {
+  // Ordine personalizzato delle stanze
   final List<String> orderedRooms = [
     'Soggiorno/Cucina',
     'Bagno PT',
@@ -52,6 +57,45 @@ class _InputPageState extends State<InputPage> {
     'Bagno 1P'
   ];
 
+  // -- LOGICA METEO --
+  bool _isLoadingWeather = false;
+  String? _weatherLocation;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  Future<void> _fetchWeather() async {
+    setState(() => _isLoadingWeather = true);
+    try {
+      // Usiamo 'final' o 'var' invece del tipo esplicito WeatherData per evitare errori di import
+      final result = await WeatherService.getDailyAvgTemp();
+
+      // Controllo di sicurezza se il risultato è valido
+      if (result != null && mounted) {
+        setState(() {
+          // Accesso dinamico alle proprietà
+          widget.externalTempController.text = (result.temp as double).toStringAsFixed(1);
+          _weatherLocation = result.locationName.toString();
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Meteo aggiornato da $_weatherLocation')),
+        );
+      }
+    } catch (e) {
+      debugPrint("Errore meteo: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Errore recupero meteo')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingWeather = false);
+    }
+  }
+  // ---------------------------
+
   @override
   Widget build(BuildContext context) {
     List<Widget> gridItems = [];
@@ -59,11 +103,12 @@ class _InputPageState extends State<InputPage> {
     // 1. Esterna
     gridItems.add(_buildTadoTile(
       title: "Esterna",
-      subtitle: "Benessere",
+      subtitle: _weatherLocation ?? "Benessere",
       controller: widget.externalTempController,
-      icon: Icons.wb_sunny_outlined,
-      color: const Color(0xFF4DB6AC), // Ciano
+      icon: Icons.cloud_sync,
+      color: const Color(0xFF1976D2), // Ciano
       isRoom: false,
+      isWeatherTile: true,
       suffix: "°",
     ));
 
@@ -87,10 +132,12 @@ class _InputPageState extends State<InputPage> {
       }
       gridItems.add(_buildTadoTile(
         title: room,
-        subtitle: "Riscaldamento",
+        subtitle: widget.isCooling ? "Raffrescamento" : "Riscaldamento",
         controller: ctrl,
         icon: null,
-        color: const Color(0xFFFFB74D), // Arancione
+        color: widget.isCooling
+            ? const Color(0xFF4DB6AC) // azzurro (come switch in raffrescamento)
+            : const Color(0xFFFFB74D), // arancione (riscaldamento)
         isRoom: true,
         suffix: "°",
       ));
@@ -101,37 +148,44 @@ class _InputPageState extends State<InputPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F7),
+
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddRecord,
-        backgroundColor: Colors.black87,
-        icon: Icon(widget.isEditing ? Icons.save_as : Icons.check, color: Colors.white),
+        backgroundColor: Colors.blue.shade900, // nuovo colore
+        icon: Icon(
+          widget.isEditing ? Icons.save_as : Icons.check,
+          color: Colors.white,
+        ),
         label: Text(
           widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
-          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
       ),
+
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), // ancora più in alto
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
+                mainAxisAlignment: MainAxisAlignment.start, // sempre a sinistra
+                children: const [
+                  Text(
                     "Home",
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF263238)),
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF263238),
+                    ),
                   ),
-                  if (!widget.isEditing)
-                    IconButton(
-                      onPressed: widget.onDuplicateFromYesterday,
-                      icon: const Icon(Icons.copy_all, color: Colors.grey),
-                      tooltip: "Copia da ieri",
-                    )
                 ],
               ),
             ),
           ),
+
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverGrid(
@@ -168,6 +222,7 @@ class _InputPageState extends State<InputPage> {
     required Color color,
     required bool isRoom,
     required String suffix,
+    bool isWeatherTile = false,
   }) {
     return ListenableBuilder(
       listenable: controller,
@@ -188,28 +243,51 @@ class _InputPageState extends State<InputPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (isRoom || val != null)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        displayVal,
-                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2, left: 2),
-                        child: Text(
-                          suffix,
-                          style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (isRoom || val != null)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayVal,
+                            style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2, left: 2),
+                            child: Text(
+                              suffix,
+                              style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      const SizedBox(),
+
+                    if (isWeatherTile)
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _isLoadingWeather ? null : _fetchWeather,
+                          borderRadius: BorderRadius.circular(20),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: _isLoadingWeather
+                                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : Icon(Icons.cloud_sync, size: 28, color: Colors.white.withOpacity(0.8)),
+                          ),
                         ),
+                      )
+                    else if (!isRoom && val == null)
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
                       ),
-                    ],
-                  )
-                else
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
-                  ),
+                  ],
+                ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -259,6 +337,7 @@ class _InputPageState extends State<InputPage> {
                 isRoom: isRoom,
                 comfortRatings: widget.comfortRatings,
                 onSave: () => setState(() {}),
+                isCooling: widget.isCooling,
               ),
             ),
           ),
@@ -274,6 +353,7 @@ class _InputPageState extends State<InputPage> {
             isRoom: isRoom,
             comfortRatings: widget.comfortRatings,
             onSave: () => setState(() {}),
+            isCooling: widget.isCooling,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const begin = Offset(0.0, 1.0);
@@ -302,7 +382,6 @@ class DegreePainter extends CustomPainter {
       ..strokeWidth = 2.5;
 
     const double radius = 5.0;
-    // Offset spostato un "pelo" a destra: da 2.0 a 6.0
     final center = Offset(10 + radius, -9.0);
 
     canvas.drawCircle(center, radius, paint);
@@ -321,6 +400,7 @@ class RoomControlPage extends StatefulWidget {
   final bool isRoom;
   final Map<String, String>? comfortRatings;
   final VoidCallback onSave;
+  final bool isCooling;
 
   const RoomControlPage({
     super.key,
@@ -330,6 +410,7 @@ class RoomControlPage extends StatefulWidget {
     required this.isRoom,
     this.comfortRatings,
     required this.onSave,
+    required this.isCooling,
   });
 
   @override
@@ -349,7 +430,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
   void initState() {
     super.initState();
     _currentValue = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
-        (widget.isConsumption ? 15.0 : (widget.isRoom ? 20.0 : 12.0));
+        (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
 
     if (widget.isRoom && widget.comfortRatings != null) {
       _currentComfort = widget.comfortRatings![widget.title] ?? 'ok';
@@ -358,19 +439,20 @@ class _RoomControlPageState extends State<RoomControlPage> {
     }
 
     if (widget.isConsumption) {
-      _min = 0; _max = 100;
+      _min = 0; _max = 25;
       _mainColor = const Color(0xFF66BB6A);
       _headerText = "CONSUMO GIORNALIERO";
     } else if (widget.isRoom) {
-      _min = 15; _max = 28;
-      _mainColor = const Color(0xFFFFB74D);
+      _min = 10; _max = 45;
+      _mainColor = widget.isCooling
+          ? const Color(0xFF4DB6AC) // azzurro raffrescamento
+          : const Color(0xFFFFB74D); // arancione riscaldamento
       _headerText = "TEMPERATURA INTERNA";
     } else {
       _min = -10; _max = 40;
-      _mainColor = const Color(0xFF4DB6AC);
+      _mainColor = const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
-    }
-  }
+    }}
 
   @override
   Widget build(BuildContext context) {
@@ -448,7 +530,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                       )
                     else
                       Transform.translate(
-                        offset: const Offset(-5.0, 0.0),
+                        offset: const Offset(-1.0, 0.0),
                         child: CustomPaint(
                           foregroundPainter: DegreePainter(color: Colors.white),
                           child: Text(
@@ -564,3 +646,4 @@ class _RoomControlPageState extends State<RoomControlPage> {
     Navigator.pop(context);
   }
 }
+

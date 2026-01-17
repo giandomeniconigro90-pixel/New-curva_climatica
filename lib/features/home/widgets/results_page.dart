@@ -3,28 +3,30 @@
 import 'package:flutter/material.dart';
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
-import '../logic/curve_logic.dart';
+import '../logic/curve_logic.dart'; // Importa CurveSuggestion e CurveStats
 
 class ResultsPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
-  final double slope;
-  final double offset;
-  final CurveSuggestion suggestion;
-  final CurveStats stats;
-  final VoidCallback onApplyAiCurve;
-  final Function(int) onDeleteRecord;
-  final Function(int) onEditRecord;
+
+  // Parametri opzionali per supportare la modalità "Avanzata" (chiamata da ClimateCurveHome)
+  final double? slope;
+  final double? offset;
+  final CurveSuggestion? suggestion;
+  final CurveStats? stats;
+  final VoidCallback? onApplyAiCurve;
+  final Function(int)? onDeleteRecord;
+  final Function(int)? onEditRecord;
 
   const ResultsPage({
     super.key,
     required this.records,
-    required this.slope,
-    required this.offset,
-    required this.suggestion,
-    required this.stats,
-    required this.onApplyAiCurve,
-    required this.onDeleteRecord,
-    required this.onEditRecord,
+    this.slope,
+    this.offset,
+    this.suggestion,
+    this.stats,
+    this.onApplyAiCurve,
+    this.onDeleteRecord,
+    this.onEditRecord,
   });
 
   @override
@@ -33,34 +35,85 @@ class ResultsPage extends StatefulWidget {
 
 class _ResultsPageState extends State<ResultsPage> {
   double _costPerKwh = 0.0;
-
-  // Blocca il pulsante dopo l'applicazione
-  bool _hasAppliedThisSession = false;
+  bool _showAdvancedStats = false;
 
   @override
   void initState() {
     super.initState();
+    // Mostra UI avanzata (AI, grafici extra) solo se i parametri sono stati passati
+    _showAdvancedStats = widget.slope != null && widget.suggestion != null;
     _loadCost();
   }
 
-  @override
-  void didUpdateWidget(ResultsPage oldWidget) {
-    super.didUpdateWidget(oldWidget);
+  Future<void> _loadCost() async {
+    final cost = AppStorage.getCostPerKwh();
+    if (mounted) setState(() => _costPerKwh = cost);
   }
 
-  Future<void> _loadCost() async {
-    final cost = await AppStorage.getCostPerKwh();
-    if (mounted) {
-      setState(() {
-        _costPerKwh = cost;
-      });
+  DateTime _parseDateSmart(String dateIso) {
+    // 0. Formato italiano dd/MM/yyyy (backup vecchi)
+    final slashParts = dateIso.split('/');
+    if (slashParts.length == 3) {
+      final d = int.tryParse(slashParts[0]);
+      final m = int.tryParse(slashParts[1]);
+      final y = int.tryParse(slashParts[2]);
+      if (d != null && m != null && y != null) {
+        return DateTime(y, m, d);
+      }
     }
+
+    // 1. Prova formato ISO completo
+    try {
+      return DateTime.parse(dateIso);
+    } catch (_) {}
+
+    // 2. Formato con spazio (yyyy-MM-dd HH:mm)
+    try {
+      final parts = dateIso.split(' ');
+      if (parts.length == 2) {
+        final datePart = parts[0].split('-');
+        final timePart = parts[1].split(':');
+        return DateTime(
+          int.parse(datePart[0]),
+          int.parse(datePart[1]),
+          int.parse(datePart[2]),
+          int.parse(timePart[0]),
+          int.parse(timePart[1]),
+        );
+      }
+    } catch (_) {}
+
+    // 3. Solo data yyyy-MM-dd
+    try {
+      final parts = dateIso.split('-');
+      return DateTime(
+        int.parse(parts[0]),
+        int.parse(parts[1]),
+        int.parse(parts[2]),
+      );
+    } catch (_) {}
+
+    // 4. Ultimo fallback
+    return DateTime.now();
+  }
+
+  // NUOVO: Conta rilevamenti da ultimo apply AI
+  int _getRecordsSinceLastAiApply(List<DailyRecordDTO> records) {
+    // Simula la logica recordsSinceLastApply da climate_curve_home.dart
+    // Conta record più recenti fino a trovare 5 o esaurire la lista
+    final sortedRecords = List<DailyRecordDTO>.from(records);
+    sortedRecords.sort((a, b) {
+      final da = _parseDateSmart(a.dateIso);
+      final db = _parseDateSmart(b.dateIso);
+      return db.compareTo(da); // più recenti prima
+    });
+    return sortedRecords.length; // Semplificazione: usa tutti i record disponibili
   }
 
   Future<void> _editCost(BuildContext context) async {
-    final initialText = _costPerKwh == 0 ? '' : _costPerKwh.toString();
-    final TextEditingController controller = TextEditingController(text: initialText);
-
+    final TextEditingController controller = TextEditingController(
+      text: _costPerKwh == 0 ? '' : _costPerKwh.toString(),
+    );
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -111,527 +164,292 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
-            Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade600, letterSpacing: 0.5)),
-            const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // NUOVO WIDGET: Distribuzione Comfort
-  Widget _buildComfortDistribution() {
-    if (widget.records.isEmpty) return const SizedBox.shrink();
-
-    int cold = 0;
-    int hot = 0;
-    int ok = 0;
-
-    for (var r in widget.records) {
-      if (r.comfortRatings.values.contains('freddo')) cold++;
-      else if (r.comfortRatings.values.contains('caldo')) hot++;
-      else ok++;
-    }
-
-    final total = widget.records.length;
-    if (total == 0) return const SizedBox.shrink();
-
-    // Calcolo percentuali per la larghezza (Flex)
-    final int flexCold = (cold / total * 100).round();
-    final int flexHot = (hot / total * 100).round();
-    final int flexOk = (ok / total * 100).round();
-
-    if (flexCold + flexHot + flexOk == 0) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('DISTRIBUZIONE COMFORT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1)),
-          const SizedBox(height: 16),
-
-          // Barra Colorata
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: SizedBox(
-              height: 20,
-              child: Row(
-                children: [
-                  if (flexCold > 0) Expanded(flex: flexCold, child: Container(color: Colors.blue.shade300)),
-                  if (flexOk > 0) Expanded(flex: flexOk, child: Container(color: Colors.green.shade400)),
-                  if (flexHot > 0) Expanded(flex: flexHot, child: Container(color: Colors.red.shade300)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Legenda Sotto
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              if (cold > 0) _buildLegendDot('Freddo', Colors.blue.shade300, '$cold gg'),
-              if (ok > 0) _buildLegendDot('Ottimale', Colors.green.shade400, '$ok gg'),
-              if (hot > 0) _buildLegendDot('Caldo', Colors.red.shade300, '$hot gg'),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLegendDot(String label, Color color, String count) {
-    return Row(
-      children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text('$label ($count)', style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
-      ],
-    );
-  }
-
-  Widget _buildStatRow(String label, String val) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-          Text(val, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEnergyWalletCard() {
-    final bool isActive = _costPerKwh > 0;
-    final double todayCost = widget.records.isNotEmpty
-        ? widget.records.last.consumption * _costPerKwh
-        : 0.0;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF263238),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.wallet_rounded, color: Colors.amberAccent, size: 20),
-                  const SizedBox(width: 8),
-                  Text('ENERGY WALLET', style: TextStyle(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold, letterSpacing: 1)),
-                ],
-              ),
-              IconButton(
-                icon: const Icon(Icons.edit, color: Colors.white54, size: 18),
-                onPressed: () => _editCost(context),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              )
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (!isActive)
-            Center(
-              child: TextButton.icon(
-                onPressed: () => _editCost(context),
-                icon: const Icon(Icons.add_circle_outline, color: Colors.white70),
-                label: const Text('Imposta Costo Energia', style: TextStyle(color: Colors.white70)),
-              ),
-            )
-          else
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('€ ${todayCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-                    Text('Spesa stimata oggi', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('TARIFFA', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
-                    Text('€ $_costPerKwh /kWh', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.amberAccent)),
-                  ],
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHistoryList() {
-    if (widget.records.isEmpty) {
-      return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text("Nessuna registrazione presente.")));
-    }
-
-    final sortedRecords = List.from(widget.records.asMap().entries.toList())
-      ..sort((a, b) => b.value.dateIso.compareTo(a.value.dateIso));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-          child: Text("STORICO REGISTRAZIONI", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
-        ),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: sortedRecords.length,
-          itemBuilder: (context, index) {
-            final entry = sortedRecords[index];
-            final originalIndex = entry.key;
-            final r = entry.value;
-
-            double avgInt = 0;
-            if (r.internalTemps.isNotEmpty) {
-              avgInt = r.internalTemps.values.map((e) => e as num).reduce((a, b) => a + b) / r.internalTemps.length;
-            }
-
-            return Card(
-              elevation: 0,
-              color: Colors.grey.shade50,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                title: Text(r.dateIso, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                subtitle: Text(
-                  "Est: ${r.externalTemp}°C • Int: ${avgInt.toStringAsFixed(1)}°C • ${r.consumption} kWh",
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.edit_rounded, color: Colors.blue, size: 20),
-                      onPressed: () => widget.onEditRecord(originalIndex),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
-                      onPressed: () => _confirmDelete(originalIndex),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Future<void> _confirmDelete(int index) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Elimina Registrazione'),
-        content: const Text('Sei sicuro di voler eliminare questi dati?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annulla')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), style: TextButton.styleFrom(foregroundColor: Colors.red), child: const Text('Elimina')),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      widget.onDeleteRecord(index);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final isLearning = widget.suggestion.isLearning;
+    if (widget.records.isEmpty) {
+      return const Center(child: Text("Nessun dato registrato", style: TextStyle(color: Colors.grey)));
+    }
 
-    final bool isAlreadyOptimized =
-        (widget.slope - widget.suggestion.suggestedSlope).abs() < 0.01 &&
-            (widget.offset - widget.suggestion.suggestedOffset).abs() < 0.01;
+    // Ordina record per data decrescente
+    final sortedRecords = List<DailyRecordDTO>.from(widget.records);
+    sortedRecords.sort((a, b) {
+      final da = _parseDateSmart(a.dateIso);
+      final db = _parseDateSmart(b.dateIso);
+      return db.compareTo(da); // più recenti prima
+    });
 
-    final bool isButtonDisabled = isLearning || _hasAppliedThisSession || isAlreadyOptimized;
+    final lastRecord = sortedRecords.first;
+    final todayCost = lastRecord.consumption * _costPerKwh;
 
-    return SingleChildScrollView(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. METRICHE
-                Row(
-                  children: [
-                    _buildMetricCard(
-                        'COMFORT',
-                        '${(widget.suggestion.comfortScore * 100).toInt()}%',
-                        Icons.sentiment_satisfied_rounded,
-                        Colors.orange
-                    ),
-                    const SizedBox(width: 12),
-                    _buildMetricCard(
-                        'EFFICIENZA',
-                        '${(widget.suggestion.energyScore * 100).toInt()}%',
-                        Icons.eco_rounded,
-                        Colors.green
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 24),
-
-                // 2. BARRA DISTRIBUZIONE COMFORT
-                _buildComfortDistribution(),
-
-                const SizedBox(height: 24),
-
-                // 3. CARD AI PRINCIPALE
-                Container(
-                  width: double.infinity,
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F7),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // --- SEZIONE 1: Energy Wallet (Sempre visibile) ---
+              const Text("Riepilogo", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () => _editCost(context),
+                child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isLearning
-                          ? [Colors.grey.shade800, Colors.grey.shade900]
-                          : [const Color(0xFF00695C), const Color(0xFF004D40)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    color: const Color(0xFF263238),
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(color: (isLearning ? Colors.grey : const Color(0xFF00695C)).withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 6))],
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
                   ),
                   child: Column(
                     children: [
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
+                          Row(children: [
+                            const Icon(Icons.wallet_rounded, color: Colors.amberAccent, size: 20),
+                            const SizedBox(width: 8),
+                            Text('ENERGY WALLET', style: TextStyle(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          ]),
+                          const Icon(Icons.edit, color: Colors.white54, size: 18),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _costPerKwh > 0 ? '€ ${todayCost.toStringAsFixed(2)}' : 'Configura',
+                                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+                              ),
+                              Text('Spesa stimata oggi', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                            ],
+                          ),
                           Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), shape: BoxShape.circle),
-                            child: const Icon(Icons.auto_awesome, color: Colors.white, size: 24),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                            child: Text(
+                              '${lastRecord.consumption} kWh',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // --- SEZIONE 2: AI Suggestion (Solo se modalità Avanzata) ---
+              if (_showAdvancedStats && widget.suggestion != null) ...[
+                _buildAiCard(widget.suggestion!),
+                const SizedBox(height: 24),
+              ],
+
+              // --- SEZIONE 3: Lista Storico ---
+              const Text("Storico Recente", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: sortedRecords.length,
+                itemBuilder: (context, index) {
+                  final r = sortedRecords[index];
+                  DateTime date = _parseDateSmart(r.dateIso);
+
+                  return InkWell(
+                    onTap: widget.onEditRecord != null ? () => widget.onEditRecord!(index) : null,
+                    //onLongPress: widget.onDeleteRecord != null ? () => widget.onDeleteRecord!(index) : null,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+                      ),
+                      child: Row(
+                        children: [
+                          // DATA
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(15)),
+                            child: Column(
+                              children: [
+                                Text("${date.day}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue.shade800)),
+                                Text("${date.month}", style: TextStyle(fontSize: 10, color: Colors.blue.shade800)),
+                              ],
+                            ),
                           ),
                           const SizedBox(width: 16),
+
+                          // DATI PRINCIPALI
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Analisi AI ClimaSense', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.thermostat, size: 14, color: Colors.orange),
+                                    const SizedBox(width: 4),
+                                    Text("Esterna: ${r.externalTemp}°C", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
                                 const SizedBox(height: 4),
-                                Text(
-                                    isLearning ? 'Apprendimento in corso...' : 'Ottimizzazione Disponibile',
-                                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)
+                                Row(
+                                  children: [
+                                    const Icon(Icons.flash_on, size: 14, color: Colors.amber),
+                                    const SizedBox(width: 4),
+                                    Text("Consumo: ${r.consumption} kWh", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
+
+                          // NOTE
+                          if (r.note != null && r.note!.isNotEmpty)
+                            const Icon(Icons.sticky_note_2_outlined, color: Colors.grey, size: 18),
+
+                          const SizedBox(width: 12),
+
+                          // NUOVE ICONE: MATITINA E SECCHIELLO
+                          if (widget.onEditRecord != null) ...[
+                            IconButton(
+                              onPressed: () => widget.onEditRecord!(index),
+                              icon: Icon(Icons.edit, size: 20, color: Colors.blue.shade600),
+                              tooltip: 'Modifica',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                          if (widget.onDeleteRecord != null) ...[
+                            IconButton(
+                              onPressed: () => widget.onDeleteRecord!(index),
+                              icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade600),
+                              tooltip: 'Elimina',
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.black.withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _hasAppliedThisSession
-                                    ? "Modifica salvata. Attendi almeno 4 giorni prima di fare altri cambiamenti, per valutare correttamente il comfort."
-                                    : widget.suggestion.smartTip,
-                                style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (!isLearning) ...[
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('PENDENZA', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Text(widget.slope.toStringAsFixed(1), style: TextStyle(color: Colors.white.withOpacity(0.6), decoration: TextDecoration.lineThrough)),
-                                      const SizedBox(width: 8),
-                                      Text(widget.suggestion.suggestedSlope.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('PARALLELA', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Text(widget.offset.toStringAsFixed(1), style: TextStyle(color: Colors.white.withOpacity(0.6), decoration: TextDecoration.lineThrough)),
-                                      const SizedBox(width: 8),
-                                      Text(widget.suggestion.suggestedOffset.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: isButtonDisabled
-                                ? null
-                                : () {
-                              setState(() {
-                                _hasAppliedThisSession = true;
-                              });
-                              widget.onApplyAiCurve();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: const Color(0xFF004D40),
-                              disabledBackgroundColor: Colors.white24,
-                              disabledForegroundColor: Colors.white38,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
-                            ),
-                            child: Text(
-                                _hasAppliedThisSession
-                                    ? 'MODIFICA APPLICATA'
-                                    : (isAlreadyOptimized ? 'PARAMETRI OTTIMIZZATI' : 'APPLICA NUOVI PARAMETRI'),
-                                style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)
-                            ),
-                          ),
-                        ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                        const SizedBox(height: 24),
+  Widget _buildAiCard(CurveSuggestion suggestion) {
+    // NUOVO: Logica per disabilitare pulsante se < 5 rilevamenti
+    final int recentRecordsCount = _getRecordsSinceLastAiApply(widget.records);
+    final bool hasEnoughData = recentRecordsCount >= 5;
 
-                        // --- NUOVO BOX SUGGERIMENTO PRATICO ---
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white.withOpacity(0.2)),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.info_outline, color: Colors.amberAccent, size: 20),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      "COME IMPOSTARE LA MACCHINA:",
-                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      "• PENDENZA (Slope): Sulla Sherpa corrisponde al numero della 'Curva Climatica' (es. Curva 4 o 5). Controlla il manuale per trovare quella più vicina a ${widget.suggestion.suggestedSlope}.\n"
-                                          "• PARALLELA (Offset): Cerca la voce 'Spostamento Curva' o 'K Value' nel menu temperature.",
-                                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 11, height: 1.3),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // ---------------------------------------
-                      ],
-                      if (isLearning) ...[
-                        const SizedBox(height: 16),
-                        LinearProgressIndicator(
-                          value: widget.suggestion.learningProgress / 5.0,
-                          backgroundColor: Colors.white10,
-                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.orangeAccent),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Servono ancora ${5 - widget.suggestion.learningProgress} giorni di dati',
-                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
-                        ),
-                      ]
-                    ],
+    // NUOVO: Controllo se i valori sono uguali a quelli attuali (tolleranza 0.05)
+    final bool valuesAreEqual = widget.slope != null && widget.offset != null &&
+        (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
+        (suggestion.suggestedOffset - widget.offset!).abs() < 0.05;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.indigo.shade50),
+        boxShadow: [BoxShadow(color: Colors.indigo.shade50, blurRadius: 15, offset: const Offset(0, 5))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(12)),
+              child: Icon(Icons.auto_awesome, color: Colors.indigo.shade400, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text("AI Advisor", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo.shade900, fontSize: 16)),
+          ]),
+
+          // NUOVO: Indicatore numero rilevamenti
+          Container(
+            margin: const EdgeInsets.only(top: 12, bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: hasEnoughData ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: hasEnoughData ? Colors.green : Colors.orange,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  hasEnoughData ? Icons.check_circle : Icons.schedule,
+                  size: 16,
+                  color: hasEnoughData ? Colors.green.shade700 : Colors.orange.shade700,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Rilevamenti: $recentRecordsCount',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: hasEnoughData ? Colors.green.shade700 : Colors.orange.shade700,
                   ),
                 ),
-
-                const SizedBox(height: 24),
-
-                // 4. ENERGY WALLET
-                _buildEnergyWalletCard(),
-
-                const SizedBox(height: 24),
-
-                // 5. INFO TECNICHE
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade200)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('DETTAGLI TECNICI', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1)),
-                      const SizedBox(height: 16),
-                      _buildStatRow('Giorni Analizzati', '${widget.stats.totalDays}'),
-                      const Divider(),
-                      _buildStatRow('Consumo Medio', '${widget.stats.avgConsumption.toStringAsFixed(1)} kWh'),
-                      const Divider(),
-                      _buildStatRow('Temp. Esterna Min/Max', '${widget.stats.minExternalTemp.toStringAsFixed(1)}° / ${widget.stats.maxExternalTemp.toStringAsFixed(1)}°'),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 30),
-
-                // 6. STORICO REGISTRAZIONI
-                _buildHistoryList(),
-
-                const SizedBox(height: 40),
               ],
             ),
           ),
-        ),
+
+          const SizedBox(height: 8),
+          // FIX: Uso .smartTip invece di .reasoning
+          Text(
+            suggestion.smartTip,
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5),
+          ),
+
+          const SizedBox(height: 20),
+          if (widget.onApplyAiCurve != null)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: hasEnoughData && !valuesAreEqual ? widget.onApplyAiCurve : null,
+                icon: const Icon(Icons.check_circle_outline, size: 18),
+                label: Text(
+                  valuesAreEqual
+                      ? "Valori identici (nessuna modifica)"
+                      : hasEnoughData
+                      ? "Applica Curva (S:${suggestion.suggestedSlope.toStringAsFixed(1)} O:${suggestion.suggestedOffset.toStringAsFixed(1)})"
+                      : "Serve 5+ rilevamenti ($recentRecordsCount)",
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: hasEnoughData && !valuesAreEqual
+                      ? Colors.indigo
+                      : Colors.grey.shade300,
+                  foregroundColor: hasEnoughData && !valuesAreEqual
+                      ? Colors.white
+                      : Colors.grey.shade600,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: hasEnoughData && !valuesAreEqual ? 0 : 0,
+                ),
+              ),
+            )
+        ],
       ),
     );
   }
