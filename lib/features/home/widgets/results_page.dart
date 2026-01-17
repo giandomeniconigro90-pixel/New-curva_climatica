@@ -1,6 +1,7 @@
 // lib/features/home/widgets/results_page.dart
 
 import 'package:flutter/material.dart';
+
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
 import '../logic/curve_logic.dart'; // Importa CurveSuggestion e CurveStats
@@ -14,8 +15,14 @@ class ResultsPage extends StatefulWidget {
   final CurveSuggestion? suggestion;
   final CurveStats? stats;
   final VoidCallback? onApplyAiCurve;
+
+  // Callbacks basate su indice (per compatibilità con DashboardHome, ecc.)
   final Function(int)? onDeleteRecord;
   final Function(int)? onEditRecord;
+
+  // NUOVE callbacks opzionali basate su dateIso (per evitare problemi con lista ordinata)
+  final void Function(String dateIso)? onEditRecordByDateIso;
+  final void Function(String dateIso)? onDeleteRecordByDateIso;
 
   const ResultsPage({
     super.key,
@@ -27,6 +34,8 @@ class ResultsPage extends StatefulWidget {
     this.onApplyAiCurve,
     this.onDeleteRecord,
     this.onEditRecord,
+    this.onEditRecordByDateIso,
+    this.onDeleteRecordByDateIso,
   });
 
   @override
@@ -97,23 +106,22 @@ class _ResultsPageState extends State<ResultsPage> {
     return DateTime.now();
   }
 
-  // NUOVO: Conta rilevamenti da ultimo apply AI
+  // Conta rilevamenti (semplificato: usa tutti i record disponibili)
   int _getRecordsSinceLastAiApply(List<DailyRecordDTO> records) {
-    // Simula la logica recordsSinceLastApply da climate_curve_home.dart
-    // Conta record più recenti fino a trovare 5 o esaurire la lista
     final sortedRecords = List<DailyRecordDTO>.from(records);
     sortedRecords.sort((a, b) {
       final da = _parseDateSmart(a.dateIso);
       final db = _parseDateSmart(b.dateIso);
       return db.compareTo(da); // più recenti prima
     });
-    return sortedRecords.length; // Semplificazione: usa tutti i record disponibili
+    return sortedRecords.length;
   }
 
   Future<void> _editCost(BuildContext context) async {
     final TextEditingController controller = TextEditingController(
       text: _costPerKwh == 0 ? '' : _costPerKwh.toString(),
     );
+
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -148,7 +156,10 @@ class _ResultsPageState extends State<ResultsPage> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Annulla')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Annulla'),
+          ),
           ElevatedButton(
             onPressed: () async {
               final text = controller.text.replaceAll(',', '.');
@@ -167,7 +178,12 @@ class _ResultsPageState extends State<ResultsPage> {
   @override
   Widget build(BuildContext context) {
     if (widget.records.isEmpty) {
-      return const Center(child: Text("Nessun dato registrato", style: TextStyle(color: Colors.grey)));
+      return const Center(
+        child: Text(
+          "Nessun dato registrato",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
     }
 
     // Ordina record per data decrescente
@@ -189,8 +205,11 @@ class _ResultsPageState extends State<ResultsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- SEZIONE 1: Energy Wallet (Sempre visibile) ---
-              const Text("Riepilogo", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              // --- SEZIONE 1: Energy Wallet ---
+              const Text(
+                "Riepilogo",
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 16),
               GestureDetector(
                 onTap: () => _editCost(context),
@@ -199,18 +218,37 @@ class _ResultsPageState extends State<ResultsPage> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF263238),
                     borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5))],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
                   ),
                   child: Column(
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(children: [
-                            const Icon(Icons.wallet_rounded, color: Colors.amberAccent, size: 20),
-                            const SizedBox(width: 8),
-                            Text('ENERGY WALLET', style: TextStyle(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold, letterSpacing: 1)),
-                          ]),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.wallet_rounded,
+                                color: Colors.amberAccent,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'ENERGY WALLET',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
                           const Icon(Icons.edit, color: Colors.white54, size: 18),
                         ],
                       ),
@@ -222,22 +260,43 @@ class _ResultsPageState extends State<ResultsPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _costPerKwh > 0 ? '€ ${todayCost.toStringAsFixed(2)}' : 'Configura',
-                                style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white),
+                                _costPerKwh > 0
+                                    ? '€ ${todayCost.toStringAsFixed(2)}'
+                                    : 'Configura',
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
                               ),
-                              Text('Spesa stimata oggi', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12)),
+                              Text(
+                                'Spesa stimata oggi',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.6),
+                                  fontSize: 12,
+                                ),
+                              ),
                             ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             child: Text(
                               '${lastRecord.consumption} kWh',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
-                      )
+                      ),
                     ],
                   ),
                 ),
@@ -245,48 +304,96 @@ class _ResultsPageState extends State<ResultsPage> {
 
               const SizedBox(height: 24),
 
-              // --- SEZIONE 2: AI Suggestion (Solo se modalità Avanzata) ---
+              // --- SEZIONE 2: AI Suggestion (solo se modalità Avanzata) ---
               if (_showAdvancedStats && widget.suggestion != null) ...[
                 _buildAiCard(widget.suggestion!),
                 const SizedBox(height: 24),
               ],
 
               // --- SEZIONE 3: Lista Storico ---
-              const Text("Storico Recente", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                "Storico Recente",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 10),
-
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: sortedRecords.length,
                 itemBuilder: (context, index) {
                   final r = sortedRecords[index];
-                  DateTime date = _parseDateSmart(r.dateIso);
+                  final date = _parseDateSmart(r.dateIso);
+
+                  void handleEditTap() {
+                    if (widget.onEditRecordByDateIso != null) {
+                      widget.onEditRecordByDateIso!(r.dateIso);
+                    } else if (widget.onEditRecord != null) {
+                      widget.onEditRecord!(index);
+                    }
+                  }
+
+                  void handleDeleteTap() {
+                    if (widget.onDeleteRecordByDateIso != null) {
+                      widget.onDeleteRecordByDateIso!(r.dateIso);
+                    } else if (widget.onDeleteRecord != null) {
+                      widget.onDeleteRecord!(index);
+                    }
+                  }
 
                   return InkWell(
-                    onTap: widget.onEditRecord != null ? () => widget.onEditRecord!(index) : null,
-                    //onLongPress: widget.onDeleteRecord != null ? () => widget.onDeleteRecord!(index) : null,
+                    onTap: widget.onEditRecordByDateIso != null ||
+                        widget.onEditRecord != null
+                        ? handleEditTap
+                        : null,
+                    // Se vuoi usare il long-press per delete, stessa logica:
+                    // onLongPress: widget.onDeleteRecordByDateIso != null ||
+                    //         widget.onDeleteRecord != null
+                    //     ? handleDeleteTap
+                    //     : null,
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
-                        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.withOpacity(0.1),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Row(
                         children: [
                           // DATA
                           Container(
                             padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(15)),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(15),
+                            ),
                             child: Column(
                               children: [
-                                Text("${date.day}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.blue.shade800)),
-                                Text("${date.month}", style: TextStyle(fontSize: 10, color: Colors.blue.shade800)),
+                                Text(
+                                  "${date.day}",
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: Colors.blue.shade800,
+                                  ),
+                                ),
+                                Text(
+                                  "${date.month}",
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.blue.shade800,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
+
                           const SizedBox(width: 16),
 
                           // DATI PRINCIPALI
@@ -295,18 +402,47 @@ class _ResultsPageState extends State<ResultsPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
+                                  children: const [
+                                    Icon(
+                                      Icons.thermostat,
+                                      size: 14,
+                                      color: Colors.orange,
+                                    ),
+                                    SizedBox(width: 4),
+                                  ],
+                                ),
+                                Row(
                                   children: [
-                                    const Icon(Icons.thermostat, size: 14, color: Colors.orange),
-                                    const SizedBox(width: 4),
-                                    Text("Esterna: ${r.externalTemp}°C", style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    const SizedBox(width: 18),
+                                    Text(
+                                      "Esterna: ${r.externalTemp}°C",
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
+                                  children: const [
+                                    Icon(
+                                      Icons.flash_on,
+                                      size: 14,
+                                      color: Colors.amber,
+                                    ),
+                                    SizedBox(width: 4),
+                                  ],
+                                ),
+                                Row(
                                   children: [
-                                    const Icon(Icons.flash_on, size: 14, color: Colors.amber),
-                                    const SizedBox(width: 4),
-                                    Text("Consumo: ${r.consumption} kWh", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                                    const SizedBox(width: 18),
+                                    Text(
+                                      "Consumo: ${r.consumption} kWh",
+                                      style: TextStyle(
+                                        color: Colors.grey.shade600,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -315,24 +451,40 @@ class _ResultsPageState extends State<ResultsPage> {
 
                           // NOTE
                           if (r.note != null && r.note!.isNotEmpty)
-                            const Icon(Icons.sticky_note_2_outlined, color: Colors.grey, size: 18),
+                            const Icon(
+                              Icons.sticky_note_2_outlined,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
 
                           const SizedBox(width: 12),
 
-                          // NUOVE ICONE: MATITINA E SECCHIELLO
-                          if (widget.onEditRecord != null) ...[
+                          // Icona modifica
+                          if (widget.onEditRecordByDateIso != null ||
+                              widget.onEditRecord != null) ...[
                             IconButton(
-                              onPressed: () => widget.onEditRecord!(index),
-                              icon: Icon(Icons.edit, size: 20, color: Colors.blue.shade600),
+                              onPressed: handleEditTap,
+                              icon: Icon(
+                                Icons.edit,
+                                size: 20,
+                                color: Colors.blue.shade600,
+                              ),
                               tooltip: 'Modifica',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
                           ],
-                          if (widget.onDeleteRecord != null) ...[
+
+                          // Icona elimina
+                          if (widget.onDeleteRecordByDateIso != null ||
+                              widget.onDeleteRecord != null) ...[
                             IconButton(
-                              onPressed: () => widget.onDeleteRecord!(index),
-                              icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade600),
+                              onPressed: handleDeleteTap,
+                              icon: Icon(
+                                Icons.delete_outline,
+                                size: 20,
+                                color: Colors.red.shade600,
+                              ),
                               tooltip: 'Elimina',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -352,12 +504,11 @@ class _ResultsPageState extends State<ResultsPage> {
   }
 
   Widget _buildAiCard(CurveSuggestion suggestion) {
-    // NUOVO: Logica per disabilitare pulsante se < 5 rilevamenti
     final int recentRecordsCount = _getRecordsSinceLastAiApply(widget.records);
     final bool hasEnoughData = recentRecordsCount >= 5;
 
-    // NUOVO: Controllo se i valori sono uguali a quelli attuali (tolleranza 0.05)
-    final bool valuesAreEqual = widget.slope != null && widget.offset != null &&
+    final bool valuesAreEqual = widget.slope != null &&
+        widget.offset != null &&
         (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
         (suggestion.suggestedOffset - widget.offset!).abs() < 0.05;
 
@@ -367,27 +518,50 @@ class _ResultsPageState extends State<ResultsPage> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.indigo.shade50),
-        boxShadow: [BoxShadow(color: Colors.indigo.shade50, blurRadius: 15, offset: const Offset(0, 5))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.indigo.shade50,
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(12)),
-              child: Icon(Icons.auto_awesome, color: Colors.indigo.shade400, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Text("AI Advisor", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.indigo.shade900, fontSize: 16)),
-          ]),
-
-          // NUOVO: Indicatore numero rilevamenti
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.auto_awesome,
+                  color: Colors.indigo.shade400,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                "AI Advisor",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.indigo.shade900,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          // Badge rilevamenti
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: hasEnoughData ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
+              color: hasEnoughData
+                  ? Colors.green.withOpacity(0.1)
+                  : Colors.orange.withOpacity(0.1),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: hasEnoughData ? Colors.green : Colors.orange,
@@ -400,7 +574,9 @@ class _ResultsPageState extends State<ResultsPage> {
                 Icon(
                   hasEnoughData ? Icons.check_circle : Icons.schedule,
                   size: 16,
-                  color: hasEnoughData ? Colors.green.shade700 : Colors.orange.shade700,
+                  color: hasEnoughData
+                      ? Colors.green.shade700
+                      : Colors.orange.shade700,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -408,26 +584,30 @@ class _ResultsPageState extends State<ResultsPage> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: hasEnoughData ? Colors.green.shade700 : Colors.orange.shade700,
+                    color: hasEnoughData
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
                   ),
                 ),
               ],
             ),
           ),
-
           const SizedBox(height: 8),
-          // FIX: Uso .smartTip invece di .reasoning
           Text(
             suggestion.smartTip,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5),
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade700,
+              height: 1.5,
+            ),
           ),
-
           const SizedBox(height: 20),
           if (widget.onApplyAiCurve != null)
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: hasEnoughData && !valuesAreEqual ? widget.onApplyAiCurve : null,
+                onPressed:
+                hasEnoughData && !valuesAreEqual ? widget.onApplyAiCurve : null,
                 icon: const Icon(Icons.check_circle_outline, size: 18),
                 label: Text(
                   valuesAreEqual
@@ -444,11 +624,13 @@ class _ResultsPageState extends State<ResultsPage> {
                       ? Colors.white
                       : Colors.grey.shade600,
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: hasEnoughData && !valuesAreEqual ? 0 : 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  elevation: 0,
                 ),
               ),
-            )
+            ),
         ],
       ),
     );
