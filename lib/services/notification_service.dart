@@ -10,13 +10,10 @@ class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
   FlutterLocalNotificationsPlugin();
 
-  /// ✅ FIX DEFINITIVO ANDROID 13+
   static Future init() async {
-    // Evita notifiche su desktop
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
     try {
-      // Timezone
       tz.initializeTimeZones();
 
       const AndroidInitializationSettings androidSettings =
@@ -26,24 +23,15 @@ class NotificationService {
       );
       await _notifications.initialize(settings);
 
-      // ✅ PERMESSO ROBUSTO Android 13+
       if (Platform.isAndroid) {
-        final PermissionStatus status = await Permission.notification.request();
-        print('🔔 Permesso notifica: $status');
-        if (status.isGranted) {
-          print('✅ Permesso NOTIFICHE CONCESSO');
-        } else {
-          print('❌ Permesso NOTIFICHE NEGATO - Vai in Impostazioni > App > ClimaSense > Notifiche');
-        }
+        await Permission.notification.request();
       }
-
-      print('🔔 Notifiche inizializzate ✅');
     } catch (e) {
-      print('⚠️ Errore init notifiche: $e');
+      // Errore init notifiche silenzioso in produzione
     }
   }
 
-  /// Programma: TEST tra 2 minuti + giornaliero
+  /// Programma la notifica giornaliera all'orario scelto dall'utente
   static Future scheduleDailyReminder() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
@@ -55,11 +43,6 @@ class NotificationService {
       final mm = int.parse(parts[1]);
 
       final now = tz.TZDateTime.now(tz.local);
-      print('🕐 Orario Hive: $timeStr - now: ${now.hour}:${now.minute}');
-
-      // TEST tra 2 minuti
-      final testTime = now.add(const Duration(minutes: 2));
-      print('🧪 TEST programmato per ${testTime.hour}:${testTime.minute}:${testTime.second}');
 
       const AndroidNotificationDetails androidDetails =
       AndroidNotificationDetails(
@@ -74,22 +57,8 @@ class NotificationService {
       );
       const NotificationDetails details = NotificationDetails(android: androidDetails);
 
-      // Pulisci precedenti
       await _notifications.cancelAll();
 
-      // 1) Test dopo 2 minuti
-      await _notifications.zonedSchedule(
-        999,
-        '🧪 PROVA 2 MINUTI',
-        'Se vedi questa notifica, lo scheduling funziona!',
-        testTime,
-        details,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
-      );
-
-      // 2) Notifica giornaliera
       var dailyDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hh, mm);
       if (dailyDate.isBefore(now)) {
         dailyDate = dailyDate.add(const Duration(days: 1));
@@ -97,7 +66,7 @@ class NotificationService {
 
       await _notifications.zonedSchedule(
         0,
-        'ClimaSense 🌡️ $timeStr',
+        'ClimaSense 🌡️',
         'Ricordati di inserire i dati di oggi!',
         dailyDate,
         details,
@@ -106,15 +75,12 @@ class NotificationService {
         UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
-
-      print(
-          '✅ Programmate: TEST @ ${testTime.hour}:${testTime.minute}, DAILY @ ${dailyDate.day}/${dailyDate.month} ${dailyDate.hour}:${dailyDate.minute}');
     } catch (e) {
-      print('❌ Errore scheduleDailyReminder: $e');
+      // Errore scheduling silenzioso in produzione
     }
   }
 
-  /// Test immediato (Menu → "TEST Notifica ORA")
+  /// Test immediato (da usare solo da UI dedicata)
   static Future testNotification() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
@@ -132,16 +98,14 @@ class NotificationService {
 
     await _notifications.show(
       1,
-      '🧪 TEST NOTIFICA',
-      'Se vedi questa, tutto è configurato correttamente.',
+      '🔔 ClimaSense',
+      'Le notifiche funzionano correttamente!',
       details,
     );
-    print('🔔 TEST immediato inviato ✅');
   }
 
   static Future cancelAll() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
     await _notifications.cancelAll();
-    print('🔔 Tutte le notifiche cancellate');
   }
 }
