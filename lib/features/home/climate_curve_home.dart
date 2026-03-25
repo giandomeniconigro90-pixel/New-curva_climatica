@@ -13,6 +13,7 @@ import 'package:fluttertoast/fluttertoast.dart';
 import '../../models/daily_record_dto.dart';
 import '../../services/hive_storage.dart';
 import '../../services/notification_service.dart';
+import '../../utils/date_utils.dart';
 import '../initial_settings/initial_settings_home.dart';
 
 import 'logic/curve_logic.dart';
@@ -207,16 +208,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     });
   }
 
-  DateTime? parseItalianDateSafe(String s) {
-    final parts = s.split('/');
-    if (parts.length != 3) return null;
-    return DateTime(
-      int.tryParse(parts[2])!,
-      int.tryParse(parts[1])!,
-      int.tryParse(parts[0])!,
-    );
-  }
-
   List<DailyRecordDTO> recordsSinceLastApply(SystemMode mode) {
     final last =
         mode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
@@ -226,12 +217,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       final d = parseItalianDateSafe(r.dateIso);
       return d != null && d.isAfter(lastDay);
     }).toList();
-  }
-
-  String formatItalianDate(DateTime dt) {
-    return '${dt.day.toString().padLeft(2, '0')}/'
-        '${dt.month.toString().padLeft(2, '0')}/'
-        '${dt.year}';
   }
 
   void clearFields({bool preFillFromLast = false}) {

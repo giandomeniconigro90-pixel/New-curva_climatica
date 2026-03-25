@@ -3,6 +3,7 @@
 import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../models/daily_record_dto.dart';
+import '../../../utils/date_utils.dart';
 
 enum SystemMode { heating, cooling }
 
@@ -80,27 +81,10 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   );
 }
 
-/// Filtra per campo mode (non più per temperatura esterna)
+/// Filtra per campo mode
 List<DailyRecordDTO> filterRecordsByMode(List<DailyRecordDTO> records, SystemMode mode) {
   final modeStr = mode == SystemMode.heating ? 'heating' : 'cooling';
   return records.where((r) => r.mode == modeStr).toList();
-}
-
-/// Parsa date in formato dd/MM/yyyy o ISO yyyy-MM-dd
-DateTime? _parseDateSafe(String dateIso) {
-  // Formato italiano dd/MM/yyyy
-  final slashParts = dateIso.split('/');
-  if (slashParts.length == 3) {
-    final d = int.tryParse(slashParts[0]);
-    final m = int.tryParse(slashParts[1]);
-    final y = int.tryParse(slashParts[2]);
-    if (d != null && m != null && y != null) return DateTime(y, m, d);
-  }
-  // Formato ISO yyyy-MM-dd o yyyy-MM-ddTHH:mm:ss
-  try {
-    return DateTime.parse(dateIso);
-  } catch (_) {}
-  return null;
 }
 
 CurveSuggestion computeOptimalCurveSuggestion(
@@ -111,14 +95,12 @@ CurveSuggestion computeOptimalCurveSuggestion(
     [DateTime? lastAppliedDate]
     ) {
 
-  // 1. Filtra per mode usando il campo mode (non la temperatura)
   var records = filterRecordsByMode(allRecords, mode);
 
-  // 2. Filtra per data con parser robusto (gestisce dd/MM/yyyy e ISO)
   if (lastAppliedDate != null) {
     final lastDay = DateTime(lastAppliedDate.year, lastAppliedDate.month, lastAppliedDate.day);
     records = records.where((r) {
-      final rDate = _parseDateSafe(r.dateIso);
+      final rDate = parseItalianDateSafe(r.dateIso);
       if (rDate == null) return false;
       return rDate.isAfter(lastDay);
     }).toList();
@@ -182,17 +164,17 @@ CurveSuggestion computeOptimalCurveSuggestion(
   }
 
   // FASE 3: PRUDENZA
-  const double MAX_SLOPE_STEP = 0.1;
-  const double MAX_OFFSET_STEP = 1.0;
+  const double maxSlopeStep = 0.1;
+  const double maxOffsetStep = 1.0;
 
   double diffSlope = targetSlope - currentSlope;
   double diffOffset = targetOffset - currentOffset;
 
-  if (diffSlope.abs() > MAX_SLOPE_STEP) {
-    targetSlope = currentSlope + (diffSlope.sign * MAX_SLOPE_STEP);
+  if (diffSlope.abs() > maxSlopeStep) {
+    targetSlope = currentSlope + (diffSlope.sign * maxSlopeStep);
   }
-  if (diffOffset.abs() > MAX_OFFSET_STEP) {
-    targetOffset = currentOffset + (diffOffset.sign * MAX_OFFSET_STEP);
+  if (diffOffset.abs() > maxOffsetStep) {
+    targetOffset = currentOffset + (diffOffset.sign * maxOffsetStep);
   }
 
   targetSlope = (targetSlope * 100).round() / 100.0;
@@ -201,7 +183,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
   if ((targetSlope - currentSlope).abs() < 0.01 && (targetOffset - currentOffset).abs() < 0.1) {
     targetSlope = currentSlope;
     targetOffset = currentOffset;
-    tip = "Parametri attuali ottimali con i nuovi dati. Mantieni cos\u00ec.";
+    tip = "Parametri attuali ottimali con i nuovi dati. Mantieni così.";
   }
 
   return CurveSuggestion(
