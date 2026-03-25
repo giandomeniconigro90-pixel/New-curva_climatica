@@ -106,17 +106,6 @@ class _ResultsPageState extends State<ResultsPage> {
     return DateTime.now();
   }
 
-  // Conta rilevamenti (semplificato: usa tutti i record disponibili)
-  int _getRecordsSinceLastAiApply(List<DailyRecordDTO> records) {
-    final sortedRecords = List<DailyRecordDTO>.from(records);
-    sortedRecords.sort((a, b) {
-      final da = _parseDateSmart(a.dateIso);
-      final db = _parseDateSmart(b.dateIso);
-      return db.compareTo(da); // più recenti prima
-    });
-    return sortedRecords.length;
-  }
-
   Future<void> _editCost(BuildContext context) async {
     final TextEditingController controller = TextEditingController(
       text: _costPerKwh == 0 ? '' : _costPerKwh.toString(),
@@ -149,7 +138,7 @@ class _ResultsPageState extends State<ResultsPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
-                suffixText: '€/kWh',
+                suffixText: '\u20ac/kWh',
                 hintText: '0.00',
               ),
             ),
@@ -262,7 +251,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             children: [
                               Text(
                                 _costPerKwh > 0
-                                    ? '€ ${todayCost.toStringAsFixed(2)}'
+                                    ? '\u20ac ${todayCost.toStringAsFixed(2)}'
                                     : 'Configura',
                                 style: const TextStyle(
                                   fontSize: 32,
@@ -411,7 +400,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                   children: [
                                     const SizedBox(width: 18),
                                     Text(
-                                      "Esterna: ${r.externalTemp}°C",
+                                      "Esterna: ${r.externalTemp}\u00b0C",
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -500,7 +489,9 @@ class _ResultsPageState extends State<ResultsPage> {
   }
 
   Widget _buildAiCard(CurveSuggestion suggestion) {
-    final int recentRecordsCount = _getRecordsSinceLastAiApply(widget.records);
+    // widget.records contiene già solo i record filtrati dopo l'ultima AI apply,
+    // passati correttamente da climate_curve_home.dart
+    final int recentRecordsCount = widget.records.length;
     final bool hasEnoughData = recentRecordsCount >= 5;
 
     final bool valuesAreEqual = widget.slope != null &&
