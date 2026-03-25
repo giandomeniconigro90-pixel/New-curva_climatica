@@ -48,10 +48,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
   final Map<String, String> comfortRatings = {};
 
-  // Tutti i record (tutte le modalità)
   List<DailyRecordDTO> allRecords = [];
 
-  // Record filtrati per modalità attiva (usati dall'UI)
   List<DailyRecordDTO> get records {
     final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
     return allRecords.where((r) => r.mode == modeStr).toList();
@@ -838,6 +836,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final picked = await showTimePicker(
       context: context,
       initialTime: now,
+      initialEntryMode: TimePickerEntryMode.input,
       builder: (ctx, child) => MediaQuery(
         data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
         child: child!,
@@ -848,7 +847,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     if (picked != null) {
       await AppStorage.saveNotificationTime(picked);
-
       await NotificationService.cancelAll();
       await NotificationService.scheduleDailyReminder();
 
