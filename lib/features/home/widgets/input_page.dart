@@ -1,6 +1,7 @@
 // lib/features/home/widgets/input_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 import '../../../../models/daily_record_dto.dart';
 import '../../../../services/weather_service.dart';
 
@@ -34,7 +35,7 @@ class InputPage extends StatefulWidget {
     required this.onDeleteRecord,
     required this.onEditRecord,
     required this.isEditing,
-    required this.isCooling,              // <--- NUOVO
+    required this.isCooling,
     required this.onDuplicateFromYesterday,
     required this.onExportCsv,
     required this.onExportPdf,
@@ -47,7 +48,6 @@ class InputPage extends StatefulWidget {
 }
 
 class _InputPageState extends State<InputPage> {
-  // Ordine personalizzato delle stanze
   final List<String> orderedRooms = [
     'Soggiorno/Cucina',
     'Bagno PT',
@@ -57,7 +57,6 @@ class _InputPageState extends State<InputPage> {
     'Bagno 1P'
   ];
 
-  // -- LOGICA METEO --
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
@@ -69,61 +68,59 @@ class _InputPageState extends State<InputPage> {
   Future<void> _fetchWeather() async {
     setState(() => _isLoadingWeather = true);
     try {
-      // Usiamo 'final' o 'var' invece del tipo esplicito WeatherData per evitare errori di import
       final result = await WeatherService.getDailyAvgTemp();
 
-      // Controllo di sicurezza se il risultato è valido
       if (result != null && mounted) {
         setState(() {
-          // Accesso dinamico alle proprietà
           widget.externalTempController.text = (result.temp as double).toStringAsFixed(1);
           _weatherLocation = result.locationName.toString();
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Meteo aggiornato da $_weatherLocation')),
+        Fluttertoast.showToast(
+          msg: 'Meteo aggiornato da $_weatherLocation',
+          backgroundColor: Colors.green.shade600,
+          textColor: Colors.white,
+          fontSize: 14,
         );
       }
     } catch (e) {
-      debugPrint("Errore meteo: $e");
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Errore recupero meteo')),
+        Fluttertoast.showToast(
+          msg: 'Errore recupero meteo',
+          backgroundColor: Colors.red.shade600,
+          textColor: Colors.white,
+          fontSize: 14,
         );
       }
     } finally {
       if (mounted) setState(() => _isLoadingWeather = false);
     }
   }
-  // ---------------------------
 
   @override
   Widget build(BuildContext context) {
     List<Widget> gridItems = [];
 
-    // 1. Esterna
     gridItems.add(_buildTadoTile(
       title: "Esterna",
       subtitle: _weatherLocation ?? "Benessere",
       controller: widget.externalTempController,
       icon: Icons.cloud_sync,
-      color: const Color(0xFF1976D2), // Ciano
+      color: const Color(0xFF1976D2),
       isRoom: false,
       isWeatherTile: true,
       suffix: "°",
     ));
 
-    // 2. Consumo
     gridItems.add(_buildTadoTile(
       title: "Consumo",
       subtitle: "Energy Cockpit",
       controller: widget.consumptionController,
       icon: Icons.eco_outlined,
-      color: const Color(0xFF66BB6A), // Verde
+      color: const Color(0xFF66BB6A),
       isRoom: false,
       suffix: "kWh",
     ));
 
-    // 3. Stanze
     for (var room in orderedRooms) {
       var ctrl = widget.internalTempControllers[room];
       if (ctrl == null) {
@@ -136,8 +133,8 @@ class _InputPageState extends State<InputPage> {
         controller: ctrl,
         icon: null,
         color: widget.isCooling
-            ? const Color(0xFF4DB6AC) // azzurro (come switch in raffrescamento)
-            : const Color(0xFFFFB74D), // arancione (riscaldamento)
+            ? const Color(0xFF4DB6AC)
+            : const Color(0xFFFFB74D),
         isRoom: true,
         suffix: "°",
       ));
@@ -151,7 +148,7 @@ class _InputPageState extends State<InputPage> {
 
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddRecord,
-        backgroundColor: Colors.blue.shade900, // nuovo colore
+        backgroundColor: Colors.blue.shade900,
         icon: Icon(
           widget.isEditing ? Icons.save_as : Icons.check,
           color: Colors.white,
@@ -169,9 +166,9 @@ class _InputPageState extends State<InputPage> {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12), // ancora più in alto
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.start, // sempre a sinistra
+                mainAxisAlignment: MainAxisAlignment.start,
                 children: const [
                   Text(
                     "Home",
@@ -368,7 +365,6 @@ class _InputPageState extends State<InputPage> {
   }
 }
 
-// --- PAINTER PER IL CERCHIO GRADO ---
 class DegreePainter extends CustomPainter {
   final Color color;
 
@@ -392,7 +388,6 @@ class DegreePainter extends CustomPainter {
 }
 
 
-// --- PAGINA CONTROLLO ---
 class RoomControlPage extends StatefulWidget {
   final String title;
   final TextEditingController controller;
@@ -445,14 +440,15 @@ class _RoomControlPageState extends State<RoomControlPage> {
     } else if (widget.isRoom) {
       _min = 10; _max = 45;
       _mainColor = widget.isCooling
-          ? const Color(0xFF4DB6AC) // azzurro raffrescamento
-          : const Color(0xFFFFB74D); // arancione riscaldamento
+          ? const Color(0xFF4DB6AC)
+          : const Color(0xFFFFB74D);
       _headerText = "TEMPERATURA INTERNA";
     } else {
       _min = -10; _max = 40;
       _mainColor = const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
-    }}
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -646,4 +642,3 @@ class _RoomControlPageState extends State<RoomControlPage> {
     Navigator.pop(context);
   }
 }
-
