@@ -23,11 +23,11 @@ class CurveStats {
 class CurveSuggestion {
   final double suggestedSlope;
   final double suggestedOffset;
-  final double comfortScore; // 0.0 - 1.0 (1.0 ottimo)
-  final double energyScore;  // > 1.0 significa che stiamo consumando troppo
+  final double comfortScore;
+  final double energyScore;
   final String smartTip;
   final bool isLearning;
-  final int learningProgress; // 0-5 giorni minimi
+  final int learningProgress;
 
   CurveSuggestion({
     required this.suggestedSlope,
@@ -43,24 +43,16 @@ class CurveSuggestion {
 /// Calcola la temperatura di mandata target basata sulla curva climatica
 double computeMandata(double tExt, double slope, double offset, SystemMode mode) {
   if (mode == SystemMode.heating) {
-    // Heating (Inverno) Target ambiente fittizio 20°C.
     double targetAmbiente = 20.0;
     double rawMandata = targetAmbiente + (targetAmbiente - tExt) * slope + offset;
-
-    // LIMITI RISCALDAMENTO (Fan Coil)
     if (rawMandata < 35.0) rawMandata = 35.0;
     if (rawMandata > 60.0) rawMandata = 60.0;
-
     return rawMandata;
   } else {
-    // Cooling (Estate) Target ambiente fittizio 26°C. Base mandata 18°C.
     double targetAmbiente = 26.0;
     double rawMandata = 18.0 - (tExt - targetAmbiente) * slope + offset;
-
-    // LIMITI RAFFRESCAMENTO
     if (rawMandata < 7.0) rawMandata = 7.0;
     if (rawMandata > 25.0) rawMandata = 25.0;
-
     return rawMandata;
   }
 }
@@ -88,39 +80,51 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   );
 }
 
+/// Filtra per campo mode (non più per temperatura esterna)
 List<DailyRecordDTO> filterRecordsByMode(List<DailyRecordDTO> records, SystemMode mode) {
-  if (mode == SystemMode.heating) {
-    return records.where((r) => r.externalTemp < 18.0).toList();
-  } else {
-    return records.where((r) => r.externalTemp >= 18.0).toList();
-  }
+  final modeStr = mode == SystemMode.heating ? 'heating' : 'cooling';
+  return records.where((r) => r.mode == modeStr).toList();
 }
 
-/// CORE LOGIC AGGIORNATA: Filtra i dati in base all'ultima modifica
+/// Parsa date in formato dd/MM/yyyy o ISO yyyy-MM-dd
+DateTime? _parseDateSafe(String dateIso) {
+  // Formato italiano dd/MM/yyyy
+  final slashParts = dateIso.split('/');
+  if (slashParts.length == 3) {
+    final d = int.tryParse(slashParts[0]);
+    final m = int.tryParse(slashParts[1]);
+    final y = int.tryParse(slashParts[2]);
+    if (d != null && m != null && y != null) return DateTime(y, m, d);
+  }
+  // Formato ISO yyyy-MM-dd o yyyy-MM-ddTHH:mm:ss
+  try {
+    return DateTime.parse(dateIso);
+  } catch (_) {}
+  return null;
+}
+
 CurveSuggestion computeOptimalCurveSuggestion(
     List<DailyRecordDTO> allRecords,
     double currentSlope,
     double currentOffset,
     SystemMode mode,
-    [DateTime? lastAppliedDate] // Parametro opzionale aggiunto
+    [DateTime? lastAppliedDate]
     ) {
 
-  // 1. Filtra per modo (Heating/Cooling)
+  // 1. Filtra per mode usando il campo mode (non la temperatura)
   var records = filterRecordsByMode(allRecords, mode);
 
-  // 2. Filtra per DATA (Tieni solo quelli dopo l'ultima modifica)
+  // 2. Filtra per data con parser robusto (gestisce dd/MM/yyyy e ISO)
   if (lastAppliedDate != null) {
+    final lastDay = DateTime(lastAppliedDate.year, lastAppliedDate.month, lastAppliedDate.day);
     records = records.where((r) {
-      try {
-        final rDate = DateTime.parse(r.dateIso);
-        return rDate.isAfter(lastAppliedDate);
-      } catch (e) {
-        return false;
-      }
+      final rDate = _parseDateSafe(r.dateIso);
+      if (rDate == null) return false;
+      return rDate.isAfter(lastDay);
     }).toList();
   }
 
-  // FASE 1: APPRENDIMENTO (Ora conta solo i giorni NUOVI)
+  // FASE 1: APPRENDIMENTO
   if (records.length < 5) {
     String message;
     if (lastAppliedDate == null) {
@@ -140,7 +144,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
     );
   }
 
-  // FASE 2: ANALISI (Identica a prima, ma lavora sui dati filtrati)
+  // FASE 2: ANALISI
   int coldComplaints = 0;
   int hotComplaints = 0;
   int okDays = 0;
@@ -197,7 +201,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
   if ((targetSlope - currentSlope).abs() < 0.01 && (targetOffset - currentOffset).abs() < 0.1) {
     targetSlope = currentSlope;
     targetOffset = currentOffset;
-    tip = "Parametri attuali ottimali con i nuovi dati. Mantieni così.";
+    tip = "Parametri attuali ottimali con i nuovi dati. Mantieni cos\u00ec.";
   }
 
   return CurveSuggestion(
