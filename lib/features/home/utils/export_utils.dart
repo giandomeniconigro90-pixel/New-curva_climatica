@@ -13,6 +13,18 @@ import '../logic/curve_logic.dart';
 
 class ExportUtils {
 
+  /// Parsa date in formato dd/MM/yyyy o ISO yyyy-MM-dd
+  static DateTime _parseDateSafe(String dateIso) {
+    final slashParts = dateIso.split('/');
+    if (slashParts.length == 3) {
+      final d = int.tryParse(slashParts[0]);
+      final m = int.tryParse(slashParts[1]);
+      final y = int.tryParse(slashParts[2]);
+      if (d != null && m != null && y != null) return DateTime(y, m, d);
+    }
+    return DateTime.tryParse(dateIso) ?? DateTime.now();
+  }
+
   // ================= CSV =================
   static String generateCsv(
       List<DailyRecordDTO> records, {
@@ -46,20 +58,19 @@ class ExportUtils {
       allRooms.addAll(r.internalTemps.keys);
     }
     final sortedRooms = allRooms.toList()..sort();
-    List<String> header = ["Data", "Ora", "T. Esterna", "Consumo", "Note"];
+    List<String> header = ["Data", "T. Esterna", "Consumo", "Note"];
     for (var room in sortedRooms) {
       header.add("$room T.");
       header.add("$room Comfort");
     }
     rows.add(header);
     for (var r in sortedRecords) {
-      DateTime date = DateTime.tryParse(r.dateIso) ?? DateTime.now();
+      final DateTime date = _parseDateSafe(r.dateIso);
       List<dynamic> row = [
         DateFormat('dd/MM/yyyy').format(date),
-        DateFormat('HH:mm').format(date),
         r.externalTemp.toString().replaceAll('.', ','),
         r.consumption.toString().replaceAll('.', ','),
-        r.note?.replaceAll('\n', ' ') ?? ""
+        r.note.replaceAll('\n', ' '),
       ];
       for (var room in sortedRooms) {
         row.add(r.internalTemps[room]?.toString().replaceAll('.', ',') ?? "");
@@ -116,14 +127,33 @@ class ExportUtils {
         margin: const pw.EdgeInsets.all(20),
         build: (pw.Context context) {
           return [
-            pw.Header(level: 0, child: pw.Text("ClimaSense Report", style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold))),
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                "ClimaSense Report",
+                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+              ),
+            ),
             pw.SizedBox(height: 10),
-            if (chartImage != null) pw.Container(height: 200, width: 400, child: pw.Image(pw.MemoryImage(chartImage))),
+            if (chartImage != null)
+              pw.Container(
+                height: 200,
+                width: 400,
+                child: pw.Image(pw.MemoryImage(chartImage)),
+              ),
             pw.SizedBox(height: 20),
             pw.Table.fromTextArray(
               context: context,
-              headers: <String>['Data', 'Ext', 'Cons', 'Note'],
-              data: sortedRecords.map((r) => [DateFormat('dd/MM HH:mm').format(DateTime.parse(r.dateIso)), "${r.externalTemp}", "${r.consumption}", r.note ?? ""]).toList(),
+              headers: <String>['Data', 'Ext °C', 'Consumo', 'Note'],
+              data: sortedRecords.map((r) {
+                final date = _parseDateSafe(r.dateIso);
+                return [
+                  DateFormat('dd/MM/yyyy').format(date),
+                  '${r.externalTemp}',
+                  '${r.consumption}',
+                  r.note,
+                ];
+              }).toList(),
             ),
           ];
         },
@@ -137,8 +167,6 @@ class ExportUtils {
   }
 
   // ================= BACKUP JSON =================
-
-  // 1. GENERATORE COMPLETO (Restituisce STRINGA JSON)
   static String generateBackupJson({
     required List<DailyRecordDTO> records,
     required SystemMode mode,
@@ -158,14 +186,11 @@ class ExportUtils {
     return jsonEncode(backupMap);
   }
 
-  // 2. GENERATORE SEMPLICE (Salva e condivide solo i record - Usato come fallback)
   static Future<void> generateSimpleBackup(List<DailyRecordDTO> records) async {
     final jsonString = jsonEncode(records.map((e) => e.toJson()).toList());
     await shareBackupJsonString(jsonString);
   }
 
-  // 3. CONDIVISORE (Prende la stringa JSON e la salva su file)
-  // RINOMINATO per evitare conflitti: shareBackupJsonString
   static Future<void> shareBackupJsonString(String jsonString, [String? fileName]) async {
     try {
       final directory = await getApplicationDocumentsDirectory();
