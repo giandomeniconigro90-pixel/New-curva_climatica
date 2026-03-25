@@ -24,10 +24,18 @@ class NotificationService {
       await _notifications.initialize(settings);
 
       if (Platform.isAndroid) {
+        // Permesso notifiche (Android 13+)
         await Permission.notification.request();
+
+        // Esenzione batteria — fondamentale per Samsung, Xiaomi, OnePlus, ecc.
+        // Mostra un dialog di sistema che chiede all'utente di permetterlo
+        final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
+        if (!batteryStatus.isGranted) {
+          await Permission.ignoreBatteryOptimizations.request();
+        }
       }
     } catch (e) {
-      // Errore init notifiche silenzioso in produzione
+      // Errore init silenzioso in produzione
     }
   }
 
@@ -55,11 +63,13 @@ class NotificationService {
         enableVibration: true,
         playSound: true,
       );
-      const NotificationDetails details = NotificationDetails(android: androidDetails);
+      const NotificationDetails details =
+          NotificationDetails(android: androidDetails);
 
       await _notifications.cancelAll();
 
-      var dailyDate = tz.TZDateTime(tz.local, now.year, now.month, now.day, hh, mm);
+      var dailyDate = tz.TZDateTime(
+          tz.local, now.year, now.month, now.day, hh, mm);
       if (dailyDate.isBefore(now)) {
         dailyDate = dailyDate.add(const Duration(days: 1));
       }
@@ -72,7 +82,7 @@ class NotificationService {
         details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
+            UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
@@ -94,7 +104,8 @@ class NotificationService {
       enableVibration: true,
       playSound: true,
     );
-    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
 
     await _notifications.show(
       1,
