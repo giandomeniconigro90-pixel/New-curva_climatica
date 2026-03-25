@@ -88,7 +88,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       'Bagno PT',
       'Cameretta Stefano',
       'Camera Giochi',
-      'Camera Mamma e Pap\u00e0',
+      'Camera Mamma e Papà',
       'Bagno 1P',
     ]) {
       internalTempControllers[room] = TextEditingController();
@@ -261,7 +261,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   void startEditRecord(int sortedIndex) {
-    // sortedIndex è relativo a records (filtrati), troviamo l'indice in allRecords
     final filtered = records;
     if (sortedIndex < 0 || sortedIndex >= filtered.length) return;
     final targetDateIso = filtered[sortedIndex].dateIso;
@@ -351,7 +350,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     if (conversionError) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: "Errore: Una delle temperature interne non \u00e8 un numero valido.",
+          msg: "Errore: Una delle temperature interne non è un numero valido.",
           backgroundColor: Colors.red.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -393,7 +392,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       if (exists) {
         if (mounted) {
           Fluttertoast.showToast(
-            msg: "Esiste gi\u00e0 una registrazione per oggi. Modifica quella esistente.",
+            msg: "Esiste già una registrazione per oggi. Modifica quella esistente.",
             backgroundColor: Colors.orange.shade600,
             textColor: Colors.white,
             fontSize: 14,
@@ -768,7 +767,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         builder: (ctx) => AlertDialog(
           title: const Text('Conferma Ripristino'),
           content: const Text(
-            'Sovrascriver\u00e0 tutti i dati attuali. Continuare?',
+            'Sovrascriverà tutti i dati attuali. Continuare?',
           ),
           actions: [
             TextButton(
@@ -982,7 +981,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                                     touchedBarSpots
                                         .map(
                                           (barSpot) => LineTooltipItem(
-                                            'Est ${barSpot.x.toInt()}\u00b0C: ${barSpot.y.toStringAsFixed(1)}\u00b0C',
+                                            'Est ${barSpot.x.toInt()}°C: ${barSpot.y.toStringAsFixed(1)}°C',
                                             const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.bold,
@@ -1019,7 +1018,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                             titlesData: FlTitlesData(
                               leftTitles: AxisTitles(
                                 axisNameWidget: const Text(
-                                  'Temp. Mandata Acqua \u00b0C',
+                                  'Temp. Mandata Acqua °C',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.grey,
@@ -1042,7 +1041,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                               ),
                               bottomTitles: AxisTitles(
                                 axisNameWidget: const Text(
-                                  'Temp. Esterna \u00b0C',
+                                  'Temp. Esterna °C',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.grey,
@@ -1113,8 +1112,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                           Expanded(
                             child: Text(
                               isHeating
-                                  ? 'Zona Rossa (>35\u00b0C): Efficienza ridotta per Ventilconvettori.'
-                                  : 'Zona Rossa (<15\u00b0C): Alto rischio condensa.',
+                                  ? 'Zona Rossa (>35°C): Efficienza ridotta per Ventilconvettori.'
+                                  : 'Zona Rossa (<15°C): Alto rischio condensa.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey.shade600,
@@ -1259,7 +1258,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
             builder: (ctx) => AlertDialog(
               title: const Text('Reset Calibrazione?'),
               content: const Text(
-                'Questo canceller\u00e0 le preferenze di pendenza/offset. I dati storici rimarranno.',
+                'Questo cancellerà le preferenze di pendenza/offset. I dati storici rimarranno.',
               ),
               actions: [
                 TextButton(
@@ -1286,6 +1285,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         },
         onBackup: doBackup,
         onRestore: doRestore,
+        onExportCsv: exportCsv,
+        onExportPdf: exportPdf,
       ),
     ];
 
@@ -1332,7 +1333,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                       ),
                       const SizedBox(height: 2),
                       const Text(
-                        'Cambia modalit\u00e0',
+                        'Cambia modalità',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.grey,

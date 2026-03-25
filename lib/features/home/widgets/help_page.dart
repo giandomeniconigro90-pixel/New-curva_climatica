@@ -3,16 +3,19 @@
 import 'package:flutter/material.dart';
 
 class HelpPage extends StatelessWidget {
-  // Aggiungiamo i callback necessari
   final VoidCallback? onResetCalibration;
   final VoidCallback? onBackup;
   final VoidCallback? onRestore;
+  final VoidCallback? onExportCsv;
+  final VoidCallback? onExportPdf;
 
   const HelpPage({
     super.key,
     this.onResetCalibration,
     this.onBackup,
     this.onRestore,
+    this.onExportCsv,
+    this.onExportPdf,
   });
 
   @override
@@ -40,6 +43,30 @@ class HelpPage extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           _buildSectionTitle('Strumenti Avanzati'),
+
+          // Sezione Export
+          Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.table_chart_outlined, color: Colors.green),
+                  title: const Text('Esporta CSV'),
+                  subtitle: const Text('Scarica lo storico in formato foglio di calcolo'),
+                  onTap: onExportCsv,
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.picture_as_pdf_outlined, color: Colors.red),
+                  title: const Text('Esporta PDF'),
+                  subtitle: const Text('Genera un report completo con grafico'),
+                  onTap: onExportPdf,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Sezione Backup & Ripristino
           Card(
