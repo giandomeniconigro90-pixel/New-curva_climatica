@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
+import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart'; // Importa CurveSuggestion e CurveStats
 
 class ResultsPage extends StatefulWidget {
@@ -57,53 +58,6 @@ class _ResultsPageState extends State<ResultsPage> {
   Future<void> _loadCost() async {
     final cost = AppStorage.getCostPerKwh();
     if (mounted) setState(() => _costPerKwh = cost);
-  }
-
-  DateTime _parseDateSmart(String dateIso) {
-    // 0. Formato italiano dd/MM/yyyy (backup vecchi)
-    final slashParts = dateIso.split('/');
-    if (slashParts.length == 3) {
-      final d = int.tryParse(slashParts[0]);
-      final m = int.tryParse(slashParts[1]);
-      final y = int.tryParse(slashParts[2]);
-      if (d != null && m != null && y != null) {
-        return DateTime(y, m, d);
-      }
-    }
-
-    // 1. Prova formato ISO completo
-    try {
-      return DateTime.parse(dateIso);
-    } catch (_) {}
-
-    // 2. Formato con spazio (yyyy-MM-dd HH:mm)
-    try {
-      final parts = dateIso.split(' ');
-      if (parts.length == 2) {
-        final datePart = parts[0].split('-');
-        final timePart = parts[1].split(':');
-        return DateTime(
-          int.parse(datePart[0]),
-          int.parse(datePart[1]),
-          int.parse(datePart[2]),
-          int.parse(timePart[0]),
-          int.parse(timePart[1]),
-        );
-      }
-    } catch (_) {}
-
-    // 3. Solo data yyyy-MM-dd
-    try {
-      final parts = dateIso.split('-');
-      return DateTime(
-        int.parse(parts[0]),
-        int.parse(parts[1]),
-        int.parse(parts[2]),
-      );
-    } catch (_) {}
-
-    // 4. Ultimo fallback
-    return DateTime.now();
   }
 
   Future<void> _editCost(BuildContext context) async {
@@ -179,8 +133,8 @@ class _ResultsPageState extends State<ResultsPage> {
     // Ordina record per data decrescente
     final sortedRecords = List<DailyRecordDTO>.from(widget.records);
     sortedRecords.sort((a, b) {
-      final da = _parseDateSmart(a.dateIso);
-      final db = _parseDateSmart(b.dateIso);
+      final da = parseItalianDateSafe(a.dateIso) ?? DateTime.now();
+      final db = parseItalianDateSafe(b.dateIso) ?? DateTime.now();
       return db.compareTo(da); // più recenti prima
     });
 
@@ -312,7 +266,7 @@ class _ResultsPageState extends State<ResultsPage> {
                 itemCount: sortedRecords.length,
                 itemBuilder: (context, index) {
                   final r = sortedRecords[index];
-                  final date = _parseDateSmart(r.dateIso);
+                  final date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
 
                   void handleEditTap() {
                     if (widget.onEditRecordByDateIso != null) {
