@@ -42,13 +42,6 @@ class ExportUtils {
     return const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
   }
 
-  static Future<void> exportSimpleCsv(List<DailyRecordDTO> records) async {
-    List<List<dynamic>> rows = [];
-    _appendDataRows(rows, records);
-    String csvData = const ListToCsvConverter(fieldDelimiter: ';').convert(rows);
-    await shareCsv(csvData, "ClimaSense_Export_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.csv");
-  }
-
   static void _appendDataRows(List<List<dynamic>> rows, List<DailyRecordDTO> records) {
     if (records.isEmpty) return;
     final sortedRecords = List<DailyRecordDTO>.from(records);
@@ -105,10 +98,6 @@ class ExportUtils {
     await _createPdf(records, slope: slope, offset: offset, suggestion: suggestion, stats: stats, chartImage: chartImage, currentMode: currentMode);
   }
 
-  static Future<void> exportSimplePdf(List<DailyRecordDTO> records) async {
-    await _createPdf(records);
-  }
-
   static Future<void> _createPdf(
       List<DailyRecordDTO> records, {
         double? slope,
@@ -144,7 +133,7 @@ class ExportUtils {
             pw.SizedBox(height: 20),
             pw.Table.fromTextArray(
               context: context,
-              headers: <String>['Data', 'Ext °C', 'Consumo', 'Note'],
+              headers: <String>['Data', 'Ext \u00b0C', 'Consumo', 'Note'],
               data: sortedRecords.map((r) {
                 final date = _parseDateSafe(r.dateIso);
                 return [
@@ -184,11 +173,6 @@ class ExportUtils {
       "records": records.map((e) => e.toJson()).toList(),
     };
     return jsonEncode(backupMap);
-  }
-
-  static Future<void> generateSimpleBackup(List<DailyRecordDTO> records) async {
-    final jsonString = jsonEncode(records.map((e) => e.toJson()).toList());
-    await shareBackupJsonString(jsonString);
   }
 
   static Future<void> shareBackupJsonString(String jsonString, [String? fileName]) async {
