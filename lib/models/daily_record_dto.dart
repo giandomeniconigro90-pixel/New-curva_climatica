@@ -35,30 +35,6 @@ class DailyRecordDTO extends HiveObject {
     this.mode = 'heating',
   });
 
-  factory DailyRecordDTO.fromMap(Map<String, dynamic> map) {
-    return DailyRecordDTO(
-      dateIso: map['dateIso'] as String,
-      externalTemp: (map['externalTemp'] as num).toDouble(),
-      internalTemps: Map<String, double>.from(map['internalTemps'] ?? {}),
-      consumption: (map['consumption'] as num).toDouble(),
-      comfortRatings: Map<String, String>.from(map['comfortRatings'] ?? {}),
-      note: map['note'] as String? ?? '',
-      mode: map['mode'] as String? ?? 'heating',
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'dateIso': dateIso,
-      'externalTemp': externalTemp,
-      'internalTemps': internalTemps,
-      'consumption': consumption,
-      'comfortRatings': comfortRatings,
-      'note': note,
-      'mode': mode,
-    };
-  }
-
   factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
     return DailyRecordDTO(
       dateIso: json['dateIso'] as String,
