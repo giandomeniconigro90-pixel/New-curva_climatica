@@ -2,13 +2,10 @@
 
 import 'package:hive/hive.dart';
 
-// NOTA: Rimuovi "part 'daily_record_dto.g.dart';" se presente e non generato
-// Se usi build_runner, decomenta: part 'daily_record_dto.g.dart';
-
 @HiveType(typeId: 0)
 class DailyRecordDTO extends HiveObject {
   @HiveField(0)
-  final String dateIso; // "YYYY-MM-DD"
+  final String dateIso;
 
   @HiveField(1)
   final double externalTemp;
@@ -20,10 +17,13 @@ class DailyRecordDTO extends HiveObject {
   final double consumption;
 
   @HiveField(4)
-  final Map<String, String> comfortRatings; // 'freddo', 'ok', 'caldo'
+  final Map<String, String> comfortRatings;
 
   @HiveField(5)
   final String note;
+
+  @HiveField(6)
+  final String mode; // 'heating' o 'cooling'
 
   DailyRecordDTO({
     required this.dateIso,
@@ -32,11 +32,9 @@ class DailyRecordDTO extends HiveObject {
     required this.consumption,
     required this.comfortRatings,
     required this.note,
+    this.mode = 'heating',
   });
 
-  // --- METODI UTILITY ---
-
-  // Converte da Mappa a Oggetto (per loadRecords)
   factory DailyRecordDTO.fromMap(Map<String, dynamic> map) {
     return DailyRecordDTO(
       dateIso: map['dateIso'] as String,
@@ -45,10 +43,10 @@ class DailyRecordDTO extends HiveObject {
       consumption: (map['consumption'] as num).toDouble(),
       comfortRatings: Map<String, String>.from(map['comfortRatings'] ?? {}),
       note: map['note'] as String? ?? '',
+      mode: map['mode'] as String? ?? 'heating',
     );
   }
 
-  // Converte da Oggetto a Mappa (per saveRecords)
   Map<String, dynamic> toMap() {
     return {
       'dateIso': dateIso,
@@ -57,10 +55,10 @@ class DailyRecordDTO extends HiveObject {
       'consumption': consumption,
       'comfortRatings': comfortRatings,
       'note': note,
+      'mode': mode,
     };
   }
 
-  // === NUOVI METODI PER BACKUP JSON ===
   factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
     return DailyRecordDTO(
       dateIso: json['dateIso'] as String,
@@ -69,6 +67,7 @@ class DailyRecordDTO extends HiveObject {
       consumption: (json['consumption'] as num).toDouble(),
       comfortRatings: Map<String, String>.from(json['comfortRatings'] ?? {}),
       note: json['note'] as String? ?? '',
+      mode: json['mode'] as String? ?? 'heating',
     );
   }
 
@@ -80,6 +79,7 @@ class DailyRecordDTO extends HiveObject {
       'consumption': consumption,
       'comfortRatings': comfortRatings,
       'note': note,
+      'mode': mode,
     };
   }
 }
@@ -102,13 +102,14 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       consumption: fields[3] as double,
       comfortRatings: (fields[4] as Map).cast<String, String>(),
       note: fields[5] as String,
+      mode: fields[6] as String? ?? 'heating',
     );
   }
 
   @override
   void write(BinaryWriter writer, DailyRecordDTO obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.dateIso)
       ..writeByte(1)
@@ -120,7 +121,9 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       ..writeByte(4)
       ..write(obj.comfortRatings)
       ..writeByte(5)
-      ..write(obj.note);
+      ..write(obj.note)
+      ..writeByte(6)
+      ..write(obj.mode);
   }
 
   @override

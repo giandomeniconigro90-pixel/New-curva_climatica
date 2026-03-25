@@ -10,17 +10,14 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
-// Modelli e Servizi
 import '../../models/daily_record_dto.dart';
 import '../../services/hive_storage.dart';
 import '../../services/notification_service.dart';
 import '../initial_settings/initial_settings_home.dart';
 
-// Logica e Utils
 import 'logic/curve_logic.dart';
 import 'utils/export_utils.dart';
 
-// Widget
 import 'widgets/input_page.dart';
 import 'widgets/results_page.dart';
 import 'widgets/help_page.dart';
@@ -44,15 +41,21 @@ class ClimateCurveOfflineHome extends StatefulWidget {
 class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   late PageController pageController;
 
-  // Controllers
   final TextEditingController externalTempController = TextEditingController();
   final TextEditingController consumptionController = TextEditingController();
   final TextEditingController noteController = TextEditingController();
   final Map<String, TextEditingController> internalTempControllers = {};
 
-  // State Data
   final Map<String, String> comfortRatings = {};
-  List<DailyRecordDTO> records = [];
+
+  // Tutti i record (tutte le modalità)
+  List<DailyRecordDTO> allRecords = [];
+
+  // Record filtrati per modalità attiva (usati dall'UI)
+  List<DailyRecordDTO> get records {
+    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    return allRecords.where((r) => r.mode == modeStr).toList();
+  }
 
   late double slope;
   late double offset;
@@ -134,12 +137,12 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     lastAiApplyCooling = coolIso != null ? DateTime.tryParse(coolIso) : null;
 
     final loadedMode =
-    modeStr == 'cooling' ? SystemMode.cooling : SystemMode.heating;
+        modeStr == 'cooling' ? SystemMode.cooling : SystemMode.heating;
 
     if (!mounted) return;
 
     setState(() {
-      records = storedRecords;
+      allRecords = storedRecords;
       currentMode = loadedMode;
 
       if (currentMode == SystemMode.heating) {
@@ -155,7 +158,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   Future<void> saveToHive() async {
-    await AppStorage.saveRecords(records);
+    await AppStorage.saveRecords(allRecords);
   }
 
   void updateSystemOverlay() {
@@ -206,8 +209,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     });
   }
 
-  // HELPER DATE E FILTRI
-
   DateTime? parseItalianDateSafe(String s) {
     final parts = s.split('/');
     if (parts.length != 3) return null;
@@ -220,7 +221,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
   List<DailyRecordDTO> recordsSinceLastApply(SystemMode mode) {
     final last =
-    mode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
+        mode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
     if (last == null) return List<DailyRecordDTO>.from(records);
     final lastDay = DateTime(last.year, last.month, last.day);
     return records.where((r) {
@@ -234,8 +235,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         '${dt.month.toString().padLeft(2, '0')}/'
         '${dt.year}';
   }
-
-  // GESTIONE INPUT CRUD
 
   void clearFields({bool preFillFromLast = false}) {
     editingIndex = null;
@@ -254,16 +253,26 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   void startEditRecordByDateIso(String dateIso) {
-    final index = records.indexWhere((r) => r.dateIso == dateIso);
+    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final index = allRecords.indexWhere(
+        (r) => r.dateIso == dateIso && r.mode == modeStr);
     if (index == -1) return;
-    startEditRecord(index);
+    startEditRecordByAllIndex(index);
   }
 
-  void startEditRecord(int index) {
-    if (index < 0 || index >= records.length) return;
-    final r = records[index];
+  void startEditRecord(int sortedIndex) {
+    // sortedIndex è relativo a records (filtrati), troviamo l'indice in allRecords
+    final filtered = records;
+    if (sortedIndex < 0 || sortedIndex >= filtered.length) return;
+    final targetDateIso = filtered[sortedIndex].dateIso;
+    startEditRecordByDateIso(targetDateIso);
+  }
 
-    editingIndex = index;
+  void startEditRecordByAllIndex(int allIndex) {
+    if (allIndex < 0 || allIndex >= allRecords.length) return;
+    final r = allRecords[allIndex];
+
+    editingIndex = allIndex;
     externalTempController.text = r.externalTemp.toString();
     consumptionController.text = r.consumption.toString();
     noteController.text = r.note ?? '';
@@ -311,9 +320,9 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     }
 
     final double? extTemp =
-    double.tryParse(externalTempController.text.replaceAll(',', '.'));
+        double.tryParse(externalTempController.text.replaceAll(',', '.'));
     final double? cons =
-    double.tryParse(consumptionController.text.replaceAll(',', '.'));
+        double.tryParse(consumptionController.text.replaceAll(',', '.'));
 
     if (extTemp == null || cons == null) {
       if (mounted) {
@@ -353,9 +362,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     final now = DateTime.now();
     final dateIso = formatItalianDate(now);
+    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
 
     if (editingIndex != null) {
-      final originalDate = records[editingIndex!].dateIso;
+      final originalDate = allRecords[editingIndex!].dateIso;
       final updatedRecord = DailyRecordDTO(
         dateIso: originalDate,
         externalTemp: extTemp,
@@ -363,9 +373,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         consumption: cons,
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
+        mode: modeStr,
       );
 
-      setState(() => records[editingIndex!] = updatedRecord);
+      setState(() => allRecords[editingIndex!] = updatedRecord);
       editingIndex = null;
 
       if (mounted) {
@@ -377,7 +388,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         );
       }
     } else {
-      final exists = records.any((r) => r.dateIso == dateIso);
+      final exists = allRecords.any(
+          (r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
         if (mounted) {
           Fluttertoast.showToast(
@@ -397,9 +409,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         consumption: cons,
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
+        mode: modeStr,
       );
 
-      setState(() => records.add(newRecord));
+      setState(() => allRecords.add(newRecord));
 
       if (mounted) {
         Fluttertoast.showToast(
@@ -418,7 +431,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   Future<void> deleteRecord(int sortedIndex) async {
-    final sortedRecords = List<DailyRecordDTO>.from(records);
+    final filtered = records;
+    final sortedRecords = List<DailyRecordDTO>.from(filtered);
     sortedRecords.sort((a, b) {
       final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
       final db = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
@@ -427,11 +441,13 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     if (sortedIndex >= 0 && sortedIndex < sortedRecords.length) {
       final targetDateIso = sortedRecords[sortedIndex].dateIso;
-      final originalIndex = records.indexWhere((r) => r.dateIso == targetDateIso);
+      final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+      final originalIndex = allRecords.indexWhere(
+          (r) => r.dateIso == targetDateIso && r.mode == modeStr);
 
       if (originalIndex != -1) {
         setState(() {
-          records.removeAt(originalIndex);
+          allRecords.removeAt(originalIndex);
           if (editingIndex == originalIndex) editingIndex = null;
         });
 
@@ -451,10 +467,24 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
   Future<void> deleteToday() async {
     final today = formatItalianDate(DateTime.now());
-    final index = records.indexWhere((r) => r.dateIso == today);
+    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final index = allRecords.indexWhere(
+        (r) => r.dateIso == today && r.mode == modeStr);
 
     if (index != -1) {
-      await deleteRecord(index);
+      setState(() {
+        allRecords.removeAt(index);
+        if (editingIndex == index) editingIndex = null;
+      });
+      await saveToHive();
+      if (mounted) {
+        Fluttertoast.showToast(
+          msg: "Registrazione eliminata",
+          backgroundColor: Colors.red.shade600,
+          textColor: Colors.white,
+          fontSize: 14,
+        );
+      }
     } else {
       if (mounted) {
         Fluttertoast.showToast(
@@ -518,7 +548,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     }
 
     final suggestion =
-    computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
+        computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
 
     if ((suggestion.suggestedSlope - slope).abs() < 0.05 &&
         (suggestion.suggestedOffset - offset).abs() < 0.05) {
@@ -637,7 +667,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
       final windowRecords = recordsSinceLastApply(currentMode);
       final suggestion =
-      computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
+          computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
       final stats = computeCurveStats(windowRecords);
 
       await ExportUtils.generateAndSavePdf(
@@ -669,12 +699,12 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   Future<Uint8List?> captureChart() async {
     try {
       final RenderRepaintBoundary? boundary =
-      chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+          chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
 
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       final ByteData? byteData =
-      await image.toByteData(format: ui.ImageByteFormat.png);
+          await image.toByteData(format: ui.ImageByteFormat.png);
 
       return byteData?.buffer.asUint8List();
     } catch (_) {
@@ -685,7 +715,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   Future<void> doBackup() async {
     try {
       final backupJson = ExportUtils.generateBackupJson(
-        records: records,
+        records: allRecords,
         mode: currentMode,
         heatingSlope: cachedHeatingSlope,
         heatingOffset: cachedHeatingOffset,
@@ -762,7 +792,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       final recordsData = backupData['records'] as List;
 
       final newRecords =
-      recordsData.map((j) => DailyRecordDTO.fromJson(j)).toList();
+          recordsData.map((j) => DailyRecordDTO.fromJson(j)).toList();
 
       await AppStorage.saveRecords(newRecords);
 
@@ -834,11 +864,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     }
   }
 
-  // GRAFICO
   Widget buildCurvePage(BuildContext context) {
     final windowRecords = recordsSinceLastApply(currentMode);
     final suggestion =
-    computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
+        computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
 
     final isHeating = currentMode == SystemMode.heating;
 
@@ -948,19 +977,19 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
                                 getTooltipColor: (touchedSpot) =>
-                                Colors.blueGrey.shade800,
+                                    Colors.blueGrey.shade800,
                                 getTooltipItems: (touchedBarSpots) =>
                                     touchedBarSpots
                                         .map(
                                           (barSpot) => LineTooltipItem(
-                                        'Est ${barSpot.x.toInt()}\u00b0C: ${barSpot.y.toStringAsFixed(1)}\u00b0C',
-                                        const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    )
+                                            'Est ${barSpot.x.toInt()}\u00b0C: ${barSpot.y.toStringAsFixed(1)}\u00b0C',
+                                            const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        )
                                         .toList(),
                               ),
                             ),
@@ -1183,10 +1212,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   @override
   Widget build(BuildContext context) {
     final DateTime? lastAppliedDate =
-    currentMode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
+        currentMode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
 
     final suggestion =
-    computeOptimalCurveSuggestion(records, slope, offset, currentMode, lastAppliedDate);
+        computeOptimalCurveSuggestion(records, slope, offset, currentMode, lastAppliedDate);
 
     final windowRecords = recordsSinceLastApply(currentMode);
     final stats = computeCurveStats(windowRecords);
