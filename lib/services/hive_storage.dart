@@ -1,12 +1,15 @@
 // lib/services/hive_storage.dart
 
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:flutter/material.dart'; // Per TimeOfDay
+import 'package:flutter/material.dart';
 import '../models/daily_record_dto.dart';
 
 class AppStorage {
   static const String _boxName = 'clima_sense_box';
   static const String _recordsBoxName = 'daily_records_box';
+
+  /// Chiave composita per evitare collisioni tra heating e cooling nella stessa data
+  static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -19,13 +22,11 @@ class AppStorage {
 
   // --- APP STATE ---
   static bool isAppInitialized() {
-    var box = Hive.box(_boxName);
-    return box.get('isInitialized', defaultValue: false);
+    return Hive.box(_boxName).get('isInitialized', defaultValue: false);
   }
 
   static Future<void> setAppInitialized() async {
-    var box = Hive.box(_boxName);
-    await box.put('isInitialized', true);
+    await Hive.box(_boxName).put('isInitialized', true);
   }
 
   // --- CONFIGURAZIONE CURVE ---
@@ -97,19 +98,12 @@ class AppStorage {
   }
 
   static Future<void> resetCalibration() async {
-    // Valori di default curva riscaldamento
     await saveSlope(1.2);
     await saveOffset(0.0);
-
-    // Valori di default curva raffrescamento
     await saveCoolingSlope(0.5);
     await saveCoolingOffset(0.0);
-
-    // Reset date applicazione AI
     await saveLastAiApplyHeatingIso(null);
     await saveLastAiApplyCoolingIso(null);
-
-    // NON toccare i records qui: niente saveRecords([])
   }
 
   // --- COSTI ---
@@ -121,8 +115,7 @@ class AppStorage {
     await Hive.box(_boxName).put('costPerKwh', value);
   }
 
-  // --- NOTIFICHE (TimeOfDay salvato come int hour, int minute o stringa 'HH:mm') ---
-  // Per compatibilità con NotificationService che usa split, salviamo come String
+  // --- NOTIFICHE ---
   static Future<void> saveNotificationTime(TimeOfDay time) async {
     final h = time.hour.toString().padLeft(2, '0');
     final m = time.minute.toString().padLeft(2, '0');
@@ -130,41 +123,36 @@ class AppStorage {
   }
 
   static String? getNotificationTime() {
-    // Ritorna "HH:mm" o null
-    return Hive.box(_boxName).get('notificationTimeStr', defaultValue: "20:00");
+    return Hive.box(_boxName).get('notificationTimeStr', defaultValue: '20:00');
   }
 
-  // --- RECORDS (Gestione Dati Giornalieri) ---
+  // --- RECORDS ---
+
+  /// Salva un singolo record usando chiave composita dateIso_mode
   static Future<void> saveRecord(DailyRecordDTO record) async {
-    var box = Hive.box<DailyRecordDTO>(_recordsBoxName);
-    await box.put(record.dateIso, record);
+    final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
+    await box.put(_recordKey(record), record);
   }
 
-  // Alias per compatibilità
-  // Alias per compatibilità
+  /// Sostituisce tutti i record usando chiave composita dateIso_mode
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
-    var box = Hive.box<DailyRecordDTO>(_recordsBoxName);
-
-    // 1) cancella tutti i record salvati prima
+    final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
     await box.clear();
-
-    // 2) risalva solo quelli passati
     for (var r in records) {
-      await box.put(r.dateIso, r);
+      await box.put(_recordKey(r), r);
     }
   }
 
   static List<DailyRecordDTO> getRecords() {
-    var box = Hive.box<DailyRecordDTO>(_recordsBoxName);
-    return box.values.toList();
+    return Hive.box<DailyRecordDTO>(_recordsBoxName).values.toList();
   }
 
-  // Alias asincrono se richiesto
   static Future<List<DailyRecordDTO>> loadRecords() async {
     return getRecords();
   }
 
-  static Future<void> deleteRecord(String dateIso) async {
-    await Hive.box<DailyRecordDTO>(_recordsBoxName).delete(dateIso);
+  /// Elimina un record per chiave composita dateIso_mode
+  static Future<void> deleteRecord(String dateIso, String mode) async {
+    await Hive.box<DailyRecordDTO>(_recordsBoxName).delete('${dateIso}_$mode');
   }
 }
