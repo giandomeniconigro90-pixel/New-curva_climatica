@@ -417,8 +417,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     await saveToHive();
     clearFields();
+    if (!mounted) return;
     FocusScope.of(context).unfocus();
   }
+
   Future<void> deleteRecord(int sortedIndex) async {
     // Trova il record nella lista originale usando dateIso (chiave univoca)
     final sortedRecords = List<DailyRecordDTO>.from(records);
@@ -738,6 +740,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         throw Exception('File di backup non valido.');
       }
 
+      if (!mounted) return;
+
       final bool? confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -808,6 +812,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       }
     }
   }
+
   Future<void> setNotificationTime() async {
     final now = TimeOfDay.now();
     final picked = await showTimePicker(
@@ -819,12 +824,13 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       ),
     );
 
+    if (!mounted) return;
+
     if (picked != null) {
       final hh = picked.hour.toString().padLeft(2, '0');
       final mm = picked.minute.toString().padLeft(2, '0');
 
-      // Salvataggio come stringa "HHmm" (adatta a come l'hai definito in AppStorage)
-      await AppStorage.saveNotificationTime('$hh$mm' as TimeOfDay);
+      await AppStorage.saveNotificationTime('$hh:$mm');
 
       await NotificationService.cancelAll();
       await NotificationService.scheduleDailyReminder();
@@ -1359,4 +1365,3 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     );
   }
 }
-
