@@ -858,39 +858,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     );
   }
 
-  Widget buildTabItem(int index, IconData icon, String label) {
-    final bool isSelected = currentPage == index;
-    final Color active = Colors.blue.shade900;
-    final Color inactive = Colors.grey.shade400;
-
-    return InkWell(
-      onTap: () => onNavDestinationSelected(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: isSelected ? active.withOpacity(0.08) : Colors.transparent,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: isSelected ? active : inactive, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? active : inactive,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final DateTime? lastAppliedDate =
@@ -979,10 +946,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       ),
     ];
 
-    final Color modeColor = isCooling
-        ? const Color(0xFF4DB6AC)
-        : const Color(0xFFFFB74D);
-
     return Scaffold(
       bottomNavigationBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
@@ -991,10 +954,34 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              buildTabItem(0, Icons.edit_calendar_outlined, 'Registra'),
-              buildTabItem(1, Icons.auto_awesome_outlined, 'AI Storico'),
-              buildTabItem(2, Icons.show_chart_rounded, 'Grafico'),
-              buildTabItem(3, Icons.help_outline_rounded, 'Guida'),
+              _TabItem(
+                index: 0,
+                icon: Icons.edit_calendar_outlined,
+                label: 'Registra',
+                currentPage: currentPage,
+                onTap: onNavDestinationSelected,
+              ),
+              _TabItem(
+                index: 1,
+                icon: Icons.auto_awesome_outlined,
+                label: 'AI Storico',
+                currentPage: currentPage,
+                onTap: onNavDestinationSelected,
+              ),
+              _TabItem(
+                index: 2,
+                icon: Icons.show_chart_rounded,
+                label: 'Grafico',
+                currentPage: currentPage,
+                onTap: onNavDestinationSelected,
+              ),
+              _TabItem(
+                index: 3,
+                icon: Icons.help_outline_rounded,
+                label: 'Guida',
+                currentPage: currentPage,
+                onTap: onNavDestinationSelected,
+              ),
             ],
           ),
         ),
@@ -1055,6 +1042,57 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                 physics: const NeverScrollableScrollPhysics(),
                 onPageChanged: onPageChanged,
                 children: pages,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- Widget privato per ogni tab della barra di navigazione ---
+class _TabItem extends StatelessWidget {
+  final int index;
+  final IconData icon;
+  final String label;
+  final int currentPage;
+  final void Function(int) onTap;
+
+  const _TabItem({
+    required this.index,
+    required this.icon,
+    required this.label,
+    required this.currentPage,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isSelected = currentPage == index;
+    final Color active = Colors.blue.shade900;
+    final Color inactive = Colors.grey.shade400;
+
+    return InkWell(
+      onTap: () => onTap(index),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: isSelected ? active.withOpacity(0.08) : Colors.transparent,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: isSelected ? active : inactive, size: 22),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? active : inactive,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
