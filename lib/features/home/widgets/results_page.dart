@@ -165,8 +165,9 @@ class _ResultsPageState extends State<ResultsPage> {
               final text = controller.text.replaceAll(',', '.');
               final newVal = double.tryParse(text) ?? 0.0;
               await AppStorage.saveCostPerKwh(newVal);
+              if (!ctx.mounted) return;
               setState(() => _costPerKwh = newVal);
-              if (mounted) Navigator.of(ctx).pop();
+              Navigator.of(ctx).pop();
             },
             child: const Text('Salva'),
           ),
@@ -345,11 +346,6 @@ class _ResultsPageState extends State<ResultsPage> {
                         widget.onEditRecord != null
                         ? handleEditTap
                         : null,
-                    // Se vuoi usare il long-press per delete, stessa logica:
-                    // onLongPress: widget.onDeleteRecordByDateIso != null ||
-                    //         widget.onDeleteRecord != null
-                    //     ? handleDeleteTap
-                    //     : null,
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
