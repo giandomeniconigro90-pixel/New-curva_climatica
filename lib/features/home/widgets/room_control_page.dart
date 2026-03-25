@@ -55,8 +55,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
   late Color _mainColor;
   late String _headerText;
 
-  final double _sliderHeight = 380.0;
-
   @override
   void initState() {
     super.initState();
@@ -88,6 +86,10 @@ class _RoomControlPageState extends State<RoomControlPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Altezza slider dinamica: 45% dell'altezza schermo, min 260, max 420
+    final double sliderHeight = MediaQuery.of(context).size.height
+        .clamp(260.0 / 0.45, 420.0 / 0.45) * 0.45;
+
     double percentage = (_currentValue - _min) / (_max - _min);
     percentage = percentage.clamp(0.0, 1.0);
 
@@ -125,7 +127,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
               children: [
                 Text(_headerText, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
-
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -185,7 +186,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
             Center(
               child: Container(
                 width: 220,
-                height: _sliderHeight,
+                height: sliderHeight,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(40),
@@ -197,7 +198,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                     children: [
                       Container(
                         width: double.infinity,
-                        height: _sliderHeight * percentage,
+                        height: sliderHeight * percentage,
                         color: Colors.white,
                       ),
                       RotatedBox(
@@ -221,7 +222,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                         ),
                       ),
                       Positioned(
-                        bottom: (_sliderHeight * percentage) - 10,
+                        bottom: (sliderHeight * percentage) - 10,
                         child: Container(
                           width: 40,
                           height: 5,
