@@ -165,9 +165,9 @@ class _InputPageState extends State<InputPage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: const [
-                  Text(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
                     "Home",
                     style: TextStyle(
                       fontSize: 30,
@@ -175,6 +175,17 @@ class _InputPageState extends State<InputPage> {
                       color: Color(0xFF263238),
                     ),
                   ),
+                  if (widget.records.isNotEmpty)
+                    Tooltip(
+                      message: 'Copia dall\'ultima registrazione',
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.copy_all_outlined,
+                          color: Color(0xFF263238),
+                        ),
+                        onPressed: widget.onDuplicateFromYesterday,
+                      ),
+                    ),
                 ],
               ),
             ),
