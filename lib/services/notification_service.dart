@@ -20,7 +20,6 @@ class NotificationService {
 
     try {
       tz.initializeTimeZones();
-      // Imposta esplicitamente Europa/Roma
       tz.setLocalLocation(tz.getLocation('Europe/Rome'));
 
       const AndroidInitializationSettings androidSettings =
@@ -52,7 +51,6 @@ class NotificationService {
   static Future scheduleDailyReminder() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
-    // Garantisce che init e timezone siano pronti
     await init();
 
     try {
@@ -95,17 +93,9 @@ class NotificationService {
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
-
-      // Toast di conferma (utile anche in produzione)
-      Fluttertoast.showToast(
-        msg: '✅ Notifica impostata per le $timeStr',
-        backgroundColor: Colors.green.shade700,
-        textColor: Colors.white,
-        toastLength: Toast.LENGTH_LONG,
-      );
     } catch (e) {
       Fluttertoast.showToast(
-        msg: '❌ Errore scheduling: $e',
+        msg: '❌ Errore scheduling notifica: $e',
         backgroundColor: Colors.red.shade700,
         textColor: Colors.white,
         toastLength: Toast.LENGTH_LONG,
