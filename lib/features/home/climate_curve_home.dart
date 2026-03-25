@@ -853,8 +853,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   void onNavDestinationSelected(int index) {
     pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
     );
   }
 
