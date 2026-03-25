@@ -80,13 +80,12 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     slope = widget.initialSlope;
     offset = widget.initialOffset;
 
-    // Inizializza controller stanze
     for (final room in [
       'Soggiorno/Cucina',
       'Bagno PT',
       'Cameretta Stefano',
       'Camera Giochi',
-      'Camera Mamma e Papà',
+      'Camera Mamma e Pap\u00e0',
       'Bagno 1P',
     ]) {
       internalTempControllers[room] = TextEditingController();
@@ -160,12 +159,11 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   void updateSystemOverlay() {
-    // Forza sempre icone scure su barra trasparente/chiara
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent, // niente barra nera
-        statusBarIconBrightness: Brightness.dark, // icone/testo NERI
-        statusBarBrightness: Brightness.light, // comunica "barra chiara" al sistema
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
     );
   }
@@ -173,7 +171,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   void toggleMode(bool value) {
     final newMode = value ? SystemMode.cooling : SystemMode.heating;
 
-    // Salva i valori correnti nella cache prima di cambiare
     if (currentMode == SystemMode.heating) {
       cachedHeatingSlope = slope;
       cachedHeatingOffset = offset;
@@ -256,7 +253,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     }
   }
 
-  // NUOVO: edit basato su dateIso (robusto con lista ordinata in ResultsPage)
   void startEditRecordByDateIso(String dateIso) {
     final index = records.indexWhere((r) => r.dateIso == dateIso);
     if (index == -1) return;
@@ -346,7 +342,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     if (conversionError) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg: "Errore: Una delle temperature interne non è un numero valido.",
+          msg: "Errore: Una delle temperature interne non \u00e8 un numero valido.",
           backgroundColor: Colors.red.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -385,7 +381,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       if (exists) {
         if (mounted) {
           Fluttertoast.showToast(
-            msg: "Esiste già una registrazione per oggi. Modifica quella esistente.",
+            msg: "Esiste gi\u00e0 una registrazione per oggi. Modifica quella esistente.",
             backgroundColor: Colors.orange.shade600,
             textColor: Colors.white,
             fontSize: 14,
@@ -422,12 +418,11 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   }
 
   Future<void> deleteRecord(int sortedIndex) async {
-    // Trova il record nella lista originale usando dateIso (chiave univoca)
     final sortedRecords = List<DailyRecordDTO>.from(records);
     sortedRecords.sort((a, b) {
       final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
       final db = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
-      return db.compareTo(da); // stesso ordinamento di results_page
+      return db.compareTo(da);
     });
 
     if (sortedIndex >= 0 && sortedIndex < sortedRecords.length) {
@@ -510,7 +505,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
   void onApplyAiCurve() {
     final windowRecords = recordsSinceLastApply(currentMode);
 
-    // Controllo 5 rilevamenti
     if (windowRecords.length < 5) {
       if (mounted) {
         Fluttertoast.showToast(
@@ -526,13 +520,11 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     final suggestion =
     computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
 
-    // Controllo valori uguali
     if ((suggestion.suggestedSlope - slope).abs() < 0.05 &&
         (suggestion.suggestedOffset - offset).abs() < 0.05) {
       if (mounted) {
         Fluttertoast.showToast(
-          msg:
-          "I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.",
+          msg: "I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.",
           backgroundColor: Colors.orange.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -541,7 +533,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       return;
     }
 
-    // Variabili definite PRIMA del setState per essere visibili ovunque
     final now = DateTime.now();
     final nowIso = now.toIso8601String();
 
@@ -747,7 +738,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         builder: (ctx) => AlertDialog(
           title: const Text('Conferma Ripristino'),
           content: const Text(
-            'Sovrascriverà tutti i dati attuali. Continuare?',
+            'Sovrascriver\u00e0 tutti i dati attuali. Continuare?',
           ),
           actions: [
             TextButton(
@@ -827,10 +818,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     if (!mounted) return;
 
     if (picked != null) {
-      final hh = picked.hour.toString().padLeft(2, '0');
-      final mm = picked.minute.toString().padLeft(2, '0');
-
-      await AppStorage.saveNotificationTime('$hh:$mm');
+      await AppStorage.saveNotificationTime(picked);
 
       await NotificationService.cancelAll();
       await NotificationService.scheduleDailyReminder();
@@ -965,7 +953,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                                     touchedBarSpots
                                         .map(
                                           (barSpot) => LineTooltipItem(
-                                        'Est ${barSpot.x.toInt()}°C: ${barSpot.y.toStringAsFixed(1)}°C',
+                                        'Est ${barSpot.x.toInt()}\u00b0C: ${barSpot.y.toStringAsFixed(1)}\u00b0C',
                                         const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.bold,
@@ -1002,7 +990,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                             titlesData: FlTitlesData(
                               leftTitles: AxisTitles(
                                 axisNameWidget: const Text(
-                                  'Temp. Mandata Acqua °C',
+                                  'Temp. Mandata Acqua \u00b0C',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.grey,
@@ -1025,7 +1013,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                               ),
                               bottomTitles: AxisTitles(
                                 axisNameWidget: const Text(
-                                  'Temp. Esterna °C',
+                                  'Temp. Esterna \u00b0C',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.grey,
@@ -1096,8 +1084,8 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                           Expanded(
                             child: Text(
                               isHeating
-                                  ? 'Zona Rossa (>35°C): Efficienza ridotta per Ventilconvettori.'
-                                  : 'Zona Rossa (<15°C): Alto rischio condensa.',
+                                  ? 'Zona Rossa (>35\u00b0C): Efficienza ridotta per Ventilconvettori.'
+                                  : 'Zona Rossa (<15\u00b0C): Alto rischio condensa.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey.shade600,
@@ -1205,9 +1193,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
 
     final bool isCooling = currentMode == SystemMode.cooling;
 
-    final Color appBarColor =
-    isCooling ? Colors.blueGrey.shade900 : Colors.deepOrange.shade800;
-
     final List<Widget> pages = [
       InputPage(
         externalTempController: externalTempController,
@@ -1220,7 +1205,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
         onDeleteRecord: deleteRecord,
         onEditRecord: startEditRecord,
         isEditing: editingIndex != null,
-        isCooling: isCooling, // <--- AGGIUNGI QUESTA RIGA
+        isCooling: isCooling,
         onDuplicateFromYesterday: duplicateFromYesterday,
         onExportCsv: exportCsv,
         onExportPdf: exportPdf,
@@ -1245,7 +1230,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
             builder: (ctx) => AlertDialog(
               title: const Text('Reset Calibrazione?'),
               content: const Text(
-                'Questo cancellerà le preferenze di pendenza/offset. I dati storici rimarranno.',
+                'Questo canceller\u00e0 le preferenze di pendenza/offset. I dati storici rimarranno.',
               ),
               actions: [
                 TextButton(
@@ -1275,16 +1260,15 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       ),
     ];
 
-    // COLORE DELLA MODALITÀ (una sola volta)
     final Color modeColor = isCooling
-        ? const Color(0xFF4DB6AC) // azzurro raffrescamento
-        : const Color(0xFFFFB74D); // arancione riscaldamento
+        ? const Color(0xFF4DB6AC)
+        : const Color(0xFFFFB74D);
 
     return Scaffold(
       bottomNavigationBar: PreferredSize(
         preferredSize: const Size.fromHeight(60),
         child: Container(
-          color: const Color(0xFFF5F5F7), // stesso del scaffoldBackgroundColor
+          color: const Color(0xFFF5F5F7),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -1299,7 +1283,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
       body: SafeArea(
         child: Column(
           children: [
-            // Riga in alto solo con switch + notifiche, senza barra
             Padding(
               padding: const EdgeInsets.only(top: 8, right: 8, left: 8),
               child: Row(
@@ -1320,7 +1303,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                       ),
                       const SizedBox(height: 2),
                       const Text(
-                        'Cambia modalità',
+                        'Cambia modalit\u00e0',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.grey,
@@ -1334,13 +1317,10 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                     onChanged: toggleMode,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     splashRadius: 18,
-                    // --- STATO ON: RAFFRESCAMENTO (Azzurro) ---
-                    activeColor: const Color(0xFF4DB6AC), // Pallino
-                    activeTrackColor: const Color(0xFF4DB6AC), // Sfondo (niente bordo)
-                    // --- STATO OFF: RISCALDAMENTO (Arancione) ---
-                    inactiveThumbColor: const Color(0xFFFFB74D), // Pallino
-                    inactiveTrackColor: const Color(0xFFFFB74D), // Sfondo (niente bordo)
-                    // Rimuove eventuale bordo sottile grigio (su versioni recenti di Flutter)
+                    activeColor: const Color(0xFF4DB6AC),
+                    activeTrackColor: const Color(0xFF4DB6AC),
+                    inactiveThumbColor: const Color(0xFFFFB74D),
+                    inactiveTrackColor: const Color(0xFFFFB74D),
                     trackOutlineColor: MaterialStateProperty.all(Colors.transparent),
                   ),
                   IconButton(
@@ -1350,7 +1330,6 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
                 ],
               ),
             ),
-            // Nessun Container colorato, si passa direttamente al contenuto
             Expanded(
               child: PageView(
                 controller: pageController,
