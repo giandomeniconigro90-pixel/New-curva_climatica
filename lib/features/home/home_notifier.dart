@@ -374,6 +374,9 @@ class HomeNotifier extends ChangeNotifier {
     allRecords.removeAt(index);
     notifyListeners();
     await saveToHive();
+    // Torna alla pagina Registra dopo la cancellazione
+    currentPage = 0;
+    pageController.jumpToPage(0);
   }
 
   void duplicateFromYesterday() {
