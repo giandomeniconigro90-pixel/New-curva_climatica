@@ -167,7 +167,8 @@ class HomeNotifier extends ChangeNotifier {
         isDark = false;
         break;
       case ThemeMode.system:
-        isDark = ui.PlatformDispatcher.instance.platformBrightness == ui.Brightness.dark;
+        isDark = ui.PlatformDispatcher.instance.platformBrightness ==
+            ui.Brightness.dark;
         break;
     }
     SystemChrome.setSystemUIOverlayStyle(
@@ -315,7 +316,7 @@ class HomeNotifier extends ChangeNotifier {
           allRecords.any((r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
         Fluttertoast.showToast(
-          msg: 'Esiste gi\u00e0 una registrazione per oggi. Modifica quella esistente.',
+          msg: 'Esiste già una registrazione per oggi. Modifica quella esistente.',
           backgroundColor: Colors.orange.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -366,6 +367,34 @@ class HomeNotifier extends ChangeNotifier {
     final modeStr = currentMode.toModeString();
     final originalIndex = allRecords
         .indexWhere((r) => r.dateIso == targetDateIso && r.mode == modeStr);
+
+    if (originalIndex == -1) return null;
+
+    _pendingDeleteRecord = allRecords[originalIndex];
+    _pendingDeleteIndex = originalIndex;
+
+    allRecords.removeAt(originalIndex);
+    if (editingIndex == originalIndex) editingIndex = null;
+    notifyListeners();
+
+    _deleteTimer = Timer(const Duration(seconds: 5), () {
+      _pendingDeleteRecord = null;
+      _pendingDeleteIndex = null;
+      saveToHive();
+    });
+
+    return _pendingDeleteRecord;
+  }
+
+  /// Elimina un record cercandolo per [dateIso] e modalità corrente.
+  /// Restituisce il record rimosso (per mostrare la SnackBar undo) o null
+  /// se non trovato.
+  DailyRecordDTO? softDeleteRecordByDateIso(String dateIso) {
+    _commitPendingDelete();
+
+    final modeStr = currentMode.toModeString();
+    final originalIndex = allRecords
+        .indexWhere((r) => r.dateIso == dateIso && r.mode == modeStr);
 
     if (originalIndex == -1) return null;
 
@@ -681,7 +710,8 @@ class HomeNotifier extends ChangeNotifier {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Conferma Ripristino'),
-          content: const Text('Sovrascriver\u00e0 tutti i dati attuali. Continuare?'),
+          content: const Text(
+              'Sovrascriverà tutti i dati attuali. Continuare?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -705,10 +735,14 @@ class HomeNotifier extends ChangeNotifier {
 
       await AppStorage.saveRecords(newRecords);
       await _settingsRepo.save(CurveSettings(
-        heatingSlope: (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2,
-        heatingOffset: (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
-        coolingSlope: (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
-        coolingOffset: (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
+        heatingSlope:
+            (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2,
+        heatingOffset:
+            (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
+        coolingSlope:
+            (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
+        coolingOffset:
+            (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
         mode: SystemMode.heating,
       ));
 

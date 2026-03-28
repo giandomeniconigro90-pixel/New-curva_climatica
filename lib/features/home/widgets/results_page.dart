@@ -17,7 +17,13 @@ class ResultsPage extends StatefulWidget {
   final Function(int)? onDeleteRecord;
   final Function(int)? onEditRecord;
   final void Function(String dateIso)? onEditRecordByDateIso;
+  /// Callback che esegue la soft-delete e restituisce il record eliminato
+  /// (o null se non trovato). La SnackBar con undo viene mostrata qui.
+  final DailyRecordDTO? Function(String dateIso)? onSoftDeleteRecordByDateIso;
+  /// Callback legacy (indice intero) — mantenuto per retrocompatibilità.
   final void Function(String dateIso)? onDeleteRecordByDateIso;
+  /// Callback per annullare l'ultima delete.
+  final VoidCallback? onUndoDelete;
 
   const ResultsPage({
     super.key,
@@ -30,7 +36,9 @@ class ResultsPage extends StatefulWidget {
     this.onDeleteRecord,
     this.onEditRecord,
     this.onEditRecordByDateIso,
+    this.onSoftDeleteRecordByDateIso,
     this.onDeleteRecordByDateIso,
+    this.onUndoDelete,
   });
 
   @override
@@ -109,6 +117,37 @@ class _ResultsPageState extends State<ResultsPage> {
         ],
       ),
     );
+  }
+
+  /// Gestisce la delete con SnackBar undo.
+  void _handleDeleteWithUndo(BuildContext context, String dateIso) {
+    // Usa il nuovo callback soft-delete se disponibile, altrimenti fallback legacy.
+    if (widget.onSoftDeleteRecordByDateIso != null) {
+      final deleted = widget.onSoftDeleteRecordByDateIso!(dateIso);
+      if (deleted == null) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              'Registrazione del ${deleted.dateIso} eliminata',
+            ),
+            duration: const Duration(seconds: 5),
+            action: widget.onUndoDelete != null
+                ? SnackBarAction(
+                    label: 'Annulla',
+                    onPressed: () {
+                      widget.onUndoDelete!();
+                    },
+                  )
+                : null,
+          ),
+        );
+    } else if (widget.onDeleteRecordByDateIso != null) {
+      // Fallback legacy senza undo.
+      widget.onDeleteRecordByDateIso!(dateIso);
+    }
   }
 
   @override
@@ -265,14 +304,6 @@ class _ResultsPageState extends State<ResultsPage> {
                     }
                   }
 
-                  void handleDeleteTap() {
-                    if (widget.onDeleteRecordByDateIso != null) {
-                      widget.onDeleteRecordByDateIso!(r.dateIso);
-                    } else if (widget.onDeleteRecord != null) {
-                      widget.onDeleteRecord!(index);
-                    }
-                  }
-
                   return InkWell(
                     onTap: widget.onEditRecordByDateIso != null ||
                             widget.onEditRecord != null
@@ -382,10 +413,12 @@ class _ResultsPageState extends State<ResultsPage> {
                               constraints: const BoxConstraints(),
                             ),
                           ],
-                          if (widget.onDeleteRecordByDateIso != null ||
+                          if (widget.onSoftDeleteRecordByDateIso != null ||
+                              widget.onDeleteRecordByDateIso != null ||
                               widget.onDeleteRecord != null) ...[
                             IconButton(
-                              onPressed: handleDeleteTap,
+                              onPressed: () =>
+                                  _handleDeleteWithUndo(context, r.dateIso),
                               icon: Icon(Icons.delete_outline,
                                   size: 20, color: cs.error),
                               tooltip: 'Elimina',
