@@ -41,6 +41,8 @@ class _ClimateCurveHomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Consumer<HomeNotifier>(
       builder: (context, notifier, _) {
         final DateTime? lastAppliedDate =
@@ -142,43 +144,40 @@ class _ClimateCurveHomeView extends StatelessWidget {
         ];
 
         return Scaffold(
-          bottomNavigationBar: PreferredSize(
-            preferredSize: const Size.fromHeight(60),
-            child: Container(
-              color: const Color(0xFFF5F5F7),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _TabItem(
-                    index: 0,
-                    icon: Icons.edit_calendar_outlined,
-                    label: 'Registra',
-                    currentPage: notifier.currentPage,
-                    onTap: notifier.onNavDestinationSelected,
-                  ),
-                  _TabItem(
-                    index: 1,
-                    icon: Icons.auto_awesome_outlined,
-                    label: 'AI Storico',
-                    currentPage: notifier.currentPage,
-                    onTap: notifier.onNavDestinationSelected,
-                  ),
-                  _TabItem(
-                    index: 2,
-                    icon: Icons.show_chart_rounded,
-                    label: 'Grafico',
-                    currentPage: notifier.currentPage,
-                    onTap: notifier.onNavDestinationSelected,
-                  ),
-                  _TabItem(
-                    index: 3,
-                    icon: Icons.help_outline_rounded,
-                    label: 'Guida',
-                    currentPage: notifier.currentPage,
-                    onTap: notifier.onNavDestinationSelected,
-                  ),
-                ],
-              ),
+          bottomNavigationBar: Container(
+            color: cs.surface,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _TabItem(
+                  index: 0,
+                  icon: Icons.edit_calendar_outlined,
+                  label: 'Registra',
+                  currentPage: notifier.currentPage,
+                  onTap: notifier.onNavDestinationSelected,
+                ),
+                _TabItem(
+                  index: 1,
+                  icon: Icons.auto_awesome_outlined,
+                  label: 'AI Storico',
+                  currentPage: notifier.currentPage,
+                  onTap: notifier.onNavDestinationSelected,
+                ),
+                _TabItem(
+                  index: 2,
+                  icon: Icons.show_chart_rounded,
+                  label: 'Grafico',
+                  currentPage: notifier.currentPage,
+                  onTap: notifier.onNavDestinationSelected,
+                ),
+                _TabItem(
+                  index: 3,
+                  icon: Icons.help_outline_rounded,
+                  label: 'Guida',
+                  currentPage: notifier.currentPage,
+                  onTap: notifier.onNavDestinationSelected,
+                ),
+              ],
             ),
           ),
           body: SafeArea(
@@ -196,18 +195,18 @@ class _ClimateCurveHomeView extends StatelessWidget {
                             notifier.currentMode == SystemMode.heating
                                 ? 'Riscaldamento'
                                 : 'Raffrescamento',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF263238),
+                              color: cs.onSurface,
                             ),
                           ),
                           const SizedBox(height: 2),
-                          const Text(
-                            'Cambia modalit\u00e0',
+                          Text(
+                            'Cambia modalità',
                             style: TextStyle(
                               fontSize: 10,
-                              color: Colors.grey,
+                              color: cs.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -224,7 +223,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                         inactiveThumbColor: const Color(0xFFFFB74D),
                         inactiveTrackColor: const Color(0xFFFFB74D),
                         trackOutlineColor:
-                            MaterialStateProperty.all(Colors.transparent),
+                            WidgetStateProperty.all(Colors.transparent),
                       ),
                       IconButton(
                         icon: const Icon(Icons.notifications_outlined),
@@ -269,20 +268,18 @@ class _TabItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isSelected = currentPage == index;
-    final Color active = Colors.blue.shade900;
-    final Color inactive = Colors.grey.shade400;
+    final cs = Theme.of(context).colorScheme;
+    final Color active = cs.primary;
+    final Color inactive = cs.onSurfaceVariant;
 
     return InkWell(
       onTap: () => onTap(index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding:
-            const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: isSelected
-              ? active.withOpacity(0.08)
-              : Colors.transparent,
+          color: isSelected ? active.withOpacity(0.08) : Colors.transparent,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

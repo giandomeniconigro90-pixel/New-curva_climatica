@@ -24,11 +24,11 @@ class CurveChartPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final suggestion =
         computeOptimalCurveSuggestion(windowRecords, slope, offset, mode);
 
     final isHeating = mode == SystemMode.heating;
-
     final double minExt = isHeating ? -10 : 20;
     final double maxExt = isHeating ? 20 : 40;
     final double minY = isHeating ? 25.0 : 5.0;
@@ -56,6 +56,9 @@ class CurveChartPage extends StatelessWidget {
       );
     }
 
+    final gridColor = cs.outlineVariant.withOpacity(0.4);
+    final labelColor = cs.onSurfaceVariant;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Center(
@@ -69,7 +72,7 @@ class CurveChartPage extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
@@ -87,12 +90,12 @@ class CurveChartPage extends StatelessWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
+                              Text(
                                 'Curva Climatica',
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E1E1E),
+                                  color: cs.onSurface,
                                 ),
                               ),
                               Text(
@@ -101,17 +104,19 @@ class CurveChartPage extends StatelessWidget {
                                     : 'Estate (Raffrescamento)',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey.shade500,
+                                  color: cs.onSurfaceVariant,
                                 ),
                               ),
                             ],
                           ),
                           Row(
                             children: [
-                              _buildLegendItem('Attuale', Colors.blue.shade700, false),
+                              _buildLegendItem(
+                                  'Attuale', cs.primary, false, cs),
                               if (suggestedSpots != null) ...[
                                 const SizedBox(width: 16),
-                                _buildLegendItem('AI Consigliata', Colors.green, true),
+                                _buildLegendItem(
+                                    'AI Consigliata', Colors.green, true, cs),
                               ],
                             ],
                           ),
@@ -128,21 +133,17 @@ class CurveChartPage extends StatelessWidget {
                             maxY: maxY,
                             lineTouchData: LineTouchData(
                               touchTooltipData: LineTouchTooltipData(
-                                getTooltipColor: (touchedSpot) =>
-                                    Colors.blueGrey.shade800,
-                                getTooltipItems: (touchedBarSpots) =>
-                                    touchedBarSpots
-                                        .map(
-                                          (barSpot) => LineTooltipItem(
-                                            'Est ${barSpot.x.toInt()}°C: ${barSpot.y.toStringAsFixed(1)}°C',
-                                            const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                            ),
+                                getTooltipColor: (_) => cs.inverseSurface,
+                                getTooltipItems: (spots) => spots
+                                    .map((s) => LineTooltipItem(
+                                          'Est ${s.x.toInt()}°C: ${s.y.toStringAsFixed(1)}°C',
+                                          TextStyle(
+                                            color: cs.onInverseSurface,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
                                           ),
-                                        )
-                                        .toList(),
+                                        ))
+                                    .toList(),
                               ),
                             ),
                             rangeAnnotations: RangeAnnotations(
@@ -159,20 +160,17 @@ class CurveChartPage extends StatelessWidget {
                               drawVerticalLine: true,
                               horizontalInterval: 5,
                               verticalInterval: 5,
-                              getDrawingHorizontalLine: (v) => FlLine(
-                                color: Colors.grey.withOpacity(0.1),
-                                strokeWidth: 1,
-                              ),
-                              getDrawingVerticalLine: (v) => FlLine(
-                                color: Colors.grey.withOpacity(0.1),
-                                strokeWidth: 1,
-                              ),
+                              getDrawingHorizontalLine: (_) =>
+                                  FlLine(color: gridColor, strokeWidth: 1),
+                              getDrawingVerticalLine: (_) =>
+                                  FlLine(color: gridColor, strokeWidth: 1),
                             ),
                             titlesData: FlTitlesData(
                               leftTitles: AxisTitles(
-                                axisNameWidget: const Text(
+                                axisNameWidget: Text(
                                   'Temp. Mandata Acqua °C',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                                  style: TextStyle(
+                                      fontSize: 10, color: labelColor),
                                 ),
                                 axisNameSize: 20,
                                 sideTitles: SideTitles(
@@ -181,18 +179,19 @@ class CurveChartPage extends StatelessWidget {
                                   interval: 5,
                                   getTitlesWidget: (val, m) => Text(
                                     val.toInt().toString(),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: Colors.grey,
+                                      color: labelColor,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
                               ),
                               bottomTitles: AxisTitles(
-                                axisNameWidget: const Text(
+                                axisNameWidget: Text(
                                   'Temp. Esterna °C',
-                                  style: TextStyle(fontSize: 10, color: Colors.grey),
+                                  style: TextStyle(
+                                      fontSize: 10, color: labelColor),
                                 ),
                                 axisNameSize: 20,
                                 sideTitles: SideTitles(
@@ -202,10 +201,8 @@ class CurveChartPage extends StatelessWidget {
                                     padding: const EdgeInsets.only(top: 6),
                                     child: Text(
                                       val.toInt().toString(),
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey,
-                                      ),
+                                      style: TextStyle(
+                                          fontSize: 11, color: labelColor),
                                     ),
                                   ),
                                 ),
@@ -219,19 +216,20 @@ class CurveChartPage extends StatelessWidget {
                             ),
                             borderData: FlBorderData(
                               show: true,
-                              border: Border.all(color: Colors.grey.shade300),
+                              border:
+                                  Border.all(color: cs.outlineVariant),
                             ),
                             lineBarsData: [
                               LineChartBarData(
                                 spots: currentSpots,
                                 isCurved: true,
-                                color: Colors.blue.shade700,
+                                color: cs.primary,
                                 barWidth: 4,
                                 isStrokeCapRound: true,
                                 dotData: const FlDotData(show: false),
                                 belowBarData: BarAreaData(
                                   show: true,
-                                  color: Colors.blue.withOpacity(0.05),
+                                  color: cs.primary.withOpacity(0.05),
                                 ),
                               ),
                               if (suggestedSpots != null)
@@ -251,10 +249,9 @@ class CurveChartPage extends StatelessWidget {
                       Row(
                         children: [
                           Container(
-                            width: 12,
-                            height: 12,
-                            color: Colors.red.withOpacity(0.1),
-                          ),
+                              width: 12,
+                              height: 12,
+                              color: Colors.red.withOpacity(0.1)),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -263,7 +260,7 @@ class CurveChartPage extends StatelessWidget {
                                   : 'Zona Rossa (<15°C): Alto rischio condensa.',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: Colors.grey.shade600,
+                                color: cs.onSurfaceVariant,
                                 fontStyle: FontStyle.italic,
                               ),
                             ),
@@ -282,17 +279,16 @@ class CurveChartPage extends StatelessWidget {
     );
   }
 
-  Widget _buildLegendItem(String text, Color color, bool isDashed) {
+  Widget _buildLegendItem(
+      String text, Color color, bool isDashed, ColorScheme cs) {
     return Row(
       children: [
         if (isDashed)
-          Row(
-            children: [
-              Container(width: 6, height: 3, color: color),
-              const SizedBox(width: 2),
-              Container(width: 6, height: 3, color: color),
-            ],
-          )
+          Row(children: [
+            Container(width: 6, height: 3, color: color),
+            const SizedBox(width: 2),
+            Container(width: 6, height: 3, color: color),
+          ])
         else
           Container(width: 14, height: 3, color: color),
         const SizedBox(width: 6),
@@ -301,7 +297,7 @@ class CurveChartPage extends StatelessWidget {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
-            color: Colors.grey.shade700,
+            color: cs.onSurfaceVariant,
           ),
         ),
       ],

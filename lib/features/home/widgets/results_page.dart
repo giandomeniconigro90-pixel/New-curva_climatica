@@ -9,16 +9,13 @@ import '../logic/curve_logic.dart';
 
 class ResultsPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
-
   final double? slope;
   final double? offset;
   final CurveSuggestion? suggestion;
   final CurveStats? stats;
   final VoidCallback? onApplyAiCurve;
-
   final Function(int)? onDeleteRecord;
   final Function(int)? onEditRecord;
-
   final void Function(String dateIso)? onEditRecordByDateIso;
   final void Function(String dateIso)? onDeleteRecordByDateIso;
 
@@ -60,7 +57,6 @@ class _ResultsPageState extends State<ResultsPage> {
     final TextEditingController controller = TextEditingController(
       text: _costPerKwh == 0 ? '' : _costPerKwh.toString(),
     );
-
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -88,7 +84,7 @@ class _ResultsPageState extends State<ResultsPage> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
-                suffixText: '\u20ac/kWh',
+                suffixText: '€/kWh',
                 hintText: '0.00',
               ),
             ),
@@ -117,12 +113,11 @@ class _ResultsPageState extends State<ResultsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     if (widget.records.isEmpty) {
       return const Center(
-        child: Text(
-          'Nessun dato registrato',
-          style: TextStyle(color: Colors.grey),
-        ),
+        child: Text('Nessun dato registrato', style: TextStyle(color: Colors.grey)),
       );
     }
 
@@ -137,18 +132,21 @@ class _ResultsPageState extends State<ResultsPage> {
     final todayCost = lastRecord.consumption * _costPerKwh;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Riepilogo',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
               ),
               const SizedBox(height: 16),
+
+              // --- Energy Wallet ---
               GestureDetector(
                 onTap: () => _editCost(context),
                 child: Container(
@@ -171,11 +169,8 @@ class _ResultsPageState extends State<ResultsPage> {
                         children: [
                           Row(
                             children: [
-                              const Icon(
-                                Icons.wallet_rounded,
-                                color: Colors.amberAccent,
-                                size: 20,
-                              ),
+                              const Icon(Icons.wallet_rounded,
+                                  color: Colors.amberAccent, size: 20),
                               const SizedBox(width: 8),
                               Text(
                                 'ENERGY WALLET',
@@ -199,7 +194,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             children: [
                               Text(
                                 _costPerKwh > 0
-                                    ? '\u20ac ${todayCost.toStringAsFixed(2)}'
+                                    ? '€ ${todayCost.toStringAsFixed(2)}'
                                     : 'Configura',
                                 style: const TextStyle(
                                   fontSize: 32,
@@ -218,9 +213,7 @@ class _ResultsPageState extends State<ResultsPage> {
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
+                                horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
@@ -228,9 +221,8 @@ class _ResultsPageState extends State<ResultsPage> {
                             child: Text(
                               '${lastRecord.consumption} kWh',
                               style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
@@ -243,22 +235,27 @@ class _ResultsPageState extends State<ResultsPage> {
               const SizedBox(height: 24),
 
               if (_showAdvancedStats && widget.suggestion != null) ...[
-                _buildAiCard(widget.suggestion!),
+                _buildAiCard(context, widget.suggestion!),
                 const SizedBox(height: 24),
               ],
 
-              const Text(
+              Text(
                 'Storico Recente',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
+
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: sortedRecords.length,
                 itemBuilder: (context, index) {
                   final r = sortedRecords[index];
-                  final date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
+                  final date =
+                      parseItalianDateSafe(r.dateIso) ?? DateTime.now();
 
                   void handleEditTap() {
                     if (widget.onEditRecordByDateIso != null) {
@@ -285,11 +282,11 @@ class _ResultsPageState extends State<ResultsPage> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: cs.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.grey.withOpacity(0.1),
+                            color: Colors.black.withOpacity(0.06),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -300,7 +297,7 @@ class _ResultsPageState extends State<ResultsPage> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
+                              color: cs.primaryContainer,
                               borderRadius: BorderRadius.circular(15),
                             ),
                             child: Column(
@@ -310,14 +307,14 @@ class _ResultsPageState extends State<ResultsPage> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
-                                    color: Colors.blue.shade800,
+                                    color: cs.onPrimaryContainer,
                                   ),
                                 ),
                                 Text(
                                   '${date.month}',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: Colors.blue.shade800,
+                                    color: cs.onPrimaryContainer,
                                   ),
                                 ),
                               ],
@@ -339,9 +336,11 @@ class _ResultsPageState extends State<ResultsPage> {
                                   children: [
                                     const SizedBox(width: 18),
                                     Text(
-                                      'Esterna: ${r.externalTemp}\u00b0C',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold),
+                                      'Esterna: ${r.externalTemp}°C',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: cs.onSurface,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -359,7 +358,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                     Text(
                                       'Consumo: ${r.consumption} kWh',
                                       style: TextStyle(
-                                        color: Colors.grey.shade600,
+                                        color: cs.onSurfaceVariant,
                                         fontSize: 12,
                                       ),
                                     ),
@@ -368,20 +367,16 @@ class _ResultsPageState extends State<ResultsPage> {
                               ],
                             ),
                           ),
-                          // Icona nota: note è non-nullable, basta .isNotEmpty
                           if (r.note.isNotEmpty)
-                            const Icon(
-                              Icons.sticky_note_2_outlined,
-                              color: Colors.grey,
-                              size: 18,
-                            ),
+                            Icon(Icons.sticky_note_2_outlined,
+                                color: cs.onSurfaceVariant, size: 18),
                           const SizedBox(width: 12),
                           if (widget.onEditRecordByDateIso != null ||
                               widget.onEditRecord != null) ...[
                             IconButton(
                               onPressed: handleEditTap,
                               icon: Icon(Icons.edit,
-                                  size: 20, color: Colors.blue.shade600),
+                                  size: 20, color: cs.primary),
                               tooltip: 'Modifica',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -392,7 +387,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             IconButton(
                               onPressed: handleDeleteTap,
                               icon: Icon(Icons.delete_outline,
-                                  size: 20, color: Colors.red.shade600),
+                                  size: 20, color: cs.error),
                               tooltip: 'Elimina',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -411,10 +406,10 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  Widget _buildAiCard(CurveSuggestion suggestion) {
+  Widget _buildAiCard(BuildContext context, CurveSuggestion suggestion) {
+    final cs = Theme.of(context).colorScheme;
     final int recentRecordsCount = widget.records.length;
     final bool hasEnoughData = recentRecordsCount >= 5;
-
     final bool valuesAreEqual = widget.slope != null &&
         widget.offset != null &&
         (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
@@ -423,12 +418,12 @@ class _ResultsPageState extends State<ResultsPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.indigo.shade50),
+        border: Border.all(color: cs.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.indigo.shade50,
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -442,21 +437,18 @@ class _ResultsPageState extends State<ResultsPage> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.indigo.shade50,
+                  color: cs.secondaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
-                  Icons.auto_awesome,
-                  color: Colors.indigo.shade400,
-                  size: 20,
-                ),
+                child: Icon(Icons.auto_awesome,
+                    color: cs.onSecondaryContainer, size: 20),
               ),
               const SizedBox(width: 12),
               Text(
                 'AI Advisor',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Colors.indigo.shade900,
+                  color: cs.onSurface,
                   fontSize: 16,
                 ),
               ),
@@ -504,10 +496,7 @@ class _ResultsPageState extends State<ResultsPage> {
           Text(
             suggestion.smartTip,
             style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade700,
-              height: 1.5,
-            ),
+                fontSize: 14, color: cs.onSurfaceVariant, height: 1.5),
           ),
           const SizedBox(height: 20),
           if (widget.onApplyAiCurve != null)
@@ -527,11 +516,11 @@ class _ResultsPageState extends State<ResultsPage> {
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: hasEnoughData && !valuesAreEqual
-                      ? Colors.indigo
-                      : Colors.grey.shade300,
+                      ? cs.primary
+                      : cs.surfaceContainerHighest,
                   foregroundColor: hasEnoughData && !valuesAreEqual
-                      ? Colors.white
-                      : Colors.grey.shade600,
+                      ? cs.onPrimary
+                      : cs.onSurfaceVariant,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
