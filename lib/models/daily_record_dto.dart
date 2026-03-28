@@ -39,6 +39,31 @@ class DailyRecordDTO extends HiveObject {
   })  : note = note ?? '',
         mode = (mode != null && validModes.contains(mode)) ? mode : 'heating';
 
+  /// Crea una copia del record sovrascrivendo solo i campi forniti.
+  DailyRecordDTO copyWith({
+    String? dateIso,
+    double? externalTemp,
+    Map<String, double>? internalTemps,
+    double? consumption,
+    Map<String, String>? comfortRatings,
+    String? note,
+    String? mode,
+  }) {
+    return DailyRecordDTO(
+      dateIso: dateIso ?? this.dateIso,
+      externalTemp: externalTemp ?? this.externalTemp,
+      internalTemps: internalTemps != null
+          ? Map<String, double>.from(internalTemps)
+          : Map<String, double>.from(this.internalTemps),
+      consumption: consumption ?? this.consumption,
+      comfortRatings: comfortRatings != null
+          ? Map<String, String>.from(comfortRatings)
+          : Map<String, String>.from(this.comfortRatings),
+      note: note ?? this.note,
+      mode: mode ?? this.mode,
+    );
+  }
+
   /// Costruisce un [DailyRecordDTO] da una mappa JSON.
   ///
   /// Gestisce in modo difensivo:
@@ -49,7 +74,6 @@ class DailyRecordDTO extends HiveObject {
   /// Lancia [FormatException] solo se [dateIso] è assente o non è una stringa,
   /// perché è la chiave primaria del record e senza di essa il dato è inutilizzabile.
   factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
-    // dateIso è obbligatorio: senza non possiamo identificare il record
     final rawDate = json['dateIso'];
     if (rawDate == null || rawDate is! String || rawDate.trim().isEmpty) {
       throw FormatException(
@@ -84,7 +108,6 @@ class DailyRecordDTO extends HiveObject {
   // Helper privati di parsing
   // ---------------------------------------------------------------------------
 
-  /// Converte un valore dinamico in double, restituisce 0.0 se non è un numero.
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is num) return value.toDouble();
@@ -92,8 +115,6 @@ class DailyRecordDTO extends HiveObject {
     return 0.0;
   }
 
-  /// Converte una mappa dinamica in Map<String, double>.
-  /// Le coppie con chiave non-String o valore non-num vengono scartate.
   static Map<String, double> _parseStringDoubleMap(dynamic raw) {
     if (raw == null) return {};
     if (raw is! Map) return {};
@@ -106,8 +127,6 @@ class DailyRecordDTO extends HiveObject {
     return result;
   }
 
-  /// Converte una mappa dinamica in Map<String, String>.
-  /// Le coppie con chiave o valore non-String vengono scartate.
   static Map<String, String> _parseStringStringMap(dynamic raw) {
     if (raw == null) return {};
     if (raw is! Map) return {};
@@ -138,9 +157,7 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       internalTemps: (fields[2] as Map).cast<String, double>(),
       consumption: fields[3] as double,
       comfortRatings: (fields[4] as Map).cast<String, String>(),
-      // Compatibilità con record legacy che non hanno il campo note (field 5)
       note: fields[5] as String? ?? '',
-      // Compatibilità con record legacy che non hanno il campo mode (field 6)
       mode: fields[6] as String? ?? 'heating',
     );
   }

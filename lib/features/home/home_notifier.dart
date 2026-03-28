@@ -45,6 +45,9 @@ class HomeNotifier extends ChangeNotifier {
   int? _pendingDeleteIndex;
   Timer? _deleteTimer;
 
+  /// Durata della finestra di undo delete.
+  static const Duration undoDeleteDuration = Duration(seconds: 5);
+
   List<DailyRecordDTO> get records {
     return allRecords.where((r) => r.mode == currentMode.toModeString()).toList();
   }
@@ -155,7 +158,6 @@ class HomeNotifier extends ChangeNotifier {
   // SISTEMA
   // ---------------------------------------------------------------------------
 
-  /// Aggiorna la status bar tenendo conto di ThemeMode.system.
   void updateSystemOverlay() {
     final themeMode = AppStorage.getThemeMode();
     final bool isDark;
@@ -377,7 +379,7 @@ class HomeNotifier extends ChangeNotifier {
     if (editingIndex == originalIndex) editingIndex = null;
     notifyListeners();
 
-    _deleteTimer = Timer(const Duration(seconds: 5), () {
+    _deleteTimer = Timer(undoDeleteDuration, () {
       _pendingDeleteRecord = null;
       _pendingDeleteIndex = null;
       saveToHive();
@@ -386,9 +388,6 @@ class HomeNotifier extends ChangeNotifier {
     return _pendingDeleteRecord;
   }
 
-  /// Elimina un record cercandolo per [dateIso] e modalità corrente.
-  /// Restituisce il record rimosso (per mostrare la SnackBar undo) o null
-  /// se non trovato.
   DailyRecordDTO? softDeleteRecordByDateIso(String dateIso) {
     _commitPendingDelete();
 
@@ -405,7 +404,7 @@ class HomeNotifier extends ChangeNotifier {
     if (editingIndex == originalIndex) editingIndex = null;
     notifyListeners();
 
-    _deleteTimer = Timer(const Duration(seconds: 5), () {
+    _deleteTimer = Timer(undoDeleteDuration, () {
       _pendingDeleteRecord = null;
       _pendingDeleteIndex = null;
       saveToHive();
@@ -439,7 +438,7 @@ class HomeNotifier extends ChangeNotifier {
     if (editingIndex == index) editingIndex = null;
     notifyListeners();
 
-    _deleteTimer = Timer(const Duration(seconds: 5), () {
+    _deleteTimer = Timer(undoDeleteDuration, () {
       _pendingDeleteRecord = null;
       _pendingDeleteIndex = null;
       saveToHive();
@@ -696,12 +695,22 @@ class HomeNotifier extends ChangeNotifier {
       if (result == null || result.files.single.path == null) return;
 
       final jsonString = await File(result.files.single.path!).readAsString();
-      final backupData = jsonDecode(jsonString);
+      final dynamic decoded = jsonDecode(jsonString);
 
-      if (backupData['metadata'] == null ||
-          backupData['settings'] == null ||
-          backupData['records'] == null) {
-        throw Exception('File di backup non valido.');
+      // Validazione struttura: il JSON deve essere una Map con le 3 chiavi attese.
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Il file non è un oggetto JSON valido.');
+      }
+      final backupData = decoded;
+
+      if (backupData['metadata'] == null) {
+        throw const FormatException('Campo "metadata" mancante nel backup.');
+      }
+      if (backupData['settings'] is! Map) {
+        throw const FormatException('Campo "settings" mancante o non valido nel backup.');
+      }
+      if (backupData['records'] is! List) {
+        throw const FormatException('Campo "records" mancante o non è una lista nel backup.');
       }
 
       if (!context.mounted) return;
@@ -730,7 +739,7 @@ class HomeNotifier extends ChangeNotifier {
 
       final settings = backupData['settings'] as Map<String, dynamic>;
       final newRecords = (backupData['records'] as List)
-          .map((j) => DailyRecordDTO.fromJson(j))
+          .map((j) => DailyRecordDTO.fromJson(j as Map<String, dynamic>))
           .toList();
 
       await AppStorage.saveRecords(newRecords);
