@@ -286,6 +286,7 @@ class HomeNotifier extends ChangeNotifier {
 
     if (editingIndex != null) {
       final originalDate = allRecords[editingIndex!].dateIso;
+      final isToday = originalDate == dateIso;
       allRecords[editingIndex!] = DailyRecordDTO(
         dateIso: originalDate,
         externalTemp: ok.externalTemp,
@@ -297,8 +298,9 @@ class HomeNotifier extends ChangeNotifier {
       );
       editingIndex = null;
       notifyListeners();
+      final label = isToday ? 'oggi' : originalDate;
       Fluttertoast.showToast(
-        msg: 'Registrazione aggiornata!',
+        msg: 'Registrazione del $label aggiornata!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -343,7 +345,6 @@ class HomeNotifier extends ChangeNotifier {
   // DELETE
   // ---------------------------------------------------------------------------
 
-  /// Elimina immediatamente il record per dateIso e salva su Hive.
   Future<void> deleteRecordByDateIso(String dateIso) async {
     final modeStr = currentMode.toModeString();
     final index =
