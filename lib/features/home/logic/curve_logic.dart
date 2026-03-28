@@ -160,17 +160,23 @@ CurveSuggestion computeOptimalCurveSuggestion(
   String tip;
 
   if (coldComplaints > hotComplaints) {
+    // In riscaldamento: troppo freddo → serve più calore → offset +
+    // In raffrescamento: troppo freddo → raffrescamento eccessivo → offset +
+    //   (offset + riduce la mandata fredda → meno raffreddamento)
     targetOffset += 1.0;
     if (coldComplaints > filteredRecords.length * 0.3) targetSlope += 0.1;
     tip = mode == SystemMode.heating
         ? 'Rilevati giorni freddi. Aumento la potenza di riscaldamento.'
-        : 'Rilevato eccesso di raffrescamento. Riduco l\'intensità.';
+        : 'Raffrescamento eccessivo. Riduco l\'intensità di raffreddamento.';
   } else if (hotComplaints > coldComplaints) {
+    // In riscaldamento: troppo caldo → serve meno calore → offset -
+    // In raffrescamento: troppo caldo → raffrescamento insufficiente → offset -
+    //   (offset - abbassa la mandata fredda → più raffreddamento)
     targetOffset -= 1.0;
     if (hotComplaints > filteredRecords.length * 0.3) targetSlope -= 0.1;
     tip = mode == SystemMode.heating
         ? 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.'
-        : 'Raffrescamento insufficiente. Aumento l\'intensità di raffreddamento.';
+        : 'Raffrescamento insufficiente. Aumento la potenza di raffreddamento.';
   } else {
     if (mode == SystemMode.heating) {
       targetOffset -= 0.5;
