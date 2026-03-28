@@ -74,8 +74,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
             records: notifier.records,
             rooms: notifier.rooms,
             onAddRecord: () => notifier.addRecord(context),
-            onDeleteRecord: (index) => notifier.startEditRecord(index),
-            onEditRecord: notifier.startEditRecord,
             isEditing: notifier.editingIndex != null,
             isCooling: isCooling,
             onDuplicateFromYesterday: notifier.duplicateFromYesterday,

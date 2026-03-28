@@ -15,8 +15,6 @@ class InputPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
   final List<String> rooms;
   final VoidCallback onAddRecord;
-  final Function(int) onDeleteRecord;
-  final Function(int) onEditRecord;
   final bool isEditing;
   final bool isCooling;
   final VoidCallback onDuplicateFromYesterday;
@@ -34,8 +32,6 @@ class InputPage extends StatefulWidget {
     required this.records,
     required this.rooms,
     required this.onAddRecord,
-    required this.onDeleteRecord,
-    required this.onEditRecord,
     required this.isEditing,
     required this.isCooling,
     required this.onDuplicateFromYesterday,
