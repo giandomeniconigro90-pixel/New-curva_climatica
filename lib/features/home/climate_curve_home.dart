@@ -41,9 +41,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final notifier = context.read<HomeNotifier>();
-    notifier.attachContext(context);
-
     return Consumer<HomeNotifier>(
       builder: (context, notifier, _) {
         final DateTime? lastAppliedDate =
@@ -74,7 +71,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             comfortRatings: notifier.comfortRatings,
             records: notifier.records,
             rooms: notifier.rooms,
-            onAddRecord: notifier.addRecord,
+            onAddRecord: () => notifier.addRecord(context),
             onDeleteRecord: notifier.deleteRecord,
             onEditRecord: notifier.startEditRecord,
             isEditing: notifier.editingIndex != null,

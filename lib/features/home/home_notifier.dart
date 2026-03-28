@@ -55,7 +55,6 @@ class HomeNotifier extends ChangeNotifier {
   int? editingIndex;
 
   final GlobalKey chartKey = GlobalKey();
-  BuildContext? _context;
 
   HomeNotifier({
     required double initialSlope,
@@ -69,17 +68,12 @@ class HomeNotifier extends ChangeNotifier {
       heatingOffset: initialOffset,
     );
 
-    // Inizializzazione controller con i default; verranno ricreati dopo loadFromHive
     for (final room in RoomConstants.defaultRooms) {
       internalTempControllers[room] = TextEditingController();
       comfortRatings[room] = 'ok';
     }
 
     loadFromHive();
-  }
-
-  void attachContext(BuildContext context) {
-    _context = context;
   }
 
   @override
@@ -112,19 +106,14 @@ class HomeNotifier extends ChangeNotifier {
     updateSystemOverlay();
   }
 
-  /// Sincronizza i controller delle stanze con la lista aggiornata.
-  /// Mantiene i valori esistenti per le stanze già presenti,
-  /// aggiunge controller per le nuove, rimuove quelle cancellate.
   void _syncRoomControllers(List<String> newRooms) {
     rooms = newRooms;
 
-    // Aggiungi controller per stanze nuove
     for (final room in newRooms) {
       internalTempControllers.putIfAbsent(room, () => TextEditingController());
       comfortRatings.putIfAbsent(room, () => 'ok');
     }
 
-    // Rimuovi controller per stanze eliminate
     final toRemove = internalTempControllers.keys
         .where((k) => !newRooms.contains(k))
         .toList();
@@ -145,7 +134,6 @@ class HomeNotifier extends ChangeNotifier {
   // GESTIONE STANZE
   // ---------------------------------------------------------------------------
 
-  /// Apre il bottom sheet di gestione stanze e ricarica i controller al termine.
   Future<void> manageRooms(BuildContext context) async {
     await showModalBottomSheet(
       context: context,
@@ -153,7 +141,6 @@ class HomeNotifier extends ChangeNotifier {
       backgroundColor: Colors.transparent,
       builder: (_) => RoomsManagerSheet(initialRooms: List.from(rooms)),
     );
-    // Ricarica le stanze aggiornate da Hive dopo la chiusura del sheet
     final updated = AppStorage.getRooms();
     _syncRoomControllers(updated);
     notifyListeners();
@@ -248,7 +235,7 @@ class HomeNotifier extends ChangeNotifier {
     editingIndex = allIndex;
     externalTempController.text = r.externalTemp.toString();
     consumptionController.text = r.consumption.toString();
-    noteController.text = r.note ?? '';
+    noteController.text = r.note;
 
     r.internalTemps.forEach((room, value) {
       if (internalTempControllers.containsKey(room)) {
@@ -264,9 +251,9 @@ class HomeNotifier extends ChangeNotifier {
     pageController.jumpToPage(0);
   }
 
-  Future<void> addRecord() async {
-    final ctx = _context;
-
+  /// [context] viene passato direttamente dal widget chiamante per evitare
+  /// riferimenti stale al BuildContext.
+  Future<void> addRecord(BuildContext context) async {
     final result = RecordFormValidator.validate(
       externalTempController: externalTempController,
       consumptionController: consumptionController,
@@ -340,7 +327,7 @@ class HomeNotifier extends ChangeNotifier {
 
     await saveToHive();
     clearFields();
-    if (ctx != null && ctx.mounted) FocusScope.of(ctx).unfocus();
+    if (context.mounted) FocusScope.of(context).unfocus();
   }
 
   Future<void> deleteRecord(int sortedIndex) async {
