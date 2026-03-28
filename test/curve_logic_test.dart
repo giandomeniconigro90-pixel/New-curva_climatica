@@ -3,8 +3,8 @@
 // Esegui con: flutter test test/curve_logic_test.dart
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:curva_climatica/features/home/logic/curve_logic.dart';
-import 'package:curva_climatica/models/daily_record_dto.dart';
+import 'package:climasense/features/home/logic/curve_logic.dart';
+import 'package:climasense/models/daily_record_dto.dart';
 
 void main() {
   // ---------------------------------------------------------------------------
