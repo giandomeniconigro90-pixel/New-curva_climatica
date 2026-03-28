@@ -9,7 +9,11 @@ class AppStorage {
   static const String _boxName = 'clima_sense_box';
   static const String _recordsBoxName = 'daily_records_box';
 
+  /// Prefisso usato durante la fase di staging dell'atomic write.
+  static const String _stagingPrefix = '__new__';
+
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
+  static String _stagingKey(DailyRecordDTO r) => '$_stagingPrefix${_recordKey(r)}';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -18,6 +22,47 @@ class AppStorage {
     }
     await Hive.openBox(_boxName);
     await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
+
+    // Recovery: se l'app è crashata durante un atomic write,
+    // troveremo chiavi con prefisso _stagingPrefix e nessuna chiave definitiva.
+    // In quel caso completiamo il write promuovendo i record in staging.
+    await _recoverStagingIfNeeded();
+  }
+
+  /// Completa un atomic write interrotto: promuove i record in staging
+  /// a record definitivi e poi rimuove le chiavi di staging.
+  static Future<void> _recoverStagingIfNeeded() async {
+    final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
+    final stagingKeys = box.keys
+        .whereType<String>()
+        .where((k) => k.startsWith(_stagingPrefix))
+        .toList();
+
+    if (stagingKeys.isEmpty) return;
+
+    // Controlla se esistono anche record definitivi:
+    // se sì, lo staging era già stato completato parzialmente → pulisci solo staging.
+    // Se no, lo staging è tutto ciò che abbiamo → promuovi.
+    final definitiveKeys = box.keys
+        .whereType<String>()
+        .where((k) => !k.startsWith(_stagingPrefix))
+        .toList();
+
+    if (definitiveKeys.isEmpty) {
+      // Nessun record definitivo → promuovi dallo staging
+      for (final sk in stagingKeys) {
+        final record = box.get(sk);
+        if (record != null) {
+          final definitiveKey = sk.substring(_stagingPrefix.length);
+          await box.put(definitiveKey, record);
+        }
+      }
+    }
+
+    // Rimuovi tutte le chiavi di staging
+    for (final sk in stagingKeys) {
+      await box.delete(sk);
+    }
   }
 
   // --- APP STATE ---
@@ -72,20 +117,29 @@ class AppStorage {
 
   // --- TEMA ---
   static ThemeMode getThemeMode() {
-    final stored = Hive.box(_boxName).get('themeMode', defaultValue: 'system') as String;
+    final stored =
+        Hive.box(_boxName).get('themeMode', defaultValue: 'system') as String;
     switch (stored) {
-      case 'light': return ThemeMode.light;
-      case 'dark':  return ThemeMode.dark;
-      default:      return ThemeMode.system;
+      case 'light':
+        return ThemeMode.light;
+      case 'dark':
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
     }
   }
 
   static Future<void> saveThemeMode(ThemeMode mode) async {
     final String value;
     switch (mode) {
-      case ThemeMode.light:  value = 'light'; break;
-      case ThemeMode.dark:   value = 'dark';  break;
-      default:               value = 'system';
+      case ThemeMode.light:
+        value = 'light';
+        break;
+      case ThemeMode.dark:
+        value = 'dark';
+        break;
+      default:
+        value = 'system';
     }
     await Hive.box(_boxName).put('themeMode', value);
   }
@@ -163,16 +217,51 @@ class AppStorage {
     await box.put(_recordKey(record), record);
   }
 
+  /// Salvataggio atomico (write-then-swap).
+  ///
+  /// Sequenza:
+  ///   1. Scrivi tutti i nuovi record con prefisso __new__  (staging)
+  ///   2. Cancella i record definitivi esistenti
+  ///   3. Promuovi i record di staging a definitivi
+  ///   4. Cancella le chiavi di staging
+  ///
+  /// Se l'app crasha tra i passi 2 e 3, all'avvio successivo
+  /// [_recoverStagingIfNeeded] completa automaticamente la promozione.
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
-    await box.clear();
-    for (var r in records) {
-      await box.put(_recordKey(r), r);
-    }
+
+    // Passo 1 — staging
+    final Map<String, DailyRecordDTO> staging = {
+      for (final r in records) _stagingKey(r): r,
+    };
+    await box.putAll(staging);
+
+    // Passo 2 — rimuovi definitivi
+    final definitiveKeys = box.keys
+        .whereType<String>()
+        .where((k) => !k.startsWith(_stagingPrefix))
+        .toList();
+    await box.deleteAll(definitiveKeys);
+
+    // Passo 3 — promuovi staging
+    final Map<String, DailyRecordDTO> promoted = {
+      for (final r in records) _recordKey(r): r,
+    };
+    await box.putAll(promoted);
+
+    // Passo 4 — rimuovi staging
+    await box.deleteAll(staging.keys.toList());
   }
 
   static List<DailyRecordDTO> getRecords() {
-    return Hive.box<DailyRecordDTO>(_recordsBoxName).values.toList();
+    // Esclude eventuali chiavi di staging residue (non dovrebbero esserci
+    // dopo la recovery in init(), ma per sicurezza filtriamo)
+    return Hive.box<DailyRecordDTO>(_recordsBoxName)
+        .toMap()
+        .entries
+        .where((e) => !(e.key as String).startsWith(_stagingPrefix))
+        .map((e) => e.value)
+        .toList();
   }
 
   static Future<List<DailyRecordDTO>> loadRecords() async {
