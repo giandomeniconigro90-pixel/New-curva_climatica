@@ -26,6 +26,28 @@ final class RecordValidationError extends RecordValidationResult {
 /// È una classe pura senza dipendenze Flutter (tranne [TextEditingController])
 /// e può essere testata in isolamento senza widget.
 class RecordFormValidator {
+  // -------------------------------------------------------------------------
+  // Range ammessi
+  // -------------------------------------------------------------------------
+
+  /// Temperatura esterna: copre climi da polare a desertico.
+  static const double extTempMin = -40.0;
+  static const double extTempMax = 50.0;
+
+  /// Temperature interne: al di sotto di 5° o sopra 40° è quasi certamente
+  /// un errore di digitazione.
+  static const double intTempMin = 5.0;
+  static const double intTempMax = 40.0;
+
+  /// Consumo giornaliero: 0 è ammesso (giorno di fermo impianto),
+  /// 9999 kWh è un tetto molto generoso per qualsiasi impianto domestico.
+  static const double consumptionMin = 0.0;
+  static const double consumptionMax = 9999.0;
+
+  // -------------------------------------------------------------------------
+  // Validazione principale
+  // -------------------------------------------------------------------------
+
   /// Esegue la validazione completa del form.
   ///
   /// [externalTempController] e [consumptionController] sono obbligatori.
@@ -63,7 +85,15 @@ class RecordFormValidator {
       return RecordValidationError('Temperatura esterna non valida.');
     }
 
-    // 4. Conversione consumo
+    // 4. Range temperatura esterna
+    if (extTemp < extTempMin || extTemp > extTempMax) {
+      return RecordValidationError(
+        'Temperatura esterna fuori range '
+        '($extTempMin°C ÷ $extTempMax°C).',
+      );
+    }
+
+    // 5. Conversione consumo
     final double? cons = double.tryParse(
       consumptionController.text.replaceAll(',', '.'),
     );
@@ -71,13 +101,27 @@ class RecordFormValidator {
       return RecordValidationError('Valore consumo non valido.');
     }
 
-    // 5. Conversione temperature interne
+    // 6. Range consumo
+    if (cons < consumptionMin || cons > consumptionMax) {
+      return RecordValidationError(
+        'Consumo fuori range '
+        '($consumptionMin ÷ $consumptionMax kWh).',
+      );
+    }
+
+    // 7. Conversione e range temperature interne
     final Map<String, double> internalTemps = {};
     for (final entry in internalTempControllers.entries) {
       final val = double.tryParse(entry.value.text.replaceAll(',', '.'));
       if (val == null) {
         return RecordValidationError(
           'Errore: La temperatura di ${entry.key} non è un numero valido.',
+        );
+      }
+      if (val < intTempMin || val > intTempMax) {
+        return RecordValidationError(
+          'Temperatura di ${entry.key} fuori range '
+          '($intTempMin°C ÷ $intTempMax°C).',
         );
       }
       internalTemps[entry.key] = val;
