@@ -15,12 +15,8 @@ class ResultsPage extends StatefulWidget {
   final CurveSuggestion? suggestion;
   final CurveStats? stats;
   final VoidCallback? onApplyAiCurve;
-  final Function(int)? onDeleteRecord;
-  final Function(int)? onEditRecord;
   final void Function(String dateIso)? onEditRecordByDateIso;
-  final DailyRecordDTO? Function(String dateIso)? onSoftDeleteRecordByDateIso;
-  final void Function(String dateIso)? onDeleteRecordByDateIso;
-  final VoidCallback? onUndoDelete;
+  final Future<void> Function(String dateIso)? onDeleteRecordByDateIso;
 
   const ResultsPage({
     super.key,
@@ -30,12 +26,8 @@ class ResultsPage extends StatefulWidget {
     this.suggestion,
     this.stats,
     this.onApplyAiCurve,
-    this.onDeleteRecord,
-    this.onEditRecord,
     this.onEditRecordByDateIso,
-    this.onSoftDeleteRecordByDateIso,
     this.onDeleteRecordByDateIso,
-    this.onUndoDelete,
   });
 
   @override
@@ -44,12 +36,10 @@ class ResultsPage extends StatefulWidget {
 
 class _ResultsPageState extends State<ResultsPage> {
   double _costPerKwh = 0.0;
-  bool _showAdvancedStats = false;
 
   @override
   void initState() {
     super.initState();
-    _showAdvancedStats = widget.slope != null && widget.suggestion != null;
     _loadCost();
   }
 
@@ -68,7 +58,8 @@ class _ResultsPageState extends State<ResultsPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            Icon(Icons.euro_symbol_rounded, color: Theme.of(context).primaryColor),
+            Icon(Icons.euro_symbol_rounded,
+                color: Theme.of(context).primaryColor),
             const SizedBox(width: 10),
             const Text('Costo Energia'),
           ],
@@ -85,9 +76,11 @@ class _ResultsPageState extends State<ResultsPage> {
             TextField(
               controller: controller,
               autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
                 suffixText: '€/kWh',
                 hintText: '0.00',
@@ -116,11 +109,9 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  /// Mostra un dialog di conferma prima di eliminare il record.
-  Future<void> _handleDeleteWithConfirm(
-      BuildContext context, DailyRecordDTO record) async {
-    final date =
-        parseItalianDateSafe(record.dateIso) ?? DateTime.now();
+  /// Mostra il dialog di conferma ed esegue la delete immediata se confermato.
+  Future<void> _handleDelete(BuildContext context, DailyRecordDTO record) async {
+    final date = parseItalianDateSafe(record.dateIso) ?? DateTime.now();
     final dateStr =
         '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
@@ -137,7 +128,7 @@ class _ResultsPageState extends State<ResultsPage> {
           ],
         ),
         content: Text(
-          'Vuoi eliminare la registrazione del $dateStr?\nL\'operazione non è reversibile.',
+          'Vuoi eliminare la registrazione del $dateStr?',
           style: const TextStyle(fontSize: 14),
         ),
         actions: [
@@ -159,21 +150,17 @@ class _ResultsPageState extends State<ResultsPage> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !context.mounted) return;
 
-    if (widget.onSoftDeleteRecordByDateIso != null) {
-      final deleted =
-          widget.onSoftDeleteRecordByDateIso!(record.dateIso);
-      if (deleted != null) {
-        Fluttertoast.showToast(
-          msg: 'Registrazione del $dateStr eliminata',
-          backgroundColor: Colors.red.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
-        );
-      }
-    } else if (widget.onDeleteRecordByDateIso != null) {
-      widget.onDeleteRecordByDateIso!(record.dateIso);
+    await widget.onDeleteRecordByDateIso?.call(record.dateIso);
+
+    if (context.mounted) {
+      Fluttertoast.showToast(
+        msg: 'Registrazione del $dateStr eliminata',
+        backgroundColor: Colors.red.shade600,
+        textColor: Colors.white,
+        fontSize: 14,
+      );
     }
   }
 
@@ -188,12 +175,12 @@ class _ResultsPageState extends State<ResultsPage> {
       );
     }
 
-    final sortedRecords = List<DailyRecordDTO>.from(widget.records);
-    sortedRecords.sort((a, b) {
-      final da = parseItalianDateSafe(a.dateIso) ?? DateTime.now();
-      final db = parseItalianDateSafe(b.dateIso) ?? DateTime.now();
-      return db.compareTo(da);
-    });
+    final sortedRecords = List<DailyRecordDTO>.from(widget.records)
+      ..sort((a, b) {
+        final da = parseItalianDateSafe(a.dateIso) ?? DateTime.now();
+        final db = parseItalianDateSafe(b.dateIso) ?? DateTime.now();
+        return db.compareTo(da);
+      });
 
     final lastRecord = sortedRecords.first;
     final todayCost = lastRecord.consumption * _costPerKwh;
@@ -302,7 +289,7 @@ class _ResultsPageState extends State<ResultsPage> {
 
               const SizedBox(height: 24),
 
-              if (_showAdvancedStats && widget.suggestion != null) ...[
+              if (widget.suggestion != null) ...[
                 _buildAiCard(context, widget.suggestion!),
                 const SizedBox(height: 24),
               ],
@@ -325,18 +312,9 @@ class _ResultsPageState extends State<ResultsPage> {
                   final date =
                       parseItalianDateSafe(r.dateIso) ?? DateTime.now();
 
-                  void handleEditTap() {
-                    if (widget.onEditRecordByDateIso != null) {
-                      widget.onEditRecordByDateIso!(r.dateIso);
-                    } else if (widget.onEditRecord != null) {
-                      widget.onEditRecord!(index);
-                    }
-                  }
-
                   return InkWell(
-                    onTap: widget.onEditRecordByDateIso != null ||
-                            widget.onEditRecord != null
-                        ? handleEditTap
+                    onTap: widget.onEditRecordByDateIso != null
+                        ? () => widget.onEditRecordByDateIso!(r.dateIso)
                         : null,
                     child: Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -354,6 +332,7 @@ class _ResultsPageState extends State<ResultsPage> {
                       ),
                       child: Row(
                         children: [
+                          // Data box
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -381,20 +360,16 @@ class _ResultsPageState extends State<ResultsPage> {
                             ),
                           ),
                           const SizedBox(width: 16),
+                          // Dati
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  children: const [
-                                    Icon(Icons.thermostat,
-                                        size: 14, color: Colors.orange),
-                                    SizedBox(width: 4),
-                                  ],
-                                ),
-                                Row(
                                   children: [
-                                    const SizedBox(width: 18),
+                                    const Icon(Icons.thermostat,
+                                        size: 14, color: Colors.orange),
+                                    const SizedBox(width: 4),
                                     Text(
                                       'Esterna: ${r.externalTemp}°C',
                                       style: TextStyle(
@@ -406,15 +381,10 @@ class _ResultsPageState extends State<ResultsPage> {
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
-                                  children: const [
-                                    Icon(Icons.flash_on,
-                                        size: 14, color: Colors.amber),
-                                    SizedBox(width: 4),
-                                  ],
-                                ),
-                                Row(
                                   children: [
-                                    const SizedBox(width: 18),
+                                    const Icon(Icons.flash_on,
+                                        size: 14, color: Colors.amber),
+                                    const SizedBox(width: 4),
                                     Text(
                                       'Consumo: ${r.consumption} kWh',
                                       style: TextStyle(
@@ -428,26 +398,26 @@ class _ResultsPageState extends State<ResultsPage> {
                             ),
                           ),
                           if (r.note.isNotEmpty)
-                            Icon(Icons.sticky_note_2_outlined,
-                                color: cs.onSurfaceVariant, size: 18),
-                          const SizedBox(width: 12),
-                          if (widget.onEditRecordByDateIso != null ||
-                              widget.onEditRecord != null) ...[
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(Icons.sticky_note_2_outlined,
+                                  color: cs.onSurfaceVariant, size: 18),
+                            ),
+                          if (widget.onEditRecordByDateIso != null)
                             IconButton(
-                              onPressed: handleEditTap,
+                              onPressed: () =>
+                                  widget.onEditRecordByDateIso!(r.dateIso),
                               icon: Icon(Icons.edit,
                                   size: 20, color: cs.primary),
                               tooltip: 'Modifica',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
-                          ],
-                          if (widget.onSoftDeleteRecordByDateIso != null ||
-                              widget.onDeleteRecordByDateIso != null ||
-                              widget.onDeleteRecord != null) ...[
+                          if (widget.onDeleteRecordByDateIso != null) ...[
+                            const SizedBox(width: 12),
                             IconButton(
                               onPressed: () =>
-                                  _handleDeleteWithConfirm(context, r),
+                                  _handleDelete(context, r),
                               icon: Icon(Icons.delete_outline,
                                   size: 20, color: cs.error),
                               tooltip: 'Elimina',
