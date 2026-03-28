@@ -13,7 +13,6 @@ class InputPage extends StatefulWidget {
   final Map<String, TextEditingController> internalTempControllers;
   final Map<String, String> comfortRatings;
   final List<DailyRecordDTO> records;
-  /// Lista stanze configurata dall'utente, passata da HomeNotifier.
   final List<String> rooms;
   final VoidCallback onAddRecord;
   final Function(int) onDeleteRecord;
@@ -71,7 +70,6 @@ class _InputPageState extends State<InputPage> {
           fontSize: 14,
         );
       } else {
-        // result == null: GPS negato, offline o timeout
         Fluttertoast.showToast(
           msg: 'Meteo non disponibile. Controlla GPS e connessione.',
           backgroundColor: Colors.orange.shade700,
@@ -96,6 +94,8 @@ class _InputPageState extends State<InputPage> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     final List<Widget> gridItems = [];
 
     gridItems.add(_buildTadoTile(
@@ -139,19 +139,18 @@ class _InputPageState extends State<InputPage> {
     final bool isPhone = screenWidth < 600;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddRecord,
-        backgroundColor: Colors.blue.shade900,
+        backgroundColor: cs.primary,
         icon: Icon(
           widget.isEditing ? Icons.save_as : Icons.check,
-          color: Colors.white,
+          color: cs.onPrimary,
         ),
         label: Text(
           widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            color: cs.onPrimary,
           ),
         ),
       ),
@@ -163,21 +162,19 @@ class _InputPageState extends State<InputPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Home',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF263238),
-                    ),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
                   ),
                   if (widget.records.isNotEmpty)
                     Tooltip(
-                      message: 'Copia dall\'ultima registrazione',
+                      message: "Copia dall'ultima registrazione",
                       child: IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.copy_all_outlined,
-                          color: Color(0xFF263238),
+                          color: cs.onSurface,
                         ),
                         onPressed: widget.onDuplicateFromYesterday,
                       ),
@@ -368,12 +365,9 @@ class _InputPageState extends State<InputPage> {
           insetPadding: const EdgeInsets.all(10),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
-            child: Container(
+            child: SizedBox(
               width: 450,
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.98,
-              ),
-              color: Colors.white,
+              height: MediaQuery.of(context).size.height * 0.98,
               child: RoomControlPage(
                 title: title,
                 controller: controller,
