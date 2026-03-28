@@ -39,20 +39,6 @@ class ClimateCurveOfflineHome extends StatelessWidget {
 class _ClimateCurveHomeView extends StatelessWidget {
   const _ClimateCurveHomeView();
 
-  void _showUndoSnackBar(BuildContext context, HomeNotifier notifier) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Registrazione eliminata'),
-        duration: const Duration(seconds: 5),
-        action: SnackBarAction(
-          label: 'ANNULLA',
-          onPressed: notifier.undoDelete,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -88,20 +74,14 @@ class _ClimateCurveHomeView extends StatelessWidget {
             records: notifier.records,
             rooms: notifier.rooms,
             onAddRecord: () => notifier.addRecord(context),
-            onDeleteRecord: (index) {
-              notifier.softDeleteRecord(index);
-              _showUndoSnackBar(context, notifier);
-            },
+            onDeleteRecord: (index) => notifier.startEditRecord(index),
             onEditRecord: notifier.startEditRecord,
             isEditing: notifier.editingIndex != null,
             isCooling: isCooling,
             onDuplicateFromYesterday: notifier.duplicateFromYesterday,
             onExportCsv: notifier.exportCsv,
             onExportPdf: notifier.exportPdf,
-            onDeleteToday: () {
-              final deleted = notifier.softDeleteToday();
-              if (deleted != null) _showUndoSnackBar(context, notifier);
-            },
+            onDeleteToday: notifier.deleteToday,
           ),
           ResultsPage(
             records: notifier.records,
@@ -110,10 +90,8 @@ class _ClimateCurveHomeView extends StatelessWidget {
             suggestion: suggestion,
             stats: stats,
             onApplyAiCurve: notifier.onApplyAiCurve,
-            onEditRecord: notifier.startEditRecord,
             onEditRecordByDateIso: notifier.startEditRecordByDateIso,
-            onSoftDeleteRecordByDateIso: notifier.softDeleteRecordByDateIso,
-            onUndoDelete: notifier.undoDelete,
+            onDeleteRecordByDateIso: notifier.deleteRecordByDateIso,
           ),
           CurveChartPage(
             slope: notifier.slope,
@@ -130,7 +108,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                 builder: (ctx) => AlertDialog(
                   title: const Text('Reset Calibrazione?'),
                   content: const Text(
-                    'Questo canceller\u00e0 le preferenze di pendenza/offset. I dati storici rimarranno.',
+                    'Questo cancellerà le preferenze di pendenza/offset. I dati storici rimarranno.',
                   ),
                   actions: [
                     TextButton(
@@ -224,7 +202,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Cambia modalit\u00e0',
+                            'Cambia modalità',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,
