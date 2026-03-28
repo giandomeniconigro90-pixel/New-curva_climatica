@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
+import 'package:hive_flutter/hive_flutter.dart';
 
 class WeatherData {
   final double temp;
@@ -17,35 +18,90 @@ class WeatherData {
 class WeatherService {
   static const Duration _timeout = Duration(seconds: 10);
 
-  /// Ottieni temperatura media giornaliera e nome città attuale.
+  /// Durata massima della cache meteo locale.
+  static const Duration cacheDuration = Duration(minutes: 30);
+
+  static const String _cacheBoxName = 'clima_sense_box';
+  static const String _keyTemp = 'weatherCacheTemp';
+  static const String _keyCity = 'weatherCacheCity';
+  static const String _keyTimestamp = 'weatherCacheTimestamp';
+
+  // ---------------------------------------------------------------------------
+  // CACHE
+  // ---------------------------------------------------------------------------
+
+  /// Restituisce i dati meteo dalla cache se ancora validi, altrimenti null.
+  static WeatherData? _readCache() {
+    final box = Hive.box(_cacheBoxName);
+    final String? tsStr = box.get(_keyTimestamp);
+    if (tsStr == null) return null;
+
+    final DateTime? ts = DateTime.tryParse(tsStr);
+    if (ts == null) return null;
+
+    if (DateTime.now().difference(ts) > cacheDuration) return null;
+
+    final double? temp = box.get(_keyTemp);
+    final String? city = box.get(_keyCity);
+    if (temp == null || city == null) return null;
+
+    if (kDebugMode) debugPrint('\u2600️ Cache meteo valida (aggiornata: $tsStr)');
+    return WeatherData(temp: temp, locationName: city);
+  }
+
+  static Future<void> _writeCache(WeatherData data) async {
+    final box = Hive.box(_cacheBoxName);
+    await box.put(_keyTemp, data.temp);
+    await box.put(_keyCity, data.locationName);
+    await box.put(_keyTimestamp, DateTime.now().toIso8601String());
+  }
+
+  /// Invalida manualmente la cache (utile p.es. dopo un cambio di citt\u00e0).
+  static Future<void> clearCache() async {
+    final box = Hive.box(_cacheBoxName);
+    await box.delete(_keyTemp);
+    await box.delete(_keyCity);
+    await box.delete(_keyTimestamp);
+  }
+
+  // ---------------------------------------------------------------------------
+  // FETCH
+  // ---------------------------------------------------------------------------
+
+  /// Ottieni temperatura media giornaliera e nome citt\u00e0 attuale.
   ///
-  /// I log di debug sono abilitati solo in [kDebugMode] e non includono
-  /// mai coordinate GPS (dati sensibili).
+  /// Se i dati in cache sono pi\u00f9 recenti di [cacheDuration] (30 min),
+  /// vengono restituiti direttamente senza accedere a GPS o rete.
+  ///
+  /// I log di debug non includono mai coordinate GPS (dati sensibili).
   static Future<WeatherData?> getDailyAvgTemp() async {
+    // Controlla cache prima di qualsiasi operazione costosa.
+    final cached = _readCache();
+    if (cached != null) return cached;
+
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (kDebugMode) debugPrint('🌍 GPS abilitato: $serviceEnabled');
+      if (kDebugMode) debugPrint('\ud83c\udf0d GPS abilitato: $serviceEnabled');
       if (!serviceEnabled) return null;
 
       LocationPermission permission = await Geolocator.checkPermission();
-      if (kDebugMode) debugPrint('🌍 Permesso iniziale: $permission');
+      if (kDebugMode) debugPrint('\ud83c\udf0d Permesso iniziale: $permission');
 
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (kDebugMode) debugPrint('🌍 Permesso dopo richiesta: $permission');
+        if (kDebugMode) debugPrint('\ud83c\udf0d Permesso dopo richiesta: $permission');
         if (permission == LocationPermission.denied) return null;
       }
 
       if (permission == LocationPermission.deniedForever) {
-        if (kDebugMode) debugPrint('🌍 Permesso negato per sempre');
+        if (kDebugMode) debugPrint('\ud83c\udf0d Permesso negato per sempre');
         return null;
       }
 
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.low,
       ).timeout(_timeout);
-      // NON loggare lat/lon: sono dati personali sensibili.
-      if (kDebugMode) debugPrint('🌍 Posizione ottenuta');
+      if (kDebugMode) debugPrint('\ud83c\udf0d Posizione ottenuta');
 
       String cityName = 'Tua Posizione';
       try {
@@ -60,14 +116,11 @@ class WeatherService {
               p.administrativeArea ??
               'Tua Posizione';
         }
-        // Il nome città non è un dato sensibile: ok loggarlo.
-        if (kDebugMode) debugPrint('🌍 Città rilevata: $cityName');
+        if (kDebugMode) debugPrint('\ud83c\udf0d Citt\u00e0 rilevata: $cityName');
       } catch (e) {
-        if (kDebugMode) debugPrint('🌍 Errore geocoding: $e');
-        // Continua comunque con cityName = 'Tua Posizione'
+        if (kDebugMode) debugPrint('\ud83c\udf0d Errore geocoding: $e');
       }
 
-      // NON loggare l'URL: contiene lat/lon in chiaro.
       final url = Uri.parse(
         'https://api.open-meteo.com/v1/forecast'
         '?latitude=${position.latitude}&longitude=${position.longitude}'
@@ -78,25 +131,27 @@ class WeatherService {
         _timeout,
         onTimeout: () => throw TimeoutException('Timeout richiesta meteo'),
       );
-      if (kDebugMode) debugPrint('🌍 HTTP status: ${response.statusCode}');
+      if (kDebugMode) debugPrint('\ud83c\udf0d HTTP status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List temps = data['daily']['temperature_2m_mean'];
         if (temps.isNotEmpty) {
           final double avgTemp = (temps[0] as num).toDouble();
-          if (kDebugMode) debugPrint('🌍 Temperatura media: $avgTemp°C');
-          return WeatherData(temp: avgTemp, locationName: cityName);
+          if (kDebugMode) debugPrint('\ud83c\udf0d Temperatura media: $avgTemp\u00b0C');
+          final result = WeatherData(temp: avgTemp, locationName: cityName);
+          await _writeCache(result);
+          return result;
         }
       }
 
-      if (kDebugMode) debugPrint('🌍 Nessun dato meteo valido');
+      if (kDebugMode) debugPrint('\ud83c\udf0d Nessun dato meteo valido');
       return null;
     } on TimeoutException catch (e) {
-      if (kDebugMode) debugPrint('🌍 TIMEOUT: $e');
+      if (kDebugMode) debugPrint('\ud83c\udf0d TIMEOUT: $e');
       return null;
     } catch (e) {
-      if (kDebugMode) debugPrint('🌍 ERRORE getDailyAvgTemp: $e');
+      if (kDebugMode) debugPrint('\ud83c\udf0d ERRORE getDailyAvgTemp: $e');
       return null;
     }
   }
