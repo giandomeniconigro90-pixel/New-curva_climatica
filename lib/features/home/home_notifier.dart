@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:convert';
@@ -39,6 +40,11 @@ class HomeNotifier extends ChangeNotifier {
 
   List<String> rooms = [];
 
+  // --- Undo delete ---
+  DailyRecordDTO? _pendingDeleteRecord;
+  int? _pendingDeleteIndex;
+  Timer? _deleteTimer;
+
   List<DailyRecordDTO> get records {
     return allRecords.where((r) => r.mode == currentMode.toModeString()).toList();
   }
@@ -76,6 +82,7 @@ class HomeNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _deleteTimer?.cancel();
     pageController.dispose();
     externalTempController.dispose();
     consumptionController.dispose();
@@ -148,7 +155,6 @@ class HomeNotifier extends ChangeNotifier {
   // SISTEMA
   // ---------------------------------------------------------------------------
 
-  /// Aggiorna l'overlay della status bar in base al tema attualmente salvato.
   void updateSystemOverlay() {
     final themeMode = AppStorage.getThemeMode();
     final bool isDark = themeMode == ThemeMode.dark;
@@ -328,7 +334,16 @@ class HomeNotifier extends ChangeNotifier {
     if (context.mounted) FocusScope.of(context).unfocus();
   }
 
-  Future<void> deleteRecord(int sortedIndex) async {
+  // ---------------------------------------------------------------------------
+  // DELETE CON UNDO
+  // ---------------------------------------------------------------------------
+
+  /// Rimuove subito dalla UI, aspetta 5s prima di salvare su Hive.
+  /// Restituisce il record eliminato (usato dalla view per la SnackBar).
+  DailyRecordDTO? softDeleteRecord(int sortedIndex) {
+    // Annulla eventuale delete pendente precedente (conferma immediata)
+    _commitPendingDelete();
+
     final sortedRecords = List<DailyRecordDTO>.from(records)
       ..sort((a, b) {
         final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
@@ -336,52 +351,96 @@ class HomeNotifier extends ChangeNotifier {
         return db.compareTo(da);
       });
 
-    if (sortedIndex < 0 || sortedIndex >= sortedRecords.length) return;
+    if (sortedIndex < 0 || sortedIndex >= sortedRecords.length) return null;
 
     final targetDateIso = sortedRecords[sortedIndex].dateIso;
     final modeStr = currentMode.toModeString();
     final originalIndex = allRecords
         .indexWhere((r) => r.dateIso == targetDateIso && r.mode == modeStr);
 
-    if (originalIndex != -1) {
-      allRecords.removeAt(originalIndex);
-      if (editingIndex == originalIndex) editingIndex = null;
-      notifyListeners();
-      await saveToHive();
-      Fluttertoast.showToast(
-        msg: 'Registrazione eliminata',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
-      );
-    }
+    if (originalIndex == -1) return null;
+
+    _pendingDeleteRecord = allRecords[originalIndex];
+    _pendingDeleteIndex = originalIndex;
+
+    allRecords.removeAt(originalIndex);
+    if (editingIndex == originalIndex) editingIndex = null;
+    notifyListeners();
+
+    _deleteTimer = Timer(const Duration(seconds: 5), () {
+      _pendingDeleteRecord = null;
+      _pendingDeleteIndex = null;
+      saveToHive();
+    });
+
+    return _pendingDeleteRecord;
   }
 
-  Future<void> deleteToday() async {
+  /// Rimuove oggi (soft delete con undo).
+  DailyRecordDTO? softDeleteToday() {
+    _commitPendingDelete();
+
     final today = formatItalianDate(DateTime.now());
     final modeStr = currentMode.toModeString();
     final index =
         allRecords.indexWhere((r) => r.dateIso == today && r.mode == modeStr);
 
-    if (index != -1) {
-      allRecords.removeAt(index);
-      if (editingIndex == index) editingIndex = null;
-      notifyListeners();
-      await saveToHive();
-      Fluttertoast.showToast(
-        msg: 'Registrazione eliminata',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
-      );
-    } else {
+    if (index == -1) {
       Fluttertoast.showToast(
         msg: 'Nessuna registrazione trovata per oggi',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
       );
+      return null;
     }
+
+    _pendingDeleteRecord = allRecords[index];
+    _pendingDeleteIndex = index;
+
+    allRecords.removeAt(index);
+    if (editingIndex == index) editingIndex = null;
+    notifyListeners();
+
+    _deleteTimer = Timer(const Duration(seconds: 5), () {
+      _pendingDeleteRecord = null;
+      _pendingDeleteIndex = null;
+      saveToHive();
+    });
+
+    return _pendingDeleteRecord;
+  }
+
+  /// Annulla l'ultima eliminazione pendente.
+  void undoDelete() {
+    if (_pendingDeleteRecord == null || _pendingDeleteIndex == null) return;
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+
+    final idx = _pendingDeleteIndex!.clamp(0, allRecords.length);
+    allRecords.insert(idx, _pendingDeleteRecord!);
+    _pendingDeleteRecord = null;
+    _pendingDeleteIndex = null;
+    notifyListeners();
+  }
+
+  /// Conferma immediatamente l'eliminazione pendente (salva su Hive subito).
+  void _commitPendingDelete() {
+    if (_pendingDeleteRecord == null) return;
+    _deleteTimer?.cancel();
+    _deleteTimer = null;
+    _pendingDeleteRecord = null;
+    _pendingDeleteIndex = null;
+    saveToHive();
+  }
+
+  // Mantenuti per retrocompatibilità con eventuali altri chiamanti
+  Future<void> deleteRecord(int sortedIndex) async {
+    softDeleteRecord(sortedIndex);
+  }
+
+  Future<void> deleteToday() async {
+    softDeleteToday();
   }
 
   void duplicateFromYesterday() {
