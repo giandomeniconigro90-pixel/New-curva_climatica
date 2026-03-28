@@ -2,12 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
-import '../../../../core/constants/room_constants.dart';
 import '../../../../models/daily_record_dto.dart';
 import '../../../../services/weather_service.dart';
 import 'room_control_page.dart';
 
-// --- INPUT PAGE: TADO STYLE (FINAL) ---
 class InputPage extends StatefulWidget {
   final TextEditingController externalTempController;
   final TextEditingController consumptionController;
@@ -15,6 +13,8 @@ class InputPage extends StatefulWidget {
   final Map<String, TextEditingController> internalTempControllers;
   final Map<String, String> comfortRatings;
   final List<DailyRecordDTO> records;
+  /// Lista stanze configurata dall'utente, passata da HomeNotifier.
+  final List<String> rooms;
   final VoidCallback onAddRecord;
   final Function(int) onDeleteRecord;
   final Function(int) onEditRecord;
@@ -33,6 +33,7 @@ class InputPage extends StatefulWidget {
     required this.internalTempControllers,
     required this.comfortRatings,
     required this.records,
+    required this.rooms,
     required this.onAddRecord,
     required this.onDeleteRecord,
     required this.onEditRecord,
@@ -95,7 +96,7 @@ class _InputPageState extends State<InputPage> {
       color: const Color(0xFF1976D2),
       isRoom: false,
       isWeatherTile: true,
-      suffix: '°',
+      suffix: '\u00b0',
     ));
 
     gridItems.add(_buildTadoTile(
@@ -108,8 +109,8 @@ class _InputPageState extends State<InputPage> {
       suffix: 'kWh',
     ));
 
-    // Unica sorgente di verità: RoomConstants.defaultRooms
-    for (final room in RoomConstants.defaultRooms) {
+    // Stanze dinamiche da HomeNotifier (persistite su Hive)
+    for (final room in widget.rooms) {
       final ctrl = widget.internalTempControllers[room] ??
           (widget.internalTempControllers[room] = TextEditingController());
       gridItems.add(_buildTadoTile(
@@ -121,7 +122,7 @@ class _InputPageState extends State<InputPage> {
             ? const Color(0xFF4DB6AC)
             : const Color(0xFFFFB74D),
         isRoom: true,
-        suffix: '°',
+        suffix: '\u00b0',
       ));
     }
 

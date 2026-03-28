@@ -21,6 +21,7 @@ import '../initial_settings/initial_settings_home.dart';
 import 'logic/curve_logic.dart';
 import 'logic/record_form_validator.dart';
 import 'utils/export_utils.dart';
+import 'widgets/rooms_manager_sheet.dart';
 
 class HomeNotifier extends ChangeNotifier {
   final CurveSettingsRepository _settingsRepo = CurveSettingsRepository();
@@ -34,8 +35,10 @@ class HomeNotifier extends ChangeNotifier {
   final Map<String, String> comfortRatings = {};
 
   List<DailyRecordDTO> allRecords = [];
-
   CurveSettings _settings = CurveSettings.defaults();
+
+  /// Lista stanze configurabile dall'utente, persistita su Hive.
+  List<String> rooms = [];
 
   List<DailyRecordDTO> get records {
     final modeStr = _settings.mode == SystemMode.cooling ? 'cooling' : 'heating';
@@ -66,6 +69,7 @@ class HomeNotifier extends ChangeNotifier {
       heatingOffset: initialOffset,
     );
 
+    // Inizializzazione controller con i default; verranno ricreati dopo loadFromHive
     for (final room in RoomConstants.defaultRooms) {
       internalTempControllers[room] = TextEditingController();
       comfortRatings[room] = 'ok';
@@ -97,12 +101,38 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> loadFromHive() async {
     final storedRecords = await AppStorage.loadRecords();
     final loadedSettings = _settingsRepo.load();
+    final loadedRooms = AppStorage.getRooms();
 
     allRecords = storedRecords;
     _settings = loadedSettings;
 
+    _syncRoomControllers(loadedRooms);
+
     notifyListeners();
     updateSystemOverlay();
+  }
+
+  /// Sincronizza i controller delle stanze con la lista aggiornata.
+  /// Mantiene i valori esistenti per le stanze già presenti,
+  /// aggiunge controller per le nuove, rimuove quelle cancellate.
+  void _syncRoomControllers(List<String> newRooms) {
+    rooms = newRooms;
+
+    // Aggiungi controller per stanze nuove
+    for (final room in newRooms) {
+      internalTempControllers.putIfAbsent(room, () => TextEditingController());
+      comfortRatings.putIfAbsent(room, () => 'ok');
+    }
+
+    // Rimuovi controller per stanze eliminate
+    final toRemove = internalTempControllers.keys
+        .where((k) => !newRooms.contains(k))
+        .toList();
+    for (final k in toRemove) {
+      internalTempControllers[k]?.dispose();
+      internalTempControllers.remove(k);
+      comfortRatings.remove(k);
+    }
   }
 
   Future<void> saveToHive() async {
@@ -110,6 +140,24 @@ class HomeNotifier extends ChangeNotifier {
   }
 
   Future<void> _saveSettings() => _settingsRepo.save(_settings);
+
+  // ---------------------------------------------------------------------------
+  // GESTIONE STANZE
+  // ---------------------------------------------------------------------------
+
+  /// Apre il bottom sheet di gestione stanze e ricarica i controller al termine.
+  Future<void> manageRooms(BuildContext context) async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => RoomsManagerSheet(initialRooms: List.from(rooms)),
+    );
+    // Ricarica le stanze aggiornate da Hive dopo la chiusura del sheet
+    final updated = AppStorage.getRooms();
+    _syncRoomControllers(updated);
+    notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // SISTEMA
@@ -219,7 +267,6 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> addRecord() async {
     final ctx = _context;
 
-    // --- Validazione delegata a RecordFormValidator ---
     final result = RecordFormValidator.validate(
       externalTempController: externalTempController,
       consumptionController: consumptionController,

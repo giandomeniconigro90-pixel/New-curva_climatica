@@ -46,9 +46,10 @@ class _ClimateCurveHomeView extends StatelessWidget {
 
     return Consumer<HomeNotifier>(
       builder: (context, notifier, _) {
-        final DateTime? lastAppliedDate = notifier.currentMode == SystemMode.heating
-            ? notifier.lastAiApplyHeating
-            : notifier.lastAiApplyCooling;
+        final DateTime? lastAppliedDate =
+            notifier.currentMode == SystemMode.heating
+                ? notifier.lastAiApplyHeating
+                : notifier.lastAiApplyCooling;
 
         final suggestion = computeOptimalCurveSuggestion(
           notifier.records,
@@ -58,7 +59,8 @@ class _ClimateCurveHomeView extends StatelessWidget {
           lastAppliedDate,
         );
 
-        final windowRecords = notifier.recordsSinceLastApply(notifier.currentMode);
+        final windowRecords =
+            notifier.recordsSinceLastApply(notifier.currentMode);
         final stats = computeCurveStats(windowRecords);
 
         final bool isCooling = notifier.currentMode == SystemMode.cooling;
@@ -71,6 +73,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             internalTempControllers: notifier.internalTempControllers,
             comfortRatings: notifier.comfortRatings,
             records: notifier.records,
+            rooms: notifier.rooms,
             onAddRecord: notifier.addRecord,
             onDeleteRecord: notifier.deleteRecord,
             onEditRecord: notifier.startEditRecord,
@@ -100,6 +103,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             chartKey: notifier.chartKey,
           ),
           HelpPage(
+            onManageRooms: () => notifier.manageRooms(context),
             onResetCalibration: () async {
               final confirm = await showDialog<bool>(
                 context: context,
@@ -115,7 +119,8 @@ class _ClimateCurveHomeView extends StatelessWidget {
                     ),
                     TextButton(
                       onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('RESET', style: TextStyle(color: Colors.red)),
+                      child: const Text('RESET',
+                          style: TextStyle(color: Colors.red)),
                     ),
                   ],
                 ),
@@ -202,7 +207,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           const Text(
-                            'Cambia modalità',
+                            'Cambia modalit\u00e0',
                             style: TextStyle(
                               fontSize: 10,
                               color: Colors.grey,
@@ -214,7 +219,8 @@ class _ClimateCurveHomeView extends StatelessWidget {
                       Switch(
                         value: notifier.currentMode == SystemMode.cooling,
                         onChanged: notifier.toggleMode,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
                         splashRadius: 18,
                         activeColor: const Color(0xFF4DB6AC),
                         activeTrackColor: const Color(0xFF4DB6AC),
@@ -248,7 +254,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
   }
 }
 
-// --- Widget privato per ogni tab della barra di navigazione ---
 class _TabItem extends StatelessWidget {
   final int index;
   final IconData icon;
@@ -274,10 +279,13 @@ class _TabItem extends StatelessWidget {
       onTap: () => onTap(index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        padding:
+            const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: isSelected ? active.withOpacity(0.08) : Colors.transparent,
+          color: isSelected
+              ? active.withOpacity(0.08)
+              : Colors.transparent,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

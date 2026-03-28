@@ -2,13 +2,13 @@
 
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/material.dart';
+import '../core/constants/room_constants.dart';
 import '../models/daily_record_dto.dart';
 
 class AppStorage {
   static const String _boxName = 'clima_sense_box';
   static const String _recordsBoxName = 'daily_records_box';
 
-  /// Chiave composita per evitare collisioni tra heating e cooling nella stessa data
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
 
   static Future<void> init() async {
@@ -126,15 +126,26 @@ class AppStorage {
     return Hive.box(_boxName).get('notificationTimeStr', defaultValue: '20:00');
   }
 
-  // --- RECORDS ---
+  // --- STANZE ---
 
-  /// Salva un singolo record usando chiave composita dateIso_mode
+  /// Salva la lista stanze personalizzata su Hive.
+  static Future<void> saveRooms(List<String> rooms) async {
+    await Hive.box(_boxName).put('customRooms', rooms);
+  }
+
+  /// Legge la lista stanze. Se non ancora salvata, restituisce i default da RoomConstants.
+  static List<String> getRooms() {
+    final stored = Hive.box(_boxName).get('customRooms');
+    if (stored == null) return List<String>.from(RoomConstants.defaultRooms);
+    return List<String>.from(stored as List);
+  }
+
+  // --- RECORDS ---
   static Future<void> saveRecord(DailyRecordDTO record) async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
     await box.put(_recordKey(record), record);
   }
 
-  /// Sostituisce tutti i record usando chiave composita dateIso_mode
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
     await box.clear();
@@ -151,7 +162,6 @@ class AppStorage {
     return getRecords();
   }
 
-  /// Elimina un record per chiave composita dateIso_mode
   static Future<void> deleteRecord(String dateIso, String mode) async {
     await Hive.box<DailyRecordDTO>(_recordsBoxName).delete('${dateIso}_$mode');
   }
