@@ -73,7 +73,6 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   }
 
   double totalCons = 0;
-  // double.infinity garantisce correttezza per qualsiasi temperatura reale.
   double minT = double.infinity;
   double maxT = double.negativeInfinity;
 
@@ -91,27 +90,22 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   );
 }
 
-/// Filtra i record per modalità corrente.
-/// Usare questo PRIMA di passare i record a [computeOptimalCurveSuggestion].
-List<DailyRecordDTO> filterRecordsByMode(
-    List<DailyRecordDTO> records, SystemMode mode) {
-  return records.where((r) => r.mode == mode.toModeString()).toList();
-}
-
 /// Calcola la curva ottimale suggerita dall'AI.
 ///
-/// [records] deve contenere SOLO i record della modalità corrente,
-/// già filtrati tramite [filterRecordsByMode] o tramite il getter
-/// [HomeNotifier.records] / [HomeNotifier.recordsSinceLastApply].
-/// NON passare allRecords non filtrati: il filtro per mode NON viene
-/// eseguito internamente per evitare doppio filtraggio.
+/// Responsabilità di questa funzione:
+/// - Filtrare i record successivi a [lastAppliedDate] (finestra temporale AI)
+/// - Analizzare comfort ed energia
+/// - Suggerire slope/offset con passo prudenziale
+///
+/// Il filtro per modalità (heating/cooling) è responsabilità del chiamante:
+/// passare [HomeNotifier.records] o [HomeNotifier.recordsSinceLastApply],
+/// che sono già filtrati per modalità corrente.
 CurveSuggestion computeOptimalCurveSuggestion(
     List<DailyRecordDTO> records,
     double currentSlope,
     double currentOffset,
     SystemMode mode,
     [DateTime? lastAppliedDate]) {
-  // Filtra per data se è stata applicata una curva di recente.
   var filteredRecords = records;
   if (lastAppliedDate != null) {
     final lastDay = DateTime(
