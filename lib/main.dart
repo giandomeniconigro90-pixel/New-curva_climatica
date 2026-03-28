@@ -22,10 +22,29 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
+  // Applica subito l'overlay corretto prima del primo frame,
+  // basandosi sul tema salvato su Hive.
+  _applyOverlayForTheme(AppStorage.getThemeMode());
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => ThemeNotifier.fromStorage(),
       child: const ClimaSenseApp(),
+    ),
+  );
+}
+
+void _applyOverlayForTheme(ThemeMode mode) {
+  // Per ThemeMode.system usiamo la finestra di sistema: non possiamo saperlo
+  // a priori, quindi lasciamo Brightness.dark come fallback sicuro
+  // (icone chiare su sfondo scuro). Se l'utente ha scelto light, usiamo
+  // Brightness.dark (icone scure su sfondo chiaro).
+  final bool isDark = mode == ThemeMode.dark;
+  SystemChrome.setSystemUIOverlayStyle(
+    SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
     ),
   );
 }
@@ -35,7 +54,11 @@ class ClimaSenseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeMode = context.watch<ThemeNotifier>().themeMode;
+    final themeNotifier = context.watch<ThemeNotifier>();
+    final themeMode = themeNotifier.themeMode;
+
+    // Aggiorna overlay ad ogni cambio tema in-app
+    _applyOverlayForTheme(themeMode);
 
     return MaterialApp(
       title: 'ClimaSense',

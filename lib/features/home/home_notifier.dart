@@ -37,7 +37,6 @@ class HomeNotifier extends ChangeNotifier {
   List<DailyRecordDTO> allRecords = [];
   CurveSettings _settings = CurveSettings.defaults();
 
-  /// Lista stanze configurabile dall'utente, persistita su Hive.
   List<String> rooms = [];
 
   List<DailyRecordDTO> get records {
@@ -149,12 +148,15 @@ class HomeNotifier extends ChangeNotifier {
   // SISTEMA
   // ---------------------------------------------------------------------------
 
+  /// Aggiorna l'overlay della status bar in base al tema attualmente salvato.
   void updateSystemOverlay() {
+    final themeMode = AppStorage.getThemeMode();
+    final bool isDark = themeMode == ThemeMode.dark;
     SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
+      SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
     );
   }
