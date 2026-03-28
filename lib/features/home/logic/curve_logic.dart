@@ -50,7 +50,7 @@ class CurveSuggestion {
   });
 }
 
-/// Calcola la temperatura di mandata target basata sulla curva climatica
+/// Calcola la temperatura di mandata target basata sulla curva climatica.
 double computeMandata(double tExt, double slope, double offset, SystemMode mode) {
   if (mode == SystemMode.heating) {
     double targetAmbiente = 20.0;
@@ -73,8 +73,11 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   }
 
   double totalCons = 0;
-  double minT = 100;
-  double maxT = -100;
+  // Usare double.infinity invece di valori magici (es. 100/-100):
+  // in questo modo il confronto è corretto per qualsiasi temperatura reale,
+  // inclusi valori estremi come -50°C o +60°C.
+  double minT = double.infinity;
+  double maxT = double.negativeInfinity;
 
   for (var r in records) {
     totalCons += r.consumption;
