@@ -1,6 +1,7 @@
 // lib/features/home/widgets/results_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
@@ -17,12 +18,8 @@ class ResultsPage extends StatefulWidget {
   final Function(int)? onDeleteRecord;
   final Function(int)? onEditRecord;
   final void Function(String dateIso)? onEditRecordByDateIso;
-  /// Callback che esegue la soft-delete e restituisce il record eliminato
-  /// (o null se non trovato). La SnackBar con undo viene mostrata qui.
   final DailyRecordDTO? Function(String dateIso)? onSoftDeleteRecordByDateIso;
-  /// Callback legacy (indice intero) — mantenuto per retrocompatibilità.
   final void Function(String dateIso)? onDeleteRecordByDateIso;
-  /// Callback per annullare l'ultima delete.
   final VoidCallback? onUndoDelete;
 
   const ResultsPage({
@@ -119,34 +116,64 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  /// Gestisce la delete con SnackBar undo.
-  void _handleDeleteWithUndo(BuildContext context, String dateIso) {
-    // Usa il nuovo callback soft-delete se disponibile, altrimenti fallback legacy.
-    if (widget.onSoftDeleteRecordByDateIso != null) {
-      final deleted = widget.onSoftDeleteRecordByDateIso!(dateIso);
-      if (deleted == null) return;
+  /// Mostra un dialog di conferma prima di eliminare il record.
+  Future<void> _handleDeleteWithConfirm(
+      BuildContext context, DailyRecordDTO record) async {
+    final date =
+        parseItalianDateSafe(record.dateIso) ?? DateTime.now();
+    final dateStr =
+        '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
 
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              'Registrazione del ${deleted.dateIso} eliminata',
-            ),
-            duration: const Duration(seconds: 5),
-            action: widget.onUndoDelete != null
-                ? SnackBarAction(
-                    label: 'Annulla',
-                    onPressed: () {
-                      widget.onUndoDelete!();
-                    },
-                  )
-                : null,
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.red),
+            SizedBox(width: 10),
+            Text('Elimina registrazione'),
+          ],
+        ),
+        content: Text(
+          'Vuoi eliminare la registrazione del $dateStr?\nL\'operazione non è reversibile.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annulla'),
           ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('ELIMINA'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    if (widget.onSoftDeleteRecordByDateIso != null) {
+      final deleted =
+          widget.onSoftDeleteRecordByDateIso!(record.dateIso);
+      if (deleted != null) {
+        Fluttertoast.showToast(
+          msg: 'Registrazione del $dateStr eliminata',
+          backgroundColor: Colors.red.shade600,
+          textColor: Colors.white,
+          fontSize: 14,
         );
+      }
     } else if (widget.onDeleteRecordByDateIso != null) {
-      // Fallback legacy senza undo.
-      widget.onDeleteRecordByDateIso!(dateIso);
+      widget.onDeleteRecordByDateIso!(record.dateIso);
     }
   }
 
@@ -156,7 +183,8 @@ class _ResultsPageState extends State<ResultsPage> {
 
     if (widget.records.isEmpty) {
       return const Center(
-        child: Text('Nessun dato registrato', style: TextStyle(color: Colors.grey)),
+        child: Text('Nessun dato registrato',
+            style: TextStyle(color: Colors.grey)),
       );
     }
 
@@ -221,7 +249,8 @@ class _ResultsPageState extends State<ResultsPage> {
                               ),
                             ],
                           ),
-                          const Icon(Icons.edit, color: Colors.white54, size: 18),
+                          const Icon(Icons.edit,
+                              color: Colors.white54, size: 18),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -418,7 +447,7 @@ class _ResultsPageState extends State<ResultsPage> {
                               widget.onDeleteRecord != null) ...[
                             IconButton(
                               onPressed: () =>
-                                  _handleDeleteWithUndo(context, r.dateIso),
+                                  _handleDeleteWithConfirm(context, r),
                               icon: Icon(Icons.delete_outline,
                                   size: 20, color: cs.error),
                               tooltip: 'Elimina',
