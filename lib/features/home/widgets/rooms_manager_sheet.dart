@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import '../../../services/hive_storage.dart';
 
-/// Bottom sheet per gestire le stanze dell'impianto:
-/// aggiunta, eliminazione e riordinamento tramite drag.
 class RoomsManagerSheet extends StatefulWidget {
   final List<String> initialRooms;
 
@@ -63,13 +61,14 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    final cs = Theme.of(context).colorScheme;
     final maxHeight = mq.size.height * 0.85;
 
     return Container(
       constraints: BoxConstraints(maxHeight: maxHeight),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -80,7 +79,7 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.grey[300],
+              color: cs.onSurfaceVariant.withOpacity(0.4),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -90,14 +89,15 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
             padding: const EdgeInsets.fromLTRB(20, 8, 16, 8),
             child: Row(
               children: [
-                const Icon(Icons.meeting_room_outlined, color: Colors.blueGrey),
+                Icon(Icons.meeting_room_outlined, color: cs.onSurfaceVariant),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Gestisci Stanze',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
                     ),
                   ),
                 ),
@@ -106,24 +106,24 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                   icon: const Icon(Icons.check),
                   label: const Text('SALVA'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.blue.shade800,
+                    foregroundColor: cs.primary,
                   ),
                 ),
               ],
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: cs.outlineVariant),
 
           // --- Lista riordinabile ---
           Flexible(
             child: _rooms.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.all(32),
+                ? Padding(
+                    padding: const EdgeInsets.all(32),
                     child: Center(
                       child: Text(
                         'Nessuna stanza.\nAggiungine una qui sotto.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
+                        style: TextStyle(color: cs.onSurfaceVariant),
                       ),
                     ),
                   )
@@ -142,15 +142,18 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                       final room = _rooms[index];
                       return ListTile(
                         key: ValueKey(room),
-                        leading: const Icon(
+                        leading: Icon(
                           Icons.drag_handle,
-                          color: Colors.grey,
+                          color: cs.onSurfaceVariant,
                         ),
-                        title: Text(room),
+                        title: Text(
+                          room,
+                          style: TextStyle(color: cs.onSurface),
+                        ),
                         trailing: IconButton(
                           icon: Icon(
                             Icons.delete_outline,
-                            color: Colors.red.shade400,
+                            color: cs.error,
                           ),
                           onPressed: () => _deleteRoom(index),
                           tooltip: 'Elimina stanza',
@@ -160,7 +163,7 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                   ),
           ),
 
-          const Divider(height: 1),
+          Divider(height: 1, color: cs.outlineVariant),
 
           // --- Campo aggiunta stanza ---
           Padding(
@@ -190,7 +193,8 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                   icon: const Icon(Icons.add),
                   label: const Text('Aggiungi'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: Colors.blue.shade800,
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 12),
                   ),
