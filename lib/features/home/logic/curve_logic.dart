@@ -163,11 +163,15 @@ CurveSuggestion computeOptimalCurveSuggestion(
   if (coldComplaints > hotComplaints) {
     targetOffset += 1.0;
     if (coldComplaints > filteredRecords.length * 0.3) targetSlope += 0.1;
-    tip = 'Rilevati giorni con comfort insufficiente (freddo). Aumento la potenza.';
+    tip = mode == SystemMode.heating
+        ? 'Rilevati giorni freddi. Aumento la potenza di riscaldamento.'
+        : 'Rilevato eccesso di raffrescamento. Riduco l\'intensità.';
   } else if (hotComplaints > coldComplaints) {
     targetOffset -= 1.0;
     if (hotComplaints > filteredRecords.length * 0.3) targetSlope -= 0.1;
-    tip = 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.';
+    tip = mode == SystemMode.heating
+        ? 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.'
+        : 'Raffrescamento insufficiente. Aumento l\'intensità di raffreddamento.';
   } else {
     if (mode == SystemMode.heating) {
       targetOffset -= 0.5;
@@ -208,7 +212,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
     energyScore: 1.0,
     smartTip: tip,
     isLearning: false,
-    learningProgress: filteredRecords.length, // conteggio reale, non hardcoded
+    learningProgress: filteredRecords.length,
   );
 }
 
