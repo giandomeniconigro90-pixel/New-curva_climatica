@@ -155,9 +155,21 @@ class HomeNotifier extends ChangeNotifier {
   // SISTEMA
   // ---------------------------------------------------------------------------
 
+  /// Aggiorna la status bar tenendo conto di ThemeMode.system.
   void updateSystemOverlay() {
     final themeMode = AppStorage.getThemeMode();
-    final bool isDark = themeMode == ThemeMode.dark;
+    final bool isDark;
+    switch (themeMode) {
+      case ThemeMode.dark:
+        isDark = true;
+        break;
+      case ThemeMode.light:
+        isDark = false;
+        break;
+      case ThemeMode.system:
+        isDark = ui.PlatformDispatcher.instance.platformBrightness == ui.Brightness.dark;
+        break;
+    }
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -338,10 +350,7 @@ class HomeNotifier extends ChangeNotifier {
   // DELETE CON UNDO
   // ---------------------------------------------------------------------------
 
-  /// Rimuove subito dalla UI, aspetta 5s prima di salvare su Hive.
-  /// Restituisce il record eliminato (usato dalla view per la SnackBar).
   DailyRecordDTO? softDeleteRecord(int sortedIndex) {
-    // Annulla eventuale delete pendente precedente (conferma immediata)
     _commitPendingDelete();
 
     final sortedRecords = List<DailyRecordDTO>.from(records)
@@ -376,7 +385,6 @@ class HomeNotifier extends ChangeNotifier {
     return _pendingDeleteRecord;
   }
 
-  /// Rimuove oggi (soft delete con undo).
   DailyRecordDTO? softDeleteToday() {
     _commitPendingDelete();
 
@@ -411,7 +419,6 @@ class HomeNotifier extends ChangeNotifier {
     return _pendingDeleteRecord;
   }
 
-  /// Annulla l'ultima eliminazione pendente.
   void undoDelete() {
     if (_pendingDeleteRecord == null || _pendingDeleteIndex == null) return;
     _deleteTimer?.cancel();
@@ -424,7 +431,6 @@ class HomeNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Conferma immediatamente l'eliminazione pendente (salva su Hive subito).
   void _commitPendingDelete() {
     if (_pendingDeleteRecord == null) return;
     _deleteTimer?.cancel();
@@ -434,7 +440,6 @@ class HomeNotifier extends ChangeNotifier {
     saveToHive();
   }
 
-  // Mantenuti per retrocompatibilità con eventuali altri chiamanti
   Future<void> deleteRecord(int sortedIndex) async {
     softDeleteRecord(sortedIndex);
   }
