@@ -637,7 +637,7 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<void> doBackup() async {
     try {
-      final backupJson = ExportUtils.generateBackupJson(
+      final backupJson = await ExportUtils.generateBackupJson(
         records: allRecords,
         mode: currentMode,
         heatingSlope: _settings.heatingSlope,
