@@ -41,6 +41,9 @@ dependencies:
   timezone: ^0.9.4
   permission_handler: ^11.3.1
 
+  # STATE MANAGEMENT
+  provider: ^6.1.2
+
   # UTILITY
   intl: ^0.19.0
   url_launcher: ^6.3.0
