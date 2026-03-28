@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -70,7 +71,7 @@ class ExportUtils {
       await file.writeAsString(csvData);
       await Share.shareXFiles([XFile(path)], text: 'Export Dati ClimaSense (CSV)');
     } catch (e) {
-      print("Errore share CSV: $e");
+      debugPrint("Errore share CSV: $e");
     }
   }
 
@@ -173,7 +174,7 @@ class ExportUtils {
       await file.writeAsString(jsonString);
       await Share.shareXFiles([XFile(path)], text: 'Backup JSON');
     } catch (e) {
-      print("Errore Backup: $e");
+      debugPrint("Errore Backup: $e");
     }
   }
 }
