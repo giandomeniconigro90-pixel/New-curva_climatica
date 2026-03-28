@@ -212,6 +212,11 @@ CurveSuggestion computeOptimalCurveSuggestion(
   );
 }
 
+/// Costruisce i punti della curva climatica per il grafico.
+///
+/// Guard: se il range è degenere (min > max oppure min == max),
+/// viene usato il range di default per la modalità per evitare
+/// un grafico vuoto o un loop infinito.
 List<FlSpot> buildCurveSpots({
   required double slope,
   required double offset,
@@ -220,8 +225,23 @@ List<FlSpot> buildCurveSpots({
   required double maxExternalTemp,
   double step = 1.0,
 }) {
+  double effectiveMin = minExternalTemp;
+  double effectiveMax = maxExternalTemp;
+
+  // Range degenere: usa fallback per modalità
+  if (effectiveMin >= effectiveMax) {
+    effectiveMin = mode == SystemMode.heating ? -10.0 : 20.0;
+    effectiveMax = mode == SystemMode.heating ? 20.0 : 40.0;
+  }
+
+  // Un solo punto: allarga di ±5 per avere una curva visibile
+  if ((effectiveMax - effectiveMin) < step) {
+    effectiveMin -= 5.0;
+    effectiveMax += 5.0;
+  }
+
   final List<FlSpot> spots = [];
-  for (double t = minExternalTemp; t <= maxExternalTemp; t += step) {
+  for (double t = effectiveMin; t <= effectiveMax; t += step) {
     final double mandata = computeMandata(t, slope, offset, mode);
     spots.add(FlSpot(t, mandata));
   }
