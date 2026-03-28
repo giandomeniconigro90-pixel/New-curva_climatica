@@ -7,6 +7,15 @@ import '../../../utils/date_utils.dart';
 
 enum SystemMode { heating, cooling }
 
+/// Extension per convertire SystemMode in stringa persistita su Hive/JSON.
+/// Usare sempre questo invece di stringhe hardcoded.
+extension SystemModeX on SystemMode {
+  String toModeString() => this == SystemMode.heating ? 'heating' : 'cooling';
+
+  static SystemMode fromString(String s) =>
+      s == 'cooling' ? SystemMode.cooling : SystemMode.heating;
+}
+
 class CurveStats {
   final double avgConsumption;
   final double minExternalTemp;
@@ -81,10 +90,9 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   );
 }
 
-/// Filtra per campo mode
+/// Filtra i record per modalità corrente.
 List<DailyRecordDTO> filterRecordsByMode(List<DailyRecordDTO> records, SystemMode mode) {
-  final modeStr = mode == SystemMode.heating ? 'heating' : 'cooling';
-  return records.where((r) => r.mode == modeStr).toList();
+  return records.where((r) => r.mode == mode.toModeString()).toList();
 }
 
 CurveSuggestion computeOptimalCurveSuggestion(
@@ -110,9 +118,9 @@ CurveSuggestion computeOptimalCurveSuggestion(
   if (records.length < 5) {
     String message;
     if (lastAppliedDate == null) {
-      message = "Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - records.length} giorni.";
+      message = 'Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - records.length} giorni.';
     } else {
-      message = "Hai modificato la curva di recente. Attendo 5 giorni di NUOVI dati per valutare le modifiche. (Giorni validi: ${records.length}/5)";
+      message = 'Hai modificato la curva di recente. Attendo 5 giorni di NUOVI dati per valutare le modifiche. (Giorni validi: ${records.length}/5)';
     }
 
     return CurveSuggestion(
@@ -143,24 +151,24 @@ CurveSuggestion computeOptimalCurveSuggestion(
   double comfortScore = okDays / records.length;
   double targetSlope = currentSlope;
   double targetOffset = currentOffset;
-  String tip = "";
+  String tip = '';
 
   if (coldComplaints > hotComplaints) {
     targetOffset += 1.0;
     if (coldComplaints > records.length * 0.3) {
       targetSlope += 0.1;
     }
-    tip = "Rilevati giorni con comfort insufficiente (freddo). Aumento la potenza.";
+    tip = 'Rilevati giorni con comfort insufficiente (freddo). Aumento la potenza.';
   } else if (hotComplaints > coldComplaints) {
     targetOffset -= 1.0;
     if (hotComplaints > records.length * 0.3) {
       targetSlope -= 0.1;
     }
-    tip = "Rilevato eccesso di calore. Riduco la potenza per risparmiare.";
+    tip = 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.';
   } else {
     if (mode == SystemMode.heating) targetOffset -= 0.5;
     else targetOffset += 0.5;
-    tip = "Comfort ottimale! Ottimizzo i consumi.";
+    tip = 'Comfort ottimale! Ottimizzo i consumi.';
   }
 
   // FASE 3: PRUDENZA
@@ -183,7 +191,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
   if ((targetSlope - currentSlope).abs() < 0.01 && (targetOffset - currentOffset).abs() < 0.1) {
     targetSlope = currentSlope;
     targetOffset = currentOffset;
-    tip = "Parametri attuali ottimali con i nuovi dati. Mantieni così.";
+    tip = 'Parametri attuali ottimali con i nuovi dati. Mantieni così.';
   }
 
   return CurveSuggestion(

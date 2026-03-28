@@ -41,8 +41,7 @@ class HomeNotifier extends ChangeNotifier {
   List<String> rooms = [];
 
   List<DailyRecordDTO> get records {
-    final modeStr = _settings.mode == SystemMode.cooling ? 'cooling' : 'heating';
-    return allRecords.where((r) => r.mode == modeStr).toList();
+    return allRecords.where((r) => r.mode == currentMode.toModeString()).toList();
   }
 
   double get slope => _settings.activeSlope;
@@ -215,9 +214,8 @@ class HomeNotifier extends ChangeNotifier {
   }
 
   void startEditRecordByDateIso(String dateIso) {
-    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
     final index = allRecords.indexWhere(
-        (r) => r.dateIso == dateIso && r.mode == modeStr);
+        (r) => r.dateIso == dateIso && r.mode == currentMode.toModeString());
     if (index == -1) return;
     startEditRecordByAllIndex(index);
   }
@@ -251,8 +249,6 @@ class HomeNotifier extends ChangeNotifier {
     pageController.jumpToPage(0);
   }
 
-  /// [context] viene passato direttamente dal widget chiamante per evitare
-  /// riferimenti stale al BuildContext.
   Future<void> addRecord(BuildContext context) async {
     final result = RecordFormValidator.validate(
       externalTempController: externalTempController,
@@ -273,7 +269,7 @@ class HomeNotifier extends ChangeNotifier {
     final ok = result as RecordValidationOk;
     final now = DateTime.now();
     final dateIso = formatItalianDate(now);
-    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final modeStr = currentMode.toModeString();
 
     if (editingIndex != null) {
       final originalDate = allRecords[editingIndex!].dateIso;
@@ -341,7 +337,7 @@ class HomeNotifier extends ChangeNotifier {
     if (sortedIndex < 0 || sortedIndex >= sortedRecords.length) return;
 
     final targetDateIso = sortedRecords[sortedIndex].dateIso;
-    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final modeStr = currentMode.toModeString();
     final originalIndex = allRecords
         .indexWhere((r) => r.dateIso == targetDateIso && r.mode == modeStr);
 
@@ -361,7 +357,7 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<void> deleteToday() async {
     final today = formatItalianDate(DateTime.now());
-    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final modeStr = currentMode.toModeString();
     final index =
         allRecords.indexWhere((r) => r.dateIso == today && r.mode == modeStr);
 
