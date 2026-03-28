@@ -1,6 +1,5 @@
 // lib/features/home/logic/curve_logic.dart
 
-import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../models/daily_record_dto.dart';
 import '../../../utils/date_utils.dart';
