@@ -2,6 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../../../../core/constants/room_constants.dart';
 import '../../../../models/daily_record_dto.dart';
 import '../../../../services/weather_service.dart';
 import 'room_control_page.dart';
@@ -48,22 +49,8 @@ class InputPage extends StatefulWidget {
 }
 
 class _InputPageState extends State<InputPage> {
-  final List<String> orderedRooms = [
-    'Soggiorno/Cucina',
-    'Bagno PT',
-    'Cameretta Stefano',
-    'Camera Giochi',
-    'Camera Mamma e Papà',
-    'Bagno 1P',
-  ];
-
   bool _isLoadingWeather = false;
   String? _weatherLocation;
-
-  @override
-  void initState() {
-    super.initState();
-  }
 
   Future<void> _fetchWeather() async {
     setState(() => _isLoadingWeather = true);
@@ -71,7 +58,8 @@ class _InputPageState extends State<InputPage> {
       final result = await WeatherService.getDailyAvgTemp();
       if (result != null && mounted) {
         setState(() {
-          widget.externalTempController.text = (result.temp as double).toStringAsFixed(1);
+          widget.externalTempController.text =
+              (result.temp as double).toStringAsFixed(1);
           _weatherLocation = result.locationName.toString();
         });
         Fluttertoast.showToast(
@@ -97,45 +85,43 @@ class _InputPageState extends State<InputPage> {
 
   @override
   Widget build(BuildContext context) {
-    List<Widget> gridItems = [];
+    final List<Widget> gridItems = [];
 
     gridItems.add(_buildTadoTile(
-      title: "Esterna",
-      subtitle: _weatherLocation ?? "Benessere",
+      title: 'Esterna',
+      subtitle: _weatherLocation ?? 'Benessere',
       controller: widget.externalTempController,
       icon: Icons.cloud_sync,
       color: const Color(0xFF1976D2),
       isRoom: false,
       isWeatherTile: true,
-      suffix: "°",
+      suffix: '°',
     ));
 
     gridItems.add(_buildTadoTile(
-      title: "Consumo",
-      subtitle: "Energy Cockpit",
+      title: 'Consumo',
+      subtitle: 'Energy Cockpit',
       controller: widget.consumptionController,
       icon: Icons.eco_outlined,
       color: const Color(0xFF66BB6A),
       isRoom: false,
-      suffix: "kWh",
+      suffix: 'kWh',
     ));
 
-    for (var room in orderedRooms) {
-      var ctrl = widget.internalTempControllers[room];
-      if (ctrl == null) {
-        ctrl = TextEditingController();
-        widget.internalTempControllers[room] = ctrl;
-      }
+    // Unica sorgente di verità: RoomConstants.defaultRooms
+    for (final room in RoomConstants.defaultRooms) {
+      final ctrl = widget.internalTempControllers[room] ??
+          (widget.internalTempControllers[room] = TextEditingController());
       gridItems.add(_buildTadoTile(
         title: room,
-        subtitle: widget.isCooling ? "Raffrescamento" : "Riscaldamento",
+        subtitle: widget.isCooling ? 'Raffrescamento' : 'Riscaldamento',
         controller: ctrl,
         icon: null,
         color: widget.isCooling
             ? const Color(0xFF4DB6AC)
             : const Color(0xFFFFB74D),
         isRoom: true,
-        suffix: "°",
+        suffix: '°',
       ));
     }
 
@@ -168,7 +154,7 @@ class _InputPageState extends State<InputPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text(
-                    "Home",
+                    'Home',
                     style: TextStyle(
                       fontSize: 30,
                       fontWeight: FontWeight.bold,
@@ -231,11 +217,13 @@ class _InputPageState extends State<InputPage> {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        double? val = double.tryParse(controller.text.replaceAll(',', '.'));
-        String displayVal = val != null ? val.toStringAsFixed(1) : "--";
+        final double? val =
+            double.tryParse(controller.text.replaceAll(',', '.'));
+        final String displayVal = val != null ? val.toStringAsFixed(1) : '--';
 
         return GestureDetector(
-          onTap: () => _openControlPage(title, controller, suffix == 'kWh', isRoom),
+          onTap: () =>
+              _openControlPage(title, controller, suffix == 'kWh', isRoom),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -392,7 +380,8 @@ class _InputPageState extends State<InputPage> {
     } else {
       Navigator.of(context).push(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => RoomControlPage(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              RoomControlPage(
             title: title,
             controller: controller,
             isConsumption: isConsumption,
@@ -401,12 +390,15 @@ class _InputPageState extends State<InputPage> {
             onSave: () => setState(() {}),
             isCooling: widget.isCooling,
           ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          transitionsBuilder:
+              (context, animation, secondaryAnimation, child) {
             const begin = Offset(0.0, 1.0);
             const end = Offset.zero;
             const curve = Curves.easeOutQuint;
-            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            return SlideTransition(position: animation.drive(tween), child: child);
+            final tween =
+                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            return SlideTransition(
+                position: animation.drive(tween), child: child);
           },
         ),
       );
