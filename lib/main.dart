@@ -1,5 +1,7 @@
 // lib/main.dart
 
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -22,9 +24,14 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Applica subito l'overlay corretto prima del primo frame,
-  // basandosi sul tema salvato su Hive.
-  _applyOverlayForTheme(AppStorage.getThemeMode());
+  // Determina la brightness effettiva già prima del primo frame.
+  // Per ThemeMode.system leggiamo direttamente PlatformDispatcher.
+  final ThemeMode savedMode = AppStorage.getThemeMode();
+  final bool isDarkAtStart = _resolveIsDark(
+    savedMode,
+    PlatformDispatcher.instance.platformBrightness,
+  );
+  _applyOverlay(isDarkAtStart);
 
   runApp(
     ChangeNotifierProvider(
@@ -34,12 +41,19 @@ void main() async {
   );
 }
 
-void _applyOverlayForTheme(ThemeMode mode) {
-  // Per ThemeMode.system usiamo la finestra di sistema: non possiamo saperlo
-  // a priori, quindi lasciamo Brightness.dark come fallback sicuro
-  // (icone chiare su sfondo scuro). Se l'utente ha scelto light, usiamo
-  // Brightness.dark (icone scure su sfondo chiaro).
-  final bool isDark = mode == ThemeMode.dark;
+/// Risolve se il tema effettivo è dark, tenendo conto di ThemeMode.system.
+bool _resolveIsDark(ThemeMode mode, Brightness platformBrightness) {
+  switch (mode) {
+    case ThemeMode.dark:
+      return true;
+    case ThemeMode.light:
+      return false;
+    case ThemeMode.system:
+      return platformBrightness == Brightness.dark;
+  }
+}
+
+void _applyOverlay(bool isDark) {
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -57,8 +71,11 @@ class ClimaSenseApp extends StatelessWidget {
     final themeNotifier = context.watch<ThemeNotifier>();
     final themeMode = themeNotifier.themeMode;
 
-    // Aggiorna overlay ad ogni cambio tema in-app
-    _applyOverlayForTheme(themeMode);
+    // In-app: per ThemeMode.system leggiamo la brightness dal MediaQuery
+    // (aggiornato da Flutter quando il sistema cambia tema).
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    final bool isDark = _resolveIsDark(themeMode, platformBrightness);
+    _applyOverlay(isDark);
 
     return MaterialApp(
       title: 'ClimaSense',
