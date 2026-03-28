@@ -110,12 +110,10 @@ class _ClimateCurveHomeView extends StatelessWidget {
             suggestion: suggestion,
             stats: stats,
             onApplyAiCurve: notifier.onApplyAiCurve,
-            onDeleteRecord: (index) {
-              notifier.softDeleteRecord(index);
-              _showUndoSnackBar(context, notifier);
-            },
             onEditRecord: notifier.startEditRecord,
             onEditRecordByDateIso: notifier.startEditRecordByDateIso,
+            onSoftDeleteRecordByDateIso: notifier.softDeleteRecordByDateIso,
+            onUndoDelete: notifier.undoDelete,
           ),
           CurveChartPage(
             slope: notifier.slope,
