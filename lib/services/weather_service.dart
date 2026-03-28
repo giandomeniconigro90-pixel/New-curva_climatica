@@ -1,5 +1,6 @@
 // lib/services/weather_service.dart
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -14,6 +15,8 @@ class WeatherData {
 }
 
 class WeatherService {
+  static const Duration _timeout = Duration(seconds: 10);
+
   /// Ottieni temperatura media giornaliera e nome città attuale
   static Future<WeatherData?> getDailyAvgTemp() async {
     try {
@@ -37,35 +40,39 @@ class WeatherService {
 
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.low,
-      );
+      ).timeout(_timeout);
       debugPrint('🌍 Posizione: ${position.latitude}, ${position.longitude}');
 
-      String cityName = "Tua Posizione";
+      String cityName = 'Tua Posizione';
       try {
         final placemarks = await placemarkFromCoordinates(
           position.latitude,
           position.longitude,
-        );
+        ).timeout(_timeout);
         if (placemarks.isNotEmpty) {
           final p = placemarks.first;
           cityName = p.locality ??
               p.subAdministrativeArea ??
               p.administrativeArea ??
-              "Tua Posizione";
+              'Tua Posizione';
         }
         debugPrint('🌍 Città rilevata: $cityName');
       } catch (e) {
         debugPrint('🌍 Errore geocoding: $e');
+        // Continua comunque con cityName = 'Tua Posizione'
       }
 
       final url = Uri.parse(
         'https://api.open-meteo.com/v1/forecast'
-            '?latitude=${position.latitude}&longitude=${position.longitude}'
-            '&daily=temperature_2m_mean&timezone=auto&forecast_days=1',
+        '?latitude=${position.latitude}&longitude=${position.longitude}'
+        '&daily=temperature_2m_mean&timezone=auto&forecast_days=1',
       );
       debugPrint('🌍 URL meteo: $url');
 
-      final response = await http.get(url);
+      final response = await http.get(url).timeout(
+        _timeout,
+        onTimeout: () => throw TimeoutException('Timeout richiesta meteo'),
+      );
       debugPrint('🌍 HTTP status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
@@ -79,6 +86,9 @@ class WeatherService {
       }
 
       debugPrint('🌍 Nessun dato meteo valido');
+      return null;
+    } on TimeoutException catch (e) {
+      debugPrint('🌍 TIMEOUT: $e');
       return null;
     } catch (e) {
       debugPrint('🌍 ERRORE getDailyAvgTemp: $e');
