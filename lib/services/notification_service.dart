@@ -14,6 +14,9 @@ class NotificationService {
 
   static bool _initialized = false;
 
+  /// Orario di fallback usato se il valore salvato è assente o malformato.
+  static const String _fallbackTime = '20:00';
+
   static Future init() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
     if (_initialized) return;
@@ -48,16 +51,37 @@ class NotificationService {
     }
   }
 
+  /// Parsa una stringa "HH:mm" e restituisce [hour, minute].
+  /// Se la stringa è malformata o fuori range restituisce il fallback [20, 0].
+  static (int hour, int minute) _parseTimeStr(String? raw) {
+    const fallbackHour = 20;
+    const fallbackMinute = 0;
+
+    if (raw == null || raw.trim().isEmpty) {
+      return (fallbackHour, fallbackMinute);
+    }
+
+    final parts = raw.trim().split(':');
+    if (parts.length != 2) return (fallbackHour, fallbackMinute);
+
+    final hh = int.tryParse(parts[0]);
+    final mm = int.tryParse(parts[1]);
+
+    if (hh == null || mm == null) return (fallbackHour, fallbackMinute);
+    if (hh < 0 || hh > 23)       return (fallbackHour, fallbackMinute);
+    if (mm < 0 || mm > 59)       return (fallbackHour, fallbackMinute);
+
+    return (hh, mm);
+  }
+
   static Future scheduleDailyReminder() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
     await init();
 
     try {
-      final String timeStr = AppStorage.getNotificationTime() ?? '20:00';
-      final parts = timeStr.split(':');
-      final int hh = int.parse(parts[0]);
-      final int mm = int.parse(parts[1]);
+      final String? timeStr = AppStorage.getNotificationTime();
+      final (int hh, int mm) = _parseTimeStr(timeStr ?? _fallbackTime);
 
       const AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
