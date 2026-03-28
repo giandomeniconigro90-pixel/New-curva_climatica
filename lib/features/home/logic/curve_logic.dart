@@ -73,9 +73,7 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
   }
 
   double totalCons = 0;
-  // Usare double.infinity invece di valori magici (es. 100/-100):
-  // in questo modo il confronto è corretto per qualsiasi temperatura reale,
-  // inclusi valori estremi come -50°C o +60°C.
+  // double.infinity garantisce correttezza per qualsiasi temperatura reale.
   double minT = double.infinity;
   double maxT = double.negativeInfinity;
 
@@ -94,23 +92,31 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
 }
 
 /// Filtra i record per modalità corrente.
-List<DailyRecordDTO> filterRecordsByMode(List<DailyRecordDTO> records, SystemMode mode) {
+/// Usare questo PRIMA di passare i record a [computeOptimalCurveSuggestion].
+List<DailyRecordDTO> filterRecordsByMode(
+    List<DailyRecordDTO> records, SystemMode mode) {
   return records.where((r) => r.mode == mode.toModeString()).toList();
 }
 
+/// Calcola la curva ottimale suggerita dall'AI.
+///
+/// [records] deve contenere SOLO i record della modalità corrente,
+/// già filtrati tramite [filterRecordsByMode] o tramite il getter
+/// [HomeNotifier.records] / [HomeNotifier.recordsSinceLastApply].
+/// NON passare allRecords non filtrati: il filtro per mode NON viene
+/// eseguito internamente per evitare doppio filtraggio.
 CurveSuggestion computeOptimalCurveSuggestion(
-    List<DailyRecordDTO> allRecords,
+    List<DailyRecordDTO> records,
     double currentSlope,
     double currentOffset,
     SystemMode mode,
-    [DateTime? lastAppliedDate]
-    ) {
-
-  var records = filterRecordsByMode(allRecords, mode);
-
+    [DateTime? lastAppliedDate]) {
+  // Filtra per data se è stata applicata una curva di recente.
+  var filteredRecords = records;
   if (lastAppliedDate != null) {
-    final lastDay = DateTime(lastAppliedDate.year, lastAppliedDate.month, lastAppliedDate.day);
-    records = records.where((r) {
+    final lastDay = DateTime(
+        lastAppliedDate.year, lastAppliedDate.month, lastAppliedDate.day);
+    filteredRecords = records.where((r) {
       final rDate = parseItalianDateSafe(r.dateIso);
       if (rDate == null) return false;
       return rDate.isAfter(lastDay);
@@ -118,14 +124,15 @@ CurveSuggestion computeOptimalCurveSuggestion(
   }
 
   // FASE 1: APPRENDIMENTO
-  if (records.length < 5) {
-    String message;
+  if (filteredRecords.length < 5) {
+    final String message;
     if (lastAppliedDate == null) {
-      message = 'Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - records.length} giorni.';
+      message =
+          'Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - filteredRecords.length} giorni.';
     } else {
-      message = 'Hai modificato la curva di recente. Attendo 5 giorni di NUOVI dati per valutare le modifiche. (Giorni validi: ${records.length}/5)';
+      message =
+          'Hai modificato la curva di recente. Attendo 5 giorni di NUOVI dati per valutare le modifiche. (Giorni validi: ${filteredRecords.length}/5)';
     }
-
     return CurveSuggestion(
       suggestedSlope: currentSlope,
       suggestedOffset: currentOffset,
@@ -133,7 +140,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
       energyScore: 1.0,
       smartTip: message,
       isLearning: true,
-      learningProgress: records.length,
+      learningProgress: filteredRecords.length,
     );
   }
 
@@ -142,44 +149,46 @@ CurveSuggestion computeOptimalCurveSuggestion(
   int hotComplaints = 0;
   int okDays = 0;
 
-  for (var r in records) {
-    bool dayCold = r.comfortRatings.values.contains('freddo');
-    bool dayHot = r.comfortRatings.values.contains('caldo');
-
-    if (dayCold) coldComplaints++;
-    else if (dayHot) hotComplaints++;
-    else okDays++;
+  for (var r in filteredRecords) {
+    final bool dayCold = r.comfortRatings.values.contains('freddo');
+    final bool dayHot = r.comfortRatings.values.contains('caldo');
+    if (dayCold) {
+      coldComplaints++;
+    } else if (dayHot) {
+      hotComplaints++;
+    } else {
+      okDays++;
+    }
   }
 
-  double comfortScore = okDays / records.length;
+  final double comfortScore = okDays / filteredRecords.length;
   double targetSlope = currentSlope;
   double targetOffset = currentOffset;
-  String tip = '';
+  String tip;
 
   if (coldComplaints > hotComplaints) {
     targetOffset += 1.0;
-    if (coldComplaints > records.length * 0.3) {
-      targetSlope += 0.1;
-    }
+    if (coldComplaints > filteredRecords.length * 0.3) targetSlope += 0.1;
     tip = 'Rilevati giorni con comfort insufficiente (freddo). Aumento la potenza.';
   } else if (hotComplaints > coldComplaints) {
     targetOffset -= 1.0;
-    if (hotComplaints > records.length * 0.3) {
-      targetSlope -= 0.1;
-    }
+    if (hotComplaints > filteredRecords.length * 0.3) targetSlope -= 0.1;
     tip = 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.';
   } else {
-    if (mode == SystemMode.heating) targetOffset -= 0.5;
-    else targetOffset += 0.5;
+    if (mode == SystemMode.heating) {
+      targetOffset -= 0.5;
+    } else {
+      targetOffset += 0.5;
+    }
     tip = 'Comfort ottimale! Ottimizzo i consumi.';
   }
 
-  // FASE 3: PRUDENZA
+  // FASE 3: PRUDENZA — limita il passo massimo per evitare salti bruschi
   const double maxSlopeStep = 0.1;
   const double maxOffsetStep = 1.0;
 
-  double diffSlope = targetSlope - currentSlope;
-  double diffOffset = targetOffset - currentOffset;
+  final double diffSlope = targetSlope - currentSlope;
+  final double diffOffset = targetOffset - currentOffset;
 
   if (diffSlope.abs() > maxSlopeStep) {
     targetSlope = currentSlope + (diffSlope.sign * maxSlopeStep);
@@ -191,7 +200,8 @@ CurveSuggestion computeOptimalCurveSuggestion(
   targetSlope = (targetSlope * 100).round() / 100.0;
   targetOffset = (targetOffset * 10).round() / 10.0;
 
-  if ((targetSlope - currentSlope).abs() < 0.01 && (targetOffset - currentOffset).abs() < 0.1) {
+  if ((targetSlope - currentSlope).abs() < 0.01 &&
+      (targetOffset - currentOffset).abs() < 0.1) {
     targetSlope = currentSlope;
     targetOffset = currentOffset;
     tip = 'Parametri attuali ottimali con i nuovi dati. Mantieni così.';
