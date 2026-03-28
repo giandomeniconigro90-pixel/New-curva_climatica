@@ -57,17 +57,27 @@ class _InputPageState extends State<InputPage> {
     setState(() => _isLoadingWeather = true);
     try {
       final result = await WeatherService.getDailyAvgTemp();
-      if (result != null && mounted) {
+      if (!mounted) return;
+      if (result != null) {
         setState(() {
           widget.externalTempController.text =
-              (result.temp as double).toStringAsFixed(1);
-          _weatherLocation = result.locationName.toString();
+              result.temp.toStringAsFixed(1);
+          _weatherLocation = result.locationName;
         });
         Fluttertoast.showToast(
           msg: 'Meteo aggiornato da $_weatherLocation',
           backgroundColor: Colors.green.shade600,
           textColor: Colors.white,
           fontSize: 14,
+        );
+      } else {
+        // result == null: GPS negato, offline o timeout
+        Fluttertoast.showToast(
+          msg: 'Meteo non disponibile. Controlla GPS e connessione.',
+          backgroundColor: Colors.orange.shade700,
+          textColor: Colors.white,
+          fontSize: 14,
+          toastLength: Toast.LENGTH_LONG,
         );
       }
     } catch (e) {
@@ -109,7 +119,6 @@ class _InputPageState extends State<InputPage> {
       suffix: 'kWh',
     ));
 
-    // Stanze dinamiche da HomeNotifier (persistite su Hive)
     for (final room in widget.rooms) {
       final ctrl = widget.internalTempControllers[room] ??
           (widget.internalTempControllers[room] = TextEditingController());
