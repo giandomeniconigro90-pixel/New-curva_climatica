@@ -10,7 +10,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../core/constants/room_constants.dart';
+import '../../models/curve_settings.dart';
 import '../../models/daily_record_dto.dart';
+import '../../repositories/curve_settings_repository.dart';
 import '../../services/hive_storage.dart';
 import '../../services/notification_service.dart';
 import '../../utils/date_utils.dart';
@@ -20,40 +22,37 @@ import 'logic/curve_logic.dart';
 import 'utils/export_utils.dart';
 
 class HomeNotifier extends ChangeNotifier {
+  final CurveSettingsRepository _settingsRepo = CurveSettingsRepository();
+
   late PageController pageController;
 
   final TextEditingController externalTempController = TextEditingController();
   final TextEditingController consumptionController = TextEditingController();
   final TextEditingController noteController = TextEditingController();
   final Map<String, TextEditingController> internalTempControllers = {};
-
   final Map<String, String> comfortRatings = {};
 
   List<DailyRecordDTO> allRecords = [];
 
+  /// Unico oggetto di stato per le impostazioni curva
+  CurveSettings _settings = CurveSettings.defaults();
+
   List<DailyRecordDTO> get records {
-    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final modeStr = _settings.mode == SystemMode.cooling ? 'cooling' : 'heating';
     return allRecords.where((r) => r.mode == modeStr).toList();
   }
 
-  late double slope;
-  late double offset;
-
-  SystemMode currentMode = SystemMode.heating;
-
-  double cachedHeatingSlope = 1.2;
-  double cachedHeatingOffset = 0.0;
-  double cachedCoolingSlope = 0.5;
-  double cachedCoolingOffset = 0.0;
-
-  DateTime? lastAiApplyHeating;
-  DateTime? lastAiApplyCooling;
+  // Getter pubblici usati dalla UI e dalla logica
+  double get slope => _settings.activeSlope;
+  double get offset => _settings.activeOffset;
+  SystemMode get currentMode => _settings.mode;
+  DateTime? get lastAiApplyHeating => _settings.lastAiApplyHeating;
+  DateTime? get lastAiApplyCooling => _settings.lastAiApplyCooling;
 
   int currentPage = 0;
   int? editingIndex;
 
   final GlobalKey chartKey = GlobalKey();
-
   BuildContext? _context;
 
   HomeNotifier({
@@ -63,8 +62,12 @@ class HomeNotifier extends ChangeNotifier {
   }) {
     currentPage = initialPage;
     pageController = PageController(initialPage: currentPage);
-    slope = initialSlope;
-    offset = initialOffset;
+    // I valori iniziali passati dall'esterno sono usati solo prima
+    // che loadFromHive() sovrascriva con i dati persistiti.
+    _settings = CurveSettings.defaults().copyWith(
+      heatingSlope: initialSlope,
+      heatingOffset: initialOffset,
+    );
 
     for (final room in RoomConstants.defaultRooms) {
       internalTempControllers[room] = TextEditingController();
@@ -90,45 +93,16 @@ class HomeNotifier extends ChangeNotifier {
     super.dispose();
   }
 
+  // ---------------------------------------------------------------------------
+  // PERSISTENZA
+  // ---------------------------------------------------------------------------
+
   Future<void> loadFromHive() async {
-    final results = await Future.wait([
-      AppStorage.loadRecords(),
-      Future.value(AppStorage.getSystemMode()),
-      Future.value(AppStorage.getSlope()),
-      Future.value(AppStorage.getOffset()),
-      Future.value(AppStorage.getCoolingSlope()),
-      Future.value(AppStorage.getCoolingOffset()),
-      Future.value(AppStorage.getLastAiApplyHeatingIso()),
-      Future.value(AppStorage.getLastAiApplyCoolingIso()),
-    ]);
-
-    final storedRecords = results[0] as List<DailyRecordDTO>;
-    final modeStr = results[1] as String? ?? 'heating';
-
-    cachedHeatingSlope = results[2] as double;
-    cachedHeatingOffset = results[3] as double;
-    cachedCoolingSlope = results[4] as double;
-    cachedCoolingOffset = results[5] as double;
-
-    final heatIso = results[6] as String?;
-    final coolIso = results[7] as String?;
-
-    lastAiApplyHeating = heatIso != null ? DateTime.tryParse(heatIso) : null;
-    lastAiApplyCooling = coolIso != null ? DateTime.tryParse(coolIso) : null;
-
-    final loadedMode =
-        modeStr == 'cooling' ? SystemMode.cooling : SystemMode.heating;
+    final storedRecords = await AppStorage.loadRecords();
+    final loadedSettings = _settingsRepo.load();
 
     allRecords = storedRecords;
-    currentMode = loadedMode;
-
-    if (currentMode == SystemMode.heating) {
-      slope = cachedHeatingSlope;
-      offset = cachedHeatingOffset;
-    } else {
-      slope = cachedCoolingSlope;
-      offset = cachedCoolingOffset;
-    }
+    _settings = loadedSettings;
 
     notifyListeners();
     updateSystemOverlay();
@@ -137,6 +111,12 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> saveToHive() async {
     await AppStorage.saveRecords(allRecords);
   }
+
+  Future<void> _saveSettings() => _settingsRepo.save(_settings);
+
+  // ---------------------------------------------------------------------------
+  // SISTEMA
+  // ---------------------------------------------------------------------------
 
   void updateSystemOverlay() {
     SystemChrome.setSystemUIOverlayStyle(
@@ -151,43 +131,33 @@ class HomeNotifier extends ChangeNotifier {
   void toggleMode(bool value) {
     final newMode = value ? SystemMode.cooling : SystemMode.heating;
 
-    if (currentMode == SystemMode.heating) {
-      cachedHeatingSlope = slope;
-      cachedHeatingOffset = offset;
-    } else {
-      cachedCoolingSlope = slope;
-      cachedCoolingOffset = offset;
-    }
+    // Salva i valori attivi nella modalità corrente prima di switchare
+    final updated = _settings.mode == SystemMode.heating
+        ? _settings.copyWith(
+            heatingSlope: slope,
+            heatingOffset: offset,
+            mode: newMode,
+          )
+        : _settings.copyWith(
+            coolingSlope: slope,
+            coolingOffset: offset,
+            mode: newMode,
+          );
 
-    currentMode = newMode;
-    if (newMode == SystemMode.heating) {
-      slope = cachedHeatingSlope;
-      offset = cachedHeatingOffset;
-    } else {
-      slope = cachedCoolingSlope;
-      offset = cachedCoolingOffset;
-    }
-
+    _settings = updated;
     notifyListeners();
     updateSystemOverlay();
-
-    Future.microtask(() async {
-      await AppStorage.saveSystemMode(
-        newMode == SystemMode.cooling ? 'cooling' : 'heating',
-      );
-      if (newMode == SystemMode.heating) {
-        await AppStorage.saveCoolingSlope(cachedCoolingSlope);
-        await AppStorage.saveCoolingOffset(cachedCoolingOffset);
-      } else {
-        await AppStorage.saveSlope(cachedHeatingSlope);
-        await AppStorage.saveOffset(cachedHeatingOffset);
-      }
-    });
+    Future.microtask(_saveSettings);
   }
 
+  // ---------------------------------------------------------------------------
+  // RECORDS
+  // ---------------------------------------------------------------------------
+
   List<DailyRecordDTO> recordsSinceLastApply(SystemMode mode) {
-    final last =
-        mode == SystemMode.heating ? lastAiApplyHeating : lastAiApplyCooling;
+    final last = mode == SystemMode.heating
+        ? _settings.lastAiApplyHeating
+        : _settings.lastAiApplyCooling;
     if (last == null) return List<DailyRecordDTO>.from(records);
     final lastDay = DateTime(last.year, last.month, last.day);
     return records.where((r) {
@@ -224,8 +194,7 @@ class HomeNotifier extends ChangeNotifier {
   void startEditRecord(int sortedIndex) {
     final filtered = records;
     if (sortedIndex < 0 || sortedIndex >= filtered.length) return;
-    final targetDateIso = filtered[sortedIndex].dateIso;
-    startEditRecordByDateIso(targetDateIso);
+    startEditRecordByDateIso(filtered[sortedIndex].dateIso);
   }
 
   void startEditRecordByAllIndex(int allIndex) {
@@ -319,7 +288,7 @@ class HomeNotifier extends ChangeNotifier {
 
     if (editingIndex != null) {
       final originalDate = allRecords[editingIndex!].dateIso;
-      final updatedRecord = DailyRecordDTO(
+      allRecords[editingIndex!] = DailyRecordDTO(
         dateIso: originalDate,
         externalTemp: extTemp,
         internalTemps: internalTemps,
@@ -328,11 +297,8 @@ class HomeNotifier extends ChangeNotifier {
         note: noteController.text,
         mode: modeStr,
       );
-
-      allRecords[editingIndex!] = updatedRecord;
       editingIndex = null;
       notifyListeners();
-
       Fluttertoast.showToast(
         msg: 'Registrazione aggiornata!',
         backgroundColor: Colors.green.shade600,
@@ -340,8 +306,8 @@ class HomeNotifier extends ChangeNotifier {
         fontSize: 14,
       );
     } else {
-      final exists = allRecords.any(
-          (r) => r.dateIso == dateIso && r.mode == modeStr);
+      final exists =
+          allRecords.any((r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
         Fluttertoast.showToast(
           msg: 'Esiste già una registrazione per oggi. Modifica quella esistente.',
@@ -352,7 +318,7 @@ class HomeNotifier extends ChangeNotifier {
         return;
       }
 
-      final newRecord = DailyRecordDTO(
+      allRecords.add(DailyRecordDTO(
         dateIso: dateIso,
         externalTemp: extTemp,
         internalTemps: internalTemps,
@@ -360,11 +326,8 @@ class HomeNotifier extends ChangeNotifier {
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
         mode: modeStr,
-      );
-
-      allRecords.add(newRecord);
+      ));
       notifyListeners();
-
       Fluttertoast.showToast(
         msg: 'Registrazione salvata!',
         backgroundColor: Colors.green.shade600,
@@ -375,48 +338,43 @@ class HomeNotifier extends ChangeNotifier {
 
     await saveToHive();
     clearFields();
-    if (ctx != null && ctx.mounted) {
-      FocusScope.of(ctx).unfocus();
-    }
+    if (ctx != null && ctx.mounted) FocusScope.of(ctx).unfocus();
   }
 
   Future<void> deleteRecord(int sortedIndex) async {
-    final filtered = records;
-    final sortedRecords = List<DailyRecordDTO>.from(filtered);
-    sortedRecords.sort((a, b) {
-      final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
-      final db = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
-      return db.compareTo(da);
-    });
+    final sortedRecords = List<DailyRecordDTO>.from(records)
+      ..sort((a, b) {
+        final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+        final db = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+        return db.compareTo(da);
+      });
 
-    if (sortedIndex >= 0 && sortedIndex < sortedRecords.length) {
-      final targetDateIso = sortedRecords[sortedIndex].dateIso;
-      final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
-      final originalIndex = allRecords.indexWhere(
-          (r) => r.dateIso == targetDateIso && r.mode == modeStr);
+    if (sortedIndex < 0 || sortedIndex >= sortedRecords.length) return;
 
-      if (originalIndex != -1) {
-        allRecords.removeAt(originalIndex);
-        if (editingIndex == originalIndex) editingIndex = null;
-        notifyListeners();
+    final targetDateIso = sortedRecords[sortedIndex].dateIso;
+    final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
+    final originalIndex = allRecords
+        .indexWhere((r) => r.dateIso == targetDateIso && r.mode == modeStr);
 
-        await saveToHive();
-
-        Fluttertoast.showToast(
-          msg: 'Registrazione eliminata',
-          backgroundColor: Colors.red.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
-        );
-      }
+    if (originalIndex != -1) {
+      allRecords.removeAt(originalIndex);
+      if (editingIndex == originalIndex) editingIndex = null;
+      notifyListeners();
+      await saveToHive();
+      Fluttertoast.showToast(
+        msg: 'Registrazione eliminata',
+        backgroundColor: Colors.red.shade600,
+        textColor: Colors.white,
+        fontSize: 14,
+      );
     }
   }
 
   Future<void> deleteToday() async {
     final today = formatItalianDate(DateTime.now());
     final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
-    final index = allRecords.indexWhere(
-        (r) => r.dateIso == today && r.mode == modeStr);
+    final index =
+        allRecords.indexWhere((r) => r.dateIso == today && r.mode == modeStr);
 
     if (index != -1) {
       allRecords.removeAt(index);
@@ -442,16 +400,13 @@ class HomeNotifier extends ChangeNotifier {
   void duplicateFromYesterday() {
     if (records.isEmpty) return;
 
-    final sorted = List<DailyRecordDTO>.from(records);
-    sorted.sort((a, b) {
-      final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
-      final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
-      return dB.compareTo(dA);
-    });
-
-    if (sorted.isEmpty) return;
-
-    final last = sorted.first;
+    final last = (List<DailyRecordDTO>.from(records)
+          ..sort((a, b) {
+            final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+            final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+            return dB.compareTo(dA);
+          }))
+        .first;
 
     last.internalTemps.forEach((room, val) {
       if (internalTempControllers.containsKey(room)) {
@@ -459,8 +414,9 @@ class HomeNotifier extends ChangeNotifier {
       }
     });
 
-    comfortRatings.clear();
-    comfortRatings.addAll(last.comfortRatings);
+    comfortRatings
+      ..clear()
+      ..addAll(last.comfortRatings);
     notifyListeners();
 
     Fluttertoast.showToast(
@@ -470,6 +426,10 @@ class HomeNotifier extends ChangeNotifier {
       fontSize: 14,
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // AI CURVE
+  // ---------------------------------------------------------------------------
 
   void onApplyAiCurve() {
     final windowRecords = recordsSinceLastApply(currentMode);
@@ -499,33 +459,21 @@ class HomeNotifier extends ChangeNotifier {
     }
 
     final now = DateTime.now();
-    final nowIso = now.toIso8601String();
 
-    slope = suggestion.suggestedSlope;
-    offset = suggestion.suggestedOffset;
+    _settings = currentMode == SystemMode.heating
+        ? _settings.copyWith(
+            heatingSlope: suggestion.suggestedSlope,
+            heatingOffset: suggestion.suggestedOffset,
+            lastAiApplyHeating: now,
+          )
+        : _settings.copyWith(
+            coolingSlope: suggestion.suggestedSlope,
+            coolingOffset: suggestion.suggestedOffset,
+            lastAiApplyCooling: now,
+          );
 
-    if (currentMode == SystemMode.heating) {
-      lastAiApplyHeating = now;
-      cachedHeatingSlope = slope;
-      cachedHeatingOffset = offset;
-    } else {
-      lastAiApplyCooling = now;
-      cachedCoolingSlope = slope;
-      cachedCoolingOffset = offset;
-    }
     notifyListeners();
-
-    Future.microtask(() async {
-      if (currentMode == SystemMode.heating) {
-        await AppStorage.saveSlope(slope);
-        await AppStorage.saveOffset(offset);
-        await AppStorage.saveLastAiApplyHeatingIso(nowIso);
-      } else {
-        await AppStorage.saveCoolingSlope(slope);
-        await AppStorage.saveCoolingOffset(offset);
-        await AppStorage.saveLastAiApplyCoolingIso(nowIso);
-      }
-    });
+    Future.microtask(_saveSettings);
 
     Fluttertoast.showToast(
       msg: 'Nuova curva AI applicata!',
@@ -534,6 +482,10 @@ class HomeNotifier extends ChangeNotifier {
       fontSize: 14,
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // EXPORT
+  // ---------------------------------------------------------------------------
 
   Future<void> exportCsv() async {
     if (records.isEmpty) {
@@ -545,7 +497,6 @@ class HomeNotifier extends ChangeNotifier {
       );
       return;
     }
-
     try {
       final csv = ExportUtils.generateCsv(
         records,
@@ -553,12 +504,8 @@ class HomeNotifier extends ChangeNotifier {
         offset: offset,
         mode: currentMode,
       );
-
       final dateStr = DateTime.now().toIso8601String().split('T').first;
-      await ExportUtils.shareCsv(
-        csv,
-        'ClimaSense_$dateStr.csv',
-      );
+      await ExportUtils.shareCsv(csv, 'ClimaSense_$dateStr.csv');
     } catch (e) {
       Fluttertoast.showToast(
         msg: 'Errore export CSV: $e',
@@ -581,7 +528,6 @@ class HomeNotifier extends ChangeNotifier {
     }
 
     final int originalPage = currentPage;
-
     if (currentPage != 2) {
       currentPage = 2;
       notifyListeners();
@@ -590,9 +536,7 @@ class HomeNotifier extends ChangeNotifier {
     }
 
     try {
-      final chartImage = await captureChart();
-      final finalImage = chartImage ?? await captureChart();
-
+      final chartImage = await captureChart() ?? await captureChart();
       final windowRecords = recordsSinceLastApply(currentMode);
       final suggestion =
           computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
@@ -604,7 +548,7 @@ class HomeNotifier extends ChangeNotifier {
         offset: offset,
         suggestion: suggestion,
         stats: stats,
-        chartImage: finalImage,
+        chartImage: chartImage,
         currentMode: currentMode,
       );
     } catch (e) {
@@ -625,36 +569,35 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<Uint8List?> captureChart() async {
     try {
-      final RenderRepaintBoundary? boundary =
-          chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = chartKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       if (boundary == null) return null;
-
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData =
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData =
           await image.toByteData(format: ui.ImageByteFormat.png);
-
       return byteData?.buffer.asUint8List();
     } catch (_) {
       return null;
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // BACKUP / RESTORE
+  // ---------------------------------------------------------------------------
+
   Future<void> doBackup() async {
     try {
       final backupJson = ExportUtils.generateBackupJson(
         records: allRecords,
         mode: currentMode,
-        heatingSlope: cachedHeatingSlope,
-        heatingOffset: cachedHeatingOffset,
-        coolingSlope: cachedCoolingSlope,
-        coolingOffset: cachedCoolingOffset,
+        heatingSlope: _settings.heatingSlope,
+        heatingOffset: _settings.heatingOffset,
+        coolingSlope: _settings.coolingSlope,
+        coolingOffset: _settings.coolingOffset,
       );
-
       final date = DateTime.now().toIso8601String().split('T').first;
       await ExportUtils.shareBackupJsonString(
-        backupJson,
-        'ClimaSenseBackup_$date.json',
-      );
+          backupJson, 'ClimaSenseBackup_$date.json');
     } catch (e) {
       Fluttertoast.showToast(
         msg: 'Errore backup: $e',
@@ -671,12 +614,9 @@ class HomeNotifier extends ChangeNotifier {
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
-
       if (result == null || result.files.single.path == null) return;
 
-      final file = File(result.files.single.path!);
-      final jsonString = await file.readAsString();
-
+      final jsonString = await File(result.files.single.path!).readAsString();
       final backupData = jsonDecode(jsonString);
 
       if (backupData['metadata'] == null ||
@@ -687,13 +627,11 @@ class HomeNotifier extends ChangeNotifier {
 
       if (!context.mounted) return;
 
-      final bool? confirmed = await showDialog<bool>(
+      final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Conferma Ripristino'),
-          content: const Text(
-            'Sovrascriverà tutti i dati attuali. Continuare?',
-          ),
+          content: const Text('Sovrascriverà tutti i dati attuali. Continuare?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -701,10 +639,8 @@ class HomeNotifier extends ChangeNotifier {
             ),
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text(
-                'CONFERMA',
-                style: TextStyle(color: Colors.red),
-              ),
+              child: const Text('CONFERMA',
+                  style: TextStyle(color: Colors.red)),
             ),
           ],
         ),
@@ -713,28 +649,23 @@ class HomeNotifier extends ChangeNotifier {
       if (confirmed != true || !context.mounted) return;
 
       final settings = backupData['settings'] as Map<String, dynamic>;
-      final recordsData = backupData['records'] as List;
-
-      final newRecords =
-          recordsData.map((j) => DailyRecordDTO.fromJson(j)).toList();
+      final newRecords = (backupData['records'] as List)
+          .map((j) => DailyRecordDTO.fromJson(j))
+          .toList();
 
       await AppStorage.saveRecords(newRecords);
 
-      final double heatingSlope =
-          (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2;
-      final double heatingOffset =
-          (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0;
-      final double coolingSlope =
-          (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5;
-      final double coolingOffset =
-          (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0;
-
-      await AppStorage.saveSlope(heatingSlope);
-      await AppStorage.saveOffset(heatingOffset);
-      await AppStorage.saveCoolingSlope(coolingSlope);
-      await AppStorage.saveCoolingOffset(coolingOffset);
-
-      await AppStorage.saveSystemMode('heating');
+      await _settingsRepo.save(CurveSettings(
+        heatingSlope:
+            (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2,
+        heatingOffset:
+            (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
+        coolingSlope:
+            (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
+        coolingOffset:
+            (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
+        mode: SystemMode.heating,
+      ));
 
       await loadFromHive();
 
@@ -754,11 +685,14 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // NOTIFICHE
+  // ---------------------------------------------------------------------------
+
   Future<void> setNotificationTime(BuildContext context) async {
-    final now = TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
-      initialTime: now,
+      initialTime: TimeOfDay.now(),
       initialEntryMode: TimePickerEntryMode.input,
       builder: (ctx, child) => MediaQuery(
         data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
@@ -766,23 +700,25 @@ class HomeNotifier extends ChangeNotifier {
       ),
     );
 
-    if (!context.mounted) return;
+    if (!context.mounted || picked == null) return;
 
-    if (picked != null) {
-      await AppStorage.saveNotificationTime(picked);
-      await NotificationService.cancelAll();
-      await NotificationService.scheduleDailyReminder();
+    await AppStorage.saveNotificationTime(picked);
+    await NotificationService.cancelAll();
+    await NotificationService.scheduleDailyReminder();
 
-      if (context.mounted) {
-        Fluttertoast.showToast(
-          msg: 'Notifica impostata alle ${picked.format(context)}',
-          backgroundColor: Colors.blue.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
-        );
-      }
+    if (context.mounted) {
+      Fluttertoast.showToast(
+        msg: 'Notifica impostata alle ${picked.format(context)}',
+        backgroundColor: Colors.blue.shade600,
+        textColor: Colors.white,
+        fontSize: 14,
+      );
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // NAVIGAZIONE
+  // ---------------------------------------------------------------------------
 
   void onPageChanged(int index) {
     currentPage = index;
@@ -791,5 +727,14 @@ class HomeNotifier extends ChangeNotifier {
 
   void onNavDestinationSelected(int index) {
     pageController.jumpToPage(index);
+  }
+
+  // ---------------------------------------------------------------------------
+  // RESET CALIBRAZIONE (usato da HelpPage)
+  // ---------------------------------------------------------------------------
+
+  Future<void> resetCalibration() async {
+    await _settingsRepo.reset();
+    await loadFromHive();
   }
 }
