@@ -31,9 +31,9 @@ class DailyRecordDTO extends HiveObject {
     required this.internalTemps,
     required this.consumption,
     required this.comfortRatings,
-    required this.note,
+    String? note,
     this.mode = 'heating',
-  });
+  }) : note = note ?? '';
 
   factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
     return DailyRecordDTO(
@@ -77,7 +77,9 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       internalTemps: (fields[2] as Map).cast<String, double>(),
       consumption: fields[3] as double,
       comfortRatings: (fields[4] as Map).cast<String, String>(),
-      note: fields[5] as String,
+      // Compatibilità con record legacy che non hanno il campo note (field 5)
+      note: fields[5] as String? ?? '',
+      // Compatibilità con record legacy che non hanno il campo mode (field 6)
       mode: fields[6] as String? ?? 'heating',
     );
   }
@@ -108,7 +110,7 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-          other is DailyRecordDTOAdapter &&
-              runtimeType == other.runtimeType &&
-              typeId == other.typeId;
+      other is DailyRecordDTOAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }

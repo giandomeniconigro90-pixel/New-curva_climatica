@@ -5,23 +5,20 @@ import 'package:flutter/material.dart';
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
 import '../../../utils/date_utils.dart';
-import '../logic/curve_logic.dart'; // Importa CurveSuggestion e CurveStats
+import '../logic/curve_logic.dart';
 
 class ResultsPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
 
-  // Parametri opzionali per supportare la modalità "Avanzata" (chiamata da ClimateCurveHome)
   final double? slope;
   final double? offset;
   final CurveSuggestion? suggestion;
   final CurveStats? stats;
   final VoidCallback? onApplyAiCurve;
 
-  // Callbacks basate su indice (per compatibilità con DashboardHome, ecc.)
   final Function(int)? onDeleteRecord;
   final Function(int)? onEditRecord;
 
-  // NUOVE callbacks opzionali basate su dateIso (per evitare problemi con lista ordinata)
   final void Function(String dateIso)? onEditRecordByDateIso;
   final void Function(String dateIso)? onDeleteRecordByDateIso;
 
@@ -50,7 +47,6 @@ class _ResultsPageState extends State<ResultsPage> {
   @override
   void initState() {
     super.initState();
-    // Mostra UI avanzata (AI, grafici extra) solo se i parametri sono stati passati
     _showAdvancedStats = widget.slope != null && widget.suggestion != null;
     _loadCost();
   }
@@ -124,18 +120,17 @@ class _ResultsPageState extends State<ResultsPage> {
     if (widget.records.isEmpty) {
       return const Center(
         child: Text(
-          "Nessun dato registrato",
+          'Nessun dato registrato',
           style: TextStyle(color: Colors.grey),
         ),
       );
     }
 
-    // Ordina record per data decrescente
     final sortedRecords = List<DailyRecordDTO>.from(widget.records);
     sortedRecords.sort((a, b) {
       final da = parseItalianDateSafe(a.dateIso) ?? DateTime.now();
       final db = parseItalianDateSafe(b.dateIso) ?? DateTime.now();
-      return db.compareTo(da); // più recenti prima
+      return db.compareTo(da);
     });
 
     final lastRecord = sortedRecords.first;
@@ -149,9 +144,8 @@ class _ResultsPageState extends State<ResultsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- SEZIONE 1: Energy Wallet ---
               const Text(
-                "Riepilogo",
+                'Riepilogo',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
@@ -248,15 +242,13 @@ class _ResultsPageState extends State<ResultsPage> {
 
               const SizedBox(height: 24),
 
-              // --- SEZIONE 2: AI Suggestion (solo se modalità Avanzata) ---
               if (_showAdvancedStats && widget.suggestion != null) ...[
                 _buildAiCard(widget.suggestion!),
                 const SizedBox(height: 24),
               ],
 
-              // --- SEZIONE 3: Lista Storico ---
               const Text(
-                "Storico Recente",
+                'Storico Recente',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
@@ -286,7 +278,7 @@ class _ResultsPageState extends State<ResultsPage> {
 
                   return InkWell(
                     onTap: widget.onEditRecordByDateIso != null ||
-                        widget.onEditRecord != null
+                            widget.onEditRecord != null
                         ? handleEditTap
                         : null,
                     child: Container(
@@ -305,7 +297,6 @@ class _ResultsPageState extends State<ResultsPage> {
                       ),
                       child: Row(
                         children: [
-                          // DATA
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -315,7 +306,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             child: Column(
                               children: [
                                 Text(
-                                  "${date.day}",
+                                  '${date.day}',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
@@ -323,7 +314,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                   ),
                                 ),
                                 Text(
-                                  "${date.month}",
+                                  '${date.month}',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: Colors.blue.shade800,
@@ -332,21 +323,15 @@ class _ResultsPageState extends State<ResultsPage> {
                               ],
                             ),
                           ),
-
                           const SizedBox(width: 16),
-
-                          // DATI PRINCIPALI
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
                                   children: const [
-                                    Icon(
-                                      Icons.thermostat,
-                                      size: 14,
-                                      color: Colors.orange,
-                                    ),
+                                    Icon(Icons.thermostat,
+                                        size: 14, color: Colors.orange),
                                     SizedBox(width: 4),
                                   ],
                                 ),
@@ -354,21 +339,17 @@ class _ResultsPageState extends State<ResultsPage> {
                                   children: [
                                     const SizedBox(width: 18),
                                     Text(
-                                      "Esterna: ${r.externalTemp}\u00b0C",
+                                      'Esterna: ${r.externalTemp}\u00b0C',
                                       style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                          fontWeight: FontWeight.bold),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: const [
-                                    Icon(
-                                      Icons.flash_on,
-                                      size: 14,
-                                      color: Colors.amber,
-                                    ),
+                                    Icon(Icons.flash_on,
+                                        size: 14, color: Colors.amber),
                                     SizedBox(width: 4),
                                   ],
                                 ),
@@ -376,7 +357,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                   children: [
                                     const SizedBox(width: 18),
                                     Text(
-                                      "Consumo: ${r.consumption} kWh",
+                                      'Consumo: ${r.consumption} kWh',
                                       style: TextStyle(
                                         color: Colors.grey.shade600,
                                         fontSize: 12,
@@ -387,43 +368,31 @@ class _ResultsPageState extends State<ResultsPage> {
                               ],
                             ),
                           ),
-
-                          // NOTE
-                          if (r.note != null && r.note!.isNotEmpty)
+                          // Icona nota: note è non-nullable, basta .isNotEmpty
+                          if (r.note.isNotEmpty)
                             const Icon(
                               Icons.sticky_note_2_outlined,
                               color: Colors.grey,
                               size: 18,
                             ),
-
                           const SizedBox(width: 12),
-
-                          // Icona modifica
                           if (widget.onEditRecordByDateIso != null ||
                               widget.onEditRecord != null) ...[
                             IconButton(
                               onPressed: handleEditTap,
-                              icon: Icon(
-                                Icons.edit,
-                                size: 20,
-                                color: Colors.blue.shade600,
-                              ),
+                              icon: Icon(Icons.edit,
+                                  size: 20, color: Colors.blue.shade600),
                               tooltip: 'Modifica',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
                           ],
-
-                          // Icona elimina
                           if (widget.onDeleteRecordByDateIso != null ||
                               widget.onDeleteRecord != null) ...[
                             IconButton(
                               onPressed: handleDeleteTap,
-                              icon: Icon(
-                                Icons.delete_outline,
-                                size: 20,
-                                color: Colors.red.shade600,
-                              ),
+                              icon: Icon(Icons.delete_outline,
+                                  size: 20, color: Colors.red.shade600),
                               tooltip: 'Elimina',
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -443,8 +412,6 @@ class _ResultsPageState extends State<ResultsPage> {
   }
 
   Widget _buildAiCard(CurveSuggestion suggestion) {
-    // widget.records contiene già solo i record filtrati dopo l'ultima AI apply,
-    // passati correttamente da climate_curve_home.dart
     final int recentRecordsCount = widget.records.length;
     final bool hasEnoughData = recentRecordsCount >= 5;
 
@@ -486,7 +453,7 @@ class _ResultsPageState extends State<ResultsPage> {
               ),
               const SizedBox(width: 12),
               Text(
-                "AI Advisor",
+                'AI Advisor',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Colors.indigo.shade900,
@@ -495,10 +462,10 @@ class _ResultsPageState extends State<ResultsPage> {
               ),
             ],
           ),
-          // Badge rilevamenti
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: hasEnoughData
                   ? Colors.green.withOpacity(0.1)
@@ -547,15 +514,16 @@ class _ResultsPageState extends State<ResultsPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed:
-                hasEnoughData && !valuesAreEqual ? widget.onApplyAiCurve : null,
+                onPressed: hasEnoughData && !valuesAreEqual
+                    ? widget.onApplyAiCurve
+                    : null,
                 icon: const Icon(Icons.check_circle_outline, size: 18),
                 label: Text(
                   valuesAreEqual
-                      ? "Valori identici (nessuna modifica)"
+                      ? 'Valori identici (nessuna modifica)'
                       : hasEnoughData
-                      ? "Applica Curva (S:${suggestion.suggestedSlope.toStringAsFixed(1)} O:${suggestion.suggestedOffset.toStringAsFixed(1)})"
-                      : "Serve 5+ rilevamenti ($recentRecordsCount)",
+                          ? 'Applica Curva (S:${suggestion.suggestedSlope.toStringAsFixed(1)} O:${suggestion.suggestedOffset.toStringAsFixed(1)})'
+                          : 'Serve 5+ rilevamenti ($recentRecordsCount)',
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: hasEnoughData && !valuesAreEqual
