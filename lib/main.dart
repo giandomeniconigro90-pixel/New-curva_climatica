@@ -1,5 +1,6 @@
 // lib/main.dart
 
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:provider/provider.dart';
 import 'services/hive_storage.dart';
 import 'services/notification_service.dart';
 import 'services/theme_notifier.dart';
+import 'services/weather_service.dart';
 import 'features/splash/splash_screen.dart';
 
 void main() async {
@@ -24,8 +26,8 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Determina la brightness effettiva già prima del primo frame.
-  // Per ThemeMode.system leggiamo direttamente PlatformDispatcher.
+  _scheduleMidnightCacheClear();
+
   final ThemeMode savedMode = AppStorage.getThemeMode();
   final bool isDarkAtStart = _resolveIsDark(
     savedMode,
@@ -41,7 +43,22 @@ void main() async {
   );
 }
 
-/// Risolve se il tema effettivo è dark, tenendo conto di ThemeMode.system.
+/// Schedula la pulizia della cache meteo ogni mezzanotte.
+/// Il primo Timer scatta alla prossima mezzanotte locale,
+/// poi un Timer.periodic ripete ogni 24 ore.
+void _scheduleMidnightCacheClear() {
+  final now = DateTime.now();
+  final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+  final delay = nextMidnight.difference(now);
+
+  Timer(delay, () {
+    WeatherService.clearCache();
+    Timer.periodic(const Duration(hours: 24), (_) {
+      WeatherService.clearCache();
+    });
+  });
+}
+
 bool _resolveIsDark(ThemeMode mode, Brightness platformBrightness) {
   switch (mode) {
     case ThemeMode.dark:
@@ -71,8 +88,6 @@ class ClimaSenseApp extends StatelessWidget {
     final themeNotifier = context.watch<ThemeNotifier>();
     final themeMode = themeNotifier.themeMode;
 
-    // In-app: per ThemeMode.system leggiamo la brightness dal MediaQuery
-    // (aggiornato da Flutter quando il sistema cambia tema).
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
     final bool isDark = _resolveIsDark(themeMode, platformBrightness);
     _applyOverlay(isDark);
