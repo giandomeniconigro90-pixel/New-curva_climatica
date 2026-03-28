@@ -19,6 +19,7 @@ import '../../utils/date_utils.dart';
 import '../initial_settings/initial_settings_home.dart';
 
 import 'logic/curve_logic.dart';
+import 'logic/record_form_validator.dart';
 import 'utils/export_utils.dart';
 
 class HomeNotifier extends ChangeNotifier {
@@ -34,7 +35,6 @@ class HomeNotifier extends ChangeNotifier {
 
   List<DailyRecordDTO> allRecords = [];
 
-  /// Unico oggetto di stato per le impostazioni curva
   CurveSettings _settings = CurveSettings.defaults();
 
   List<DailyRecordDTO> get records {
@@ -42,7 +42,6 @@ class HomeNotifier extends ChangeNotifier {
     return allRecords.where((r) => r.mode == modeStr).toList();
   }
 
-  // Getter pubblici usati dalla UI e dalla logica
   double get slope => _settings.activeSlope;
   double get offset => _settings.activeOffset;
   SystemMode get currentMode => _settings.mode;
@@ -62,8 +61,6 @@ class HomeNotifier extends ChangeNotifier {
   }) {
     currentPage = initialPage;
     pageController = PageController(initialPage: currentPage);
-    // I valori iniziali passati dall'esterno sono usati solo prima
-    // che loadFromHive() sovrascriva con i dati persistiti.
     _settings = CurveSettings.defaults().copyWith(
       heatingSlope: initialSlope,
       heatingOffset: initialOffset,
@@ -131,7 +128,6 @@ class HomeNotifier extends ChangeNotifier {
   void toggleMode(bool value) {
     final newMode = value ? SystemMode.cooling : SystemMode.heating;
 
-    // Salva i valori attivi nella modalità corrente prima di switchare
     final updated = _settings.mode == SystemMode.heating
         ? _settings.copyWith(
             heatingSlope: slope,
@@ -222,10 +218,17 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<void> addRecord() async {
     final ctx = _context;
-    if (externalTempController.text.isEmpty ||
-        consumptionController.text.isEmpty) {
+
+    // --- Validazione delegata a RecordFormValidator ---
+    final result = RecordFormValidator.validate(
+      externalTempController: externalTempController,
+      consumptionController: consumptionController,
+      internalTempControllers: internalTempControllers,
+    );
+
+    if (result is RecordValidationError) {
       Fluttertoast.showToast(
-        msg: 'Errore: Temperatura Esterna e Consumo sono obbligatori!',
+        msg: result.message,
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -233,55 +236,7 @@ class HomeNotifier extends ChangeNotifier {
       return;
     }
 
-    for (var entry in internalTempControllers.entries) {
-      if (entry.value.text.trim().isEmpty) {
-        Fluttertoast.showToast(
-          msg: 'Errore: Manca la temperatura per ${entry.key}!',
-          backgroundColor: Colors.red.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
-        );
-        return;
-      }
-    }
-
-    final double? extTemp =
-        double.tryParse(externalTempController.text.replaceAll(',', '.'));
-    final double? cons =
-        double.tryParse(consumptionController.text.replaceAll(',', '.'));
-
-    if (extTemp == null || cons == null) {
-      Fluttertoast.showToast(
-        msg: 'Valori numerici non validi',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
-      );
-      return;
-    }
-
-    final Map<String, double> internalTemps = {};
-    bool conversionError = false;
-
-    internalTempControllers.forEach((room, controller) {
-      final val = double.tryParse(controller.text.replaceAll(',', '.'));
-      if (val != null) {
-        internalTemps[room] = val;
-      } else {
-        conversionError = true;
-      }
-    });
-
-    if (conversionError) {
-      Fluttertoast.showToast(
-        msg: 'Errore: Una delle temperature interne non è un numero valido.',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
-      );
-      return;
-    }
-
+    final ok = result as RecordValidationOk;
     final now = DateTime.now();
     final dateIso = formatItalianDate(now);
     final modeStr = currentMode == SystemMode.cooling ? 'cooling' : 'heating';
@@ -290,9 +245,9 @@ class HomeNotifier extends ChangeNotifier {
       final originalDate = allRecords[editingIndex!].dateIso;
       allRecords[editingIndex!] = DailyRecordDTO(
         dateIso: originalDate,
-        externalTemp: extTemp,
-        internalTemps: internalTemps,
-        consumption: cons,
+        externalTemp: ok.externalTemp,
+        internalTemps: ok.internalTemps,
+        consumption: ok.consumption,
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
         mode: modeStr,
@@ -310,7 +265,7 @@ class HomeNotifier extends ChangeNotifier {
           allRecords.any((r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
         Fluttertoast.showToast(
-          msg: 'Esiste già una registrazione per oggi. Modifica quella esistente.',
+          msg: 'Esiste gi\u00e0 una registrazione per oggi. Modifica quella esistente.',
           backgroundColor: Colors.orange.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -320,9 +275,9 @@ class HomeNotifier extends ChangeNotifier {
 
       allRecords.add(DailyRecordDTO(
         dateIso: dateIso,
-        externalTemp: extTemp,
-        internalTemps: internalTemps,
-        consumption: cons,
+        externalTemp: ok.externalTemp,
+        internalTemps: ok.internalTemps,
+        consumption: ok.consumption,
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
         mode: modeStr,
@@ -573,8 +528,7 @@ class HomeNotifier extends ChangeNotifier {
           as RenderRepaintBoundary?;
       if (boundary == null) return null;
       final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
     } catch (_) {
       return null;
@@ -631,7 +585,7 @@ class HomeNotifier extends ChangeNotifier {
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Conferma Ripristino'),
-          content: const Text('Sovrascriverà tutti i dati attuali. Continuare?'),
+          content: const Text('Sovrascriver\u00e0 tutti i dati attuali. Continuare?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -654,16 +608,11 @@ class HomeNotifier extends ChangeNotifier {
           .toList();
 
       await AppStorage.saveRecords(newRecords);
-
       await _settingsRepo.save(CurveSettings(
-        heatingSlope:
-            (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2,
-        heatingOffset:
-            (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
-        coolingSlope:
-            (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
-        coolingOffset:
-            (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
+        heatingSlope: (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2,
+        heatingOffset: (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
+        coolingSlope: (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
+        coolingOffset: (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
         mode: SystemMode.heating,
       ));
 
@@ -730,7 +679,7 @@ class HomeNotifier extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------------------
-  // RESET CALIBRAZIONE (usato da HelpPage)
+  // RESET CALIBRAZIONE
   // ---------------------------------------------------------------------------
 
   Future<void> resetCalibration() async {
