@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
+import '../../core/constants/room_constants.dart';
 import '../../models/daily_record_dto.dart';
 import '../../services/hive_storage.dart';
 import '../../services/notification_service.dart';
@@ -82,14 +83,7 @@ class ClimateCurveOfflineHomeState extends State<ClimateCurveOfflineHome> {
     slope = widget.initialSlope;
     offset = widget.initialOffset;
 
-    for (final room in [
-      'Soggiorno/Cucina',
-      'Bagno PT',
-      'Cameretta Stefano',
-      'Camera Giochi',
-      'Camera Mamma e Papà',
-      'Bagno 1P',
-    ]) {
+    for (final room in RoomConstants.defaultRooms) {
       internalTempControllers[room] = TextEditingController();
       comfortRatings[room] = 'ok';
     }
