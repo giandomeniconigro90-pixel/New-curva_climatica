@@ -48,6 +48,15 @@ class _InputPageState extends State<InputPage> {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
+  /// Restituisce il testo da mostrare come subtitle della tile Esterna.
+  String get _weatherSubtitle {
+    if (_weatherLocation != null) return _weatherLocation!;
+    final age = WeatherService.getCacheAgeMinutes();
+    if (age == null) return 'Benessere';
+    if (age == 0) return 'Adesso';
+    return '$age min fa';
+  }
+
   Future<void> _fetchWeather() async {
     setState(() => _isLoadingWeather = true);
     try {
@@ -96,7 +105,7 @@ class _InputPageState extends State<InputPage> {
 
     gridItems.add(_buildTadoTile(
       title: 'Esterna',
-      subtitle: _weatherLocation ?? 'Benessere',
+      subtitle: _weatherSubtitle,
       controller: widget.externalTempController,
       icon: Icons.cloud_sync,
       color: const Color(0xFF1976D2),

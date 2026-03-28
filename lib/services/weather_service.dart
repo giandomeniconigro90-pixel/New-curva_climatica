@@ -45,7 +45,7 @@ class WeatherService {
     final String? city = box.get(_keyCity);
     if (temp == null || city == null) return null;
 
-    if (kDebugMode) debugPrint('\u2600️ Cache meteo valida (aggiornata: $tsStr)');
+    if (kDebugMode) debugPrint('\u2600\ufe0f Cache meteo valida (aggiornata: $tsStr)');
     return WeatherData(temp: temp, locationName: city);
   }
 
@@ -56,7 +56,7 @@ class WeatherService {
     await box.put(_keyTimestamp, DateTime.now().toIso8601String());
   }
 
-  /// Invalida manualmente la cache (utile p.es. dopo un cambio di citt\u00e0).
+  /// Invalida manualmente la cache.
   static Future<void> clearCache() async {
     final box = Hive.box(_cacheBoxName);
     await box.delete(_keyTemp);
@@ -64,18 +64,28 @@ class WeatherService {
     await box.delete(_keyTimestamp);
   }
 
+  /// Restituisce quanti minuti fa è stata aggiornata la cache.
+  /// Restituisce null se la cache è vuota o scaduta.
+  static int? getCacheAgeMinutes() {
+    final box = Hive.box(_cacheBoxName);
+    final String? tsStr = box.get(_keyTimestamp);
+    if (tsStr == null) return null;
+    final DateTime? ts = DateTime.tryParse(tsStr);
+    if (ts == null) return null;
+    final age = DateTime.now().difference(ts);
+    if (age > cacheDuration) return null;
+    return age.inMinutes;
+  }
+
   // ---------------------------------------------------------------------------
   // FETCH
   // ---------------------------------------------------------------------------
 
-  /// Ottieni temperatura media giornaliera e nome citt\u00e0 attuale.
+  /// Ottieni temperatura media giornaliera e nome città attuale.
   ///
-  /// Se i dati in cache sono pi\u00f9 recenti di [cacheDuration] (30 min),
+  /// Se i dati in cache sono più recenti di [cacheDuration] (30 min),
   /// vengono restituiti direttamente senza accedere a GPS o rete.
-  ///
-  /// I log di debug non includono mai coordinate GPS (dati sensibili).
   static Future<WeatherData?> getDailyAvgTemp() async {
-    // Controlla cache prima di qualsiasi operazione costosa.
     final cached = _readCache();
     if (cached != null) return cached;
 
