@@ -3,29 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:provider/provider.dart';
 
-// Import Services
 import 'services/hive_storage.dart';
 import 'services/notification_service.dart';
-
-// Import Splash Screen (Percorso corretto)
+import 'services/theme_notifier.dart';
 import 'features/splash/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inizializza lo Storage (Hive)
   await AppStorage.init();
-
-  // Inizializza le Notifiche
   await NotificationService.init();
-
-  // Inizializza la localizzazione per le date (Italiano)
   await initializeDateFormatting('it_IT', null);
-
-  // --- CONFIGURAZIONE ORIENTAMENTO ---
-  // Abilitiamo tutte le orientazioni (Portrait + Landscape)
-  // Fondamentale per far funzionare correttamente la UI Tablet del Samsung Tab S6
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -33,7 +22,12 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  runApp(const ClimaSenseApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeNotifier.fromStorage(),
+      child: const ClimaSenseApp(),
+    ),
+  );
 }
 
 class ClimaSenseApp extends StatelessWidget {
@@ -41,12 +35,17 @@ class ClimaSenseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final themeMode = context.watch<ThemeNotifier>().themeMode;
+
     return MaterialApp(
       title: 'ClimaSense',
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
       theme: ThemeData(
-        // Impostazioni tema base
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF263238)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF263238),
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF5F5F7),
         appBarTheme: const AppBarTheme(
@@ -54,7 +53,17 @@ class ClimaSenseApp extends StatelessWidget {
           surfaceTintColor: Colors.transparent,
         ),
       ),
-      // Avvia dalla Splash Screen
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF263238),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        appBarTheme: const AppBarTheme(
+          surfaceTintColor: Colors.transparent,
+        ),
+      ),
       home: const SplashScreen(),
     );
   }

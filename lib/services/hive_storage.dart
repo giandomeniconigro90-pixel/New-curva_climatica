@@ -70,6 +70,26 @@ class AppStorage {
     return Hive.box(_boxName).get('systemMode', defaultValue: 'heating');
   }
 
+  // --- TEMA ---
+  static ThemeMode getThemeMode() {
+    final stored = Hive.box(_boxName).get('themeMode', defaultValue: 'system') as String;
+    switch (stored) {
+      case 'light': return ThemeMode.light;
+      case 'dark':  return ThemeMode.dark;
+      default:      return ThemeMode.system;
+    }
+  }
+
+  static Future<void> saveThemeMode(ThemeMode mode) async {
+    final String value;
+    switch (mode) {
+      case ThemeMode.light:  value = 'light'; break;
+      case ThemeMode.dark:   value = 'dark';  break;
+      default:               value = 'system';
+    }
+    await Hive.box(_boxName).put('themeMode', value);
+  }
+
   // --- AI FLAGS ---
   static Future<void> saveLastAiApplyHeatingIso(String? iso) async {
     final box = Hive.box(_boxName);
@@ -127,13 +147,10 @@ class AppStorage {
   }
 
   // --- STANZE ---
-
-  /// Salva la lista stanze personalizzata su Hive.
   static Future<void> saveRooms(List<String> rooms) async {
     await Hive.box(_boxName).put('customRooms', rooms);
   }
 
-  /// Legge la lista stanze. Se non ancora salvata, restituisce i default da RoomConstants.
   static List<String> getRooms() {
     final stored = Hive.box(_boxName).get('customRooms');
     if (stored == null) return List<String>.from(RoomConstants.defaultRooms);
