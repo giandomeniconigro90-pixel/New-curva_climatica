@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
@@ -71,7 +72,6 @@ class ExportUtils {
     final file = File(path);
     await file.writeAsString(csvData);
     await Share.shareXFiles([XFile(path)], text: 'Export Dati ClimaSense (CSV)');
-    // Pulizia file temporaneo dopo la condivisione
     _deleteFileSilently(file);
   }
 
@@ -151,23 +151,37 @@ class ExportUtils {
     final file = File(path);
     await file.writeAsBytes(await pdf.save());
     await Share.shareXFiles([XFile(path)], text: 'Export PDF');
-    // Pulizia file temporaneo dopo la condivisione
     _deleteFileSilently(file);
   }
 
   // ================= BACKUP JSON =================
-  static String generateBackupJson({
+
+  /// Legge la versione dell'app da [PackageInfo] in modo asincrono.
+  /// In caso di errore (es. piattaforma non supportata) restituisce 'unknown'.
+  static Future<String> _getAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return info.version; // es. "1.0.0"
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  /// Genera il JSON di backup includendo la versione reale dell'app.
+  /// È diventato [async] per leggere [PackageInfo].
+  static Future<String> generateBackupJson({
     required List<DailyRecordDTO> records,
     required SystemMode mode,
     required double heatingSlope,
     required double heatingOffset,
     required double coolingSlope,
     required double coolingOffset,
-  }) {
+  }) async {
+    final appVersion = await _getAppVersion();
     final Map<String, dynamic> backupMap = {
       'metadata': {
         'exportDate': DateTime.now().toIso8601String(),
-        'appVersion': '1.0.0', // TODO: collegare a package_info_plus
+        'appVersion': appVersion,
       },
       'settings': {
         'heatingSlope': heatingSlope,
@@ -188,7 +202,6 @@ class ExportUtils {
     final file = File(path);
     await file.writeAsString(jsonString);
     await Share.shareXFiles([XFile(path)], text: 'Backup JSON');
-    // Pulizia file temporaneo dopo la condivisione
     _deleteFileSilently(file);
   }
 
@@ -196,7 +209,7 @@ class ExportUtils {
   static void _deleteFileSilently(File file) {
     file.delete().catchError((e) {
       debugPrint('ExportUtils: impossibile eliminare file temp: $e');
-      return file; // catchError richiede di restituire lo stesso tipo
+      return file;
     });
   }
 }
