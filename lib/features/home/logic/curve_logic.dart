@@ -208,7 +208,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
     energyScore: 1.0,
     smartTip: tip,
     isLearning: false,
-    learningProgress: 5,
+    learningProgress: filteredRecords.length, // conteggio reale, non hardcoded
   );
 }
 
