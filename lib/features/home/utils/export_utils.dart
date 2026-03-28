@@ -9,21 +9,10 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:csv/csv.dart';
 
 import '../../../models/daily_record_dto.dart';
+import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart';
 
 class ExportUtils {
-
-  /// Parsa date in formato dd/MM/yyyy o ISO yyyy-MM-dd
-  static DateTime _parseDateSafe(String dateIso) {
-    final slashParts = dateIso.split('/');
-    if (slashParts.length == 3) {
-      final d = int.tryParse(slashParts[0]);
-      final m = int.tryParse(slashParts[1]);
-      final y = int.tryParse(slashParts[2]);
-      if (d != null && m != null && y != null) return DateTime(y, m, d);
-    }
-    return DateTime.tryParse(dateIso) ?? DateTime.now();
-  }
 
   // ================= CSV =================
   static String generateCsv(
@@ -58,7 +47,7 @@ class ExportUtils {
     }
     rows.add(header);
     for (var r in sortedRecords) {
-      final DateTime date = _parseDateSafe(r.dateIso);
+      final DateTime date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
       List<dynamic> row = [
         DateFormat('dd/MM/yyyy').format(date),
         r.externalTemp.toString().replaceAll('.', ','),
@@ -135,7 +124,7 @@ class ExportUtils {
               context: context,
               headers: <String>['Data', 'Ext \u00b0C', 'Consumo', 'Note'],
               data: sortedRecords.map((r) {
-                final date = _parseDateSafe(r.dateIso);
+                final date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
                 return [
                   DateFormat('dd/MM/yyyy').format(date),
                   '${r.externalTemp}',
