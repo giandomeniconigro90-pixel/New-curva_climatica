@@ -63,16 +63,16 @@ class ExportUtils {
     }
   }
 
+  /// Lancia eccezione in caso di errore: il chiamante deve gestirla
+  /// (tipicamente con Fluttertoast) per dare feedback all'utente.
   static Future<void> shareCsv(String csvData, String fileName) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final path = "${directory.path}/$fileName";
-      final file = File(path);
-      await file.writeAsString(csvData);
-      await Share.shareXFiles([XFile(path)], text: 'Export Dati ClimaSense (CSV)');
-    } catch (e) {
-      debugPrint("Errore share CSV: $e");
-    }
+    final directory = await getApplicationDocumentsDirectory();
+    final path = '${directory.path}/$fileName';
+    final file = File(path);
+    await file.writeAsString(csvData);
+    await Share.shareXFiles([XFile(path)], text: 'Export Dati ClimaSense (CSV)');
+    // Pulizia file temporaneo dopo la condivisione
+    _deleteFileSilently(file);
   }
 
   // ================= PDF =================
@@ -85,7 +85,15 @@ class ExportUtils {
     required Uint8List? chartImage,
     required SystemMode currentMode,
   }) async {
-    await _createPdf(records, slope: slope, offset: offset, suggestion: suggestion, stats: stats, chartImage: chartImage, currentMode: currentMode);
+    await _createPdf(
+      records,
+      slope: slope,
+      offset: offset,
+      suggestion: suggestion,
+      stats: stats,
+      chartImage: chartImage,
+      currentMode: currentMode,
+    );
   }
 
   static Future<void> _createPdf(
@@ -109,7 +117,7 @@ class ExportUtils {
             pw.Header(
               level: 0,
               child: pw.Text(
-                "ClimaSense Report",
+                'ClimaSense Report',
                 style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
               ),
             ),
@@ -139,10 +147,12 @@ class ExportUtils {
       ),
     );
     final directory = await getApplicationDocumentsDirectory();
-    final path = "${directory.path}/ClimaSense_Report.pdf";
+    final path = '${directory.path}/ClimaSense_Report.pdf';
     final file = File(path);
     await file.writeAsBytes(await pdf.save());
     await Share.shareXFiles([XFile(path)], text: 'Export PDF');
+    // Pulizia file temporaneo dopo la condivisione
+    _deleteFileSilently(file);
   }
 
   // ================= BACKUP JSON =================
@@ -155,26 +165,38 @@ class ExportUtils {
     required double coolingOffset,
   }) {
     final Map<String, dynamic> backupMap = {
-      "metadata": {"exportDate": DateTime.now().toIso8601String(), "appVersion": "1.0.0"},
-      "settings": {
-        "heatingSlope": heatingSlope, "heatingOffset": heatingOffset,
-        "coolingSlope": coolingSlope, "coolingOffset": coolingOffset,
+      'metadata': {
+        'exportDate': DateTime.now().toIso8601String(),
+        'appVersion': '1.0.0', // TODO: collegare a package_info_plus
       },
-      "records": records.map((e) => e.toJson()).toList(),
+      'settings': {
+        'heatingSlope': heatingSlope,
+        'heatingOffset': heatingOffset,
+        'coolingSlope': coolingSlope,
+        'coolingOffset': coolingOffset,
+      },
+      'records': records.map((e) => e.toJson()).toList(),
     };
     return jsonEncode(backupMap);
   }
 
+  /// Lancia eccezione in caso di errore: il chiamante deve gestirla.
   static Future<void> shareBackupJsonString(String jsonString, [String? fileName]) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final name = fileName ?? "ClimaSense_Backup.json";
-      final path = "${directory.path}/$name";
-      final file = File(path);
-      await file.writeAsString(jsonString);
-      await Share.shareXFiles([XFile(path)], text: 'Backup JSON');
-    } catch (e) {
-      debugPrint("Errore Backup: $e");
-    }
+    final directory = await getApplicationDocumentsDirectory();
+    final name = fileName ?? 'ClimaSense_Backup.json';
+    final path = '${directory.path}/$name';
+    final file = File(path);
+    await file.writeAsString(jsonString);
+    await Share.shareXFiles([XFile(path)], text: 'Backup JSON');
+    // Pulizia file temporaneo dopo la condivisione
+    _deleteFileSilently(file);
+  }
+
+  /// Elimina un file silenziosamente (best-effort, non blocca il flusso).
+  static void _deleteFileSilently(File file) {
+    file.delete().catchError((e) {
+      debugPrint('ExportUtils: impossibile eliminare file temp: $e');
+      return file; // catchError richiede di restituire lo stesso tipo
+    });
   }
 }
