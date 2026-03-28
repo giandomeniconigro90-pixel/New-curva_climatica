@@ -256,7 +256,7 @@ class HomeNotifier extends ChangeNotifier {
     if (externalTempController.text.isEmpty ||
         consumptionController.text.isEmpty) {
       Fluttertoast.showToast(
-        msg: "Errore: Temperatura Esterna e Consumo sono obbligatori!",
+        msg: 'Errore: Temperatura Esterna e Consumo sono obbligatori!',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -267,7 +267,7 @@ class HomeNotifier extends ChangeNotifier {
     for (var entry in internalTempControllers.entries) {
       if (entry.value.text.trim().isEmpty) {
         Fluttertoast.showToast(
-          msg: "Errore: Manca la temperatura per \${entry.key}!",
+          msg: 'Errore: Manca la temperatura per ${entry.key}!',
           backgroundColor: Colors.red.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -283,7 +283,7 @@ class HomeNotifier extends ChangeNotifier {
 
     if (extTemp == null || cons == null) {
       Fluttertoast.showToast(
-        msg: "Valori numerici non validi",
+        msg: 'Valori numerici non validi',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -305,7 +305,7 @@ class HomeNotifier extends ChangeNotifier {
 
     if (conversionError) {
       Fluttertoast.showToast(
-        msg: "Errore: Una delle temperature interne non è un numero valido.",
+        msg: 'Errore: Una delle temperature interne non è un numero valido.',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -334,7 +334,7 @@ class HomeNotifier extends ChangeNotifier {
       notifyListeners();
 
       Fluttertoast.showToast(
-        msg: "Registrazione aggiornata!",
+        msg: 'Registrazione aggiornata!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -344,7 +344,7 @@ class HomeNotifier extends ChangeNotifier {
           (r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
         Fluttertoast.showToast(
-          msg: "Esiste già una registrazione per oggi. Modifica quella esistente.",
+          msg: 'Esiste già una registrazione per oggi. Modifica quella esistente.',
           backgroundColor: Colors.orange.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -366,7 +366,7 @@ class HomeNotifier extends ChangeNotifier {
       notifyListeners();
 
       Fluttertoast.showToast(
-        msg: "Registrazione salvata!",
+        msg: 'Registrazione salvata!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -403,7 +403,7 @@ class HomeNotifier extends ChangeNotifier {
         await saveToHive();
 
         Fluttertoast.showToast(
-          msg: "Registrazione eliminata",
+          msg: 'Registrazione eliminata',
           backgroundColor: Colors.red.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -424,14 +424,14 @@ class HomeNotifier extends ChangeNotifier {
       notifyListeners();
       await saveToHive();
       Fluttertoast.showToast(
-        msg: "Registrazione eliminata",
+        msg: 'Registrazione eliminata',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
       );
     } else {
       Fluttertoast.showToast(
-        msg: "Nessuna registrazione trovata per oggi",
+        msg: 'Nessuna registrazione trovata per oggi',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -476,7 +476,7 @@ class HomeNotifier extends ChangeNotifier {
 
     if (windowRecords.length < 5) {
       Fluttertoast.showToast(
-        msg: "Serve almeno 5 rilevamenti nuovi (\${windowRecords.length}/5)",
+        msg: 'Serve almeno 5 rilevamenti nuovi (${windowRecords.length}/5)',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -490,7 +490,7 @@ class HomeNotifier extends ChangeNotifier {
     if ((suggestion.suggestedSlope - slope).abs() < 0.05 &&
         (suggestion.suggestedOffset - offset).abs() < 0.05) {
       Fluttertoast.showToast(
-        msg: "I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.",
+        msg: 'I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -528,7 +528,7 @@ class HomeNotifier extends ChangeNotifier {
     });
 
     Fluttertoast.showToast(
-      msg: "Nuova curva AI applicata!",
+      msg: 'Nuova curva AI applicata!',
       backgroundColor: Colors.indigo,
       textColor: Colors.white,
       fontSize: 14,
@@ -538,7 +538,7 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> exportCsv() async {
     if (records.isEmpty) {
       Fluttertoast.showToast(
-        msg: "Nessun dato da esportare!",
+        msg: 'Nessun dato da esportare!',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -554,13 +554,14 @@ class HomeNotifier extends ChangeNotifier {
         mode: currentMode,
       );
 
+      final dateStr = DateTime.now().toIso8601String().split('T').first;
       await ExportUtils.shareCsv(
         csv,
-        'ClimaSense_\${DateTime.now().toIso8601String().split('T')[0]}.csv',
+        'ClimaSense_$dateStr.csv',
       );
     } catch (e) {
       Fluttertoast.showToast(
-        msg: "Errore export CSV: \$e",
+        msg: 'Errore export CSV: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -571,7 +572,7 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> exportPdf() async {
     if (records.isEmpty) {
       Fluttertoast.showToast(
-        msg: "Nessun dato da esportare!",
+        msg: 'Nessun dato da esportare!',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -608,7 +609,7 @@ class HomeNotifier extends ChangeNotifier {
       );
     } catch (e) {
       Fluttertoast.showToast(
-        msg: "Errore export PDF: \$e",
+        msg: 'Errore export PDF: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -650,14 +651,13 @@ class HomeNotifier extends ChangeNotifier {
       );
 
       final date = DateTime.now().toIso8601String().split('T').first;
-
       await ExportUtils.shareBackupJsonString(
         backupJson,
-        'ClimaSenseBackup_\$date.json',
+        'ClimaSenseBackup_$date.json',
       );
     } catch (e) {
       Fluttertoast.showToast(
-        msg: "Errore backup: \$e",
+        msg: 'Errore backup: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -739,14 +739,14 @@ class HomeNotifier extends ChangeNotifier {
       await loadFromHive();
 
       Fluttertoast.showToast(
-        msg: "Ripristino completato!",
+        msg: 'Ripristino completato!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
       );
     } catch (e) {
       Fluttertoast.showToast(
-        msg: "Errore ripristino: \$e",
+        msg: 'Errore ripristino: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -775,7 +775,7 @@ class HomeNotifier extends ChangeNotifier {
 
       if (context.mounted) {
         Fluttertoast.showToast(
-          msg: "Notifica impostata alle \${picked.format(context)}",
+          msg: 'Notifica impostata alle ${picked.format(context)}',
           backgroundColor: Colors.blue.shade600,
           textColor: Colors.white,
           fontSize: 14,
