@@ -31,6 +31,10 @@ class AppStorage {
 
   /// Completa un atomic write interrotto: promuove i record in staging
   /// a record definitivi e poi rimuove le chiavi di staging.
+  ///
+  /// IMPORTANTE: usa [DailyRecordDTO.clone()] per creare una nuova istanza
+  /// senza legame alla vecchia chiave Hive, evitando il crash
+  /// "same HiveObject stored with two different keys".
   static Future<void> _recoverStagingIfNeeded() async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
     final stagingKeys = box.keys
@@ -46,7 +50,7 @@ class AppStorage {
     final definitiveKeys = box.keys
         .whereType<String>()
         .where((k) => !k.startsWith(_stagingPrefix))
-        .toList();
+        .toSet();
 
     if (definitiveKeys.isEmpty) {
       // Nessun record definitivo → promuovi dallo staging
@@ -54,15 +58,24 @@ class AppStorage {
         final record = box.get(sk);
         if (record != null) {
           final definitiveKey = sk.substring(_stagingPrefix.length);
-          await box.put(definitiveKey, record);
+          // Crea una nuova istanza: un HiveObject non può essere salvato
+          // con una chiave diversa da quella con cui è stato inserito.
+          final fresh = DailyRecordDTO(
+            dateIso: record.dateIso,
+            externalTemp: record.externalTemp,
+            internalTemps: Map<String, double>.from(record.internalTemps),
+            consumption: record.consumption,
+            comfortRatings: Map<String, String>.from(record.comfortRatings),
+            note: record.note,
+            mode: record.mode,
+          );
+          await box.put(definitiveKey, fresh);
         }
       }
     }
 
     // Rimuovi tutte le chiavi di staging
-    for (final sk in stagingKeys) {
-      await box.delete(sk);
-    }
+    await box.deleteAll(stagingKeys);
   }
 
   // --- APP STATE ---
@@ -222,7 +235,7 @@ class AppStorage {
   /// Sequenza:
   ///   1. Scrivi tutti i nuovi record con prefisso __new__  (staging)
   ///   2. Cancella i record definitivi esistenti
-  ///   3. Promuovi i record di staging a definitivi
+  ///   3. Promuovi i record di staging a definitivi (nuova istanza)
   ///   4. Cancella le chiavi di staging
   ///
   /// Se l'app crasha tra i passi 2 e 3, all'avvio successivo
@@ -230,9 +243,18 @@ class AppStorage {
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
 
-    // Passo 1 — staging
+    // Passo 1 — staging: salva copie fresh con chiave __new__
     final Map<String, DailyRecordDTO> staging = {
-      for (final r in records) _stagingKey(r): r,
+      for (final r in records)
+        _stagingKey(r): DailyRecordDTO(
+          dateIso: r.dateIso,
+          externalTemp: r.externalTemp,
+          internalTemps: Map<String, double>.from(r.internalTemps),
+          consumption: r.consumption,
+          comfortRatings: Map<String, String>.from(r.comfortRatings),
+          note: r.note,
+          mode: r.mode,
+        ),
     };
     await box.putAll(staging);
 
@@ -243,9 +265,18 @@ class AppStorage {
         .toList();
     await box.deleteAll(definitiveKeys);
 
-    // Passo 3 — promuovi staging
+    // Passo 3 — promuovi staging con nuove istanze
     final Map<String, DailyRecordDTO> promoted = {
-      for (final r in records) _recordKey(r): r,
+      for (final r in records)
+        _recordKey(r): DailyRecordDTO(
+          dateIso: r.dateIso,
+          externalTemp: r.externalTemp,
+          internalTemps: Map<String, double>.from(r.internalTemps),
+          consumption: r.consumption,
+          comfortRatings: Map<String, String>.from(r.comfortRatings),
+          note: r.note,
+          mode: r.mode,
+        ),
     };
     await box.putAll(promoted);
 
