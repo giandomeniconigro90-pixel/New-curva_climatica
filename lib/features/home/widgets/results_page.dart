@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../../models/daily_record_dto.dart';
-import '../../../services/hive_storage.dart';
 import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart';
 
@@ -35,80 +34,6 @@ class ResultsPage extends StatefulWidget {
 }
 
 class _ResultsPageState extends State<ResultsPage> {
-  double _costPerKwh = 0.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCost();
-  }
-
-  Future<void> _loadCost() async {
-    final cost = AppStorage.getCostPerKwh();
-    if (mounted) setState(() => _costPerKwh = cost);
-  }
-
-  Future<void> _editCost(BuildContext context) async {
-    final TextEditingController controller = TextEditingController(
-      text: _costPerKwh == 0 ? '' : _costPerKwh.toString(),
-    );
-    await showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.euro_symbol_rounded,
-                color: Theme.of(context).primaryColor),
-            const SizedBox(width: 10),
-            const Text('Costo Energia'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Inserisci il costo al kWh dalla tua bolletta.\nLascia vuoto o 0 per nascondere i costi.',
-              style: TextStyle(fontSize: 13, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 20),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              textAlign: TextAlign.center,
-              style:
-                  const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                suffixText: '\u20ac/kWh',
-                hintText: '0.00',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final text = controller.text.replaceAll(',', '.');
-              final newVal = double.tryParse(text) ?? 0.0;
-              await AppStorage.saveCostPerKwh(newVal);
-              if (!ctx.mounted) return;
-              setState(() => _costPerKwh = newVal);
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Salva'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _handleDelete(BuildContext context, DailyRecordDTO record) async {
     final date = parseItalianDateSafe(record.dateIso) ?? DateTime.now();
     final dateStr =
@@ -163,7 +88,7 @@ class _ResultsPageState extends State<ResultsPage> {
     }
   }
 
-  /// Restituisce icona e colore in base alla modalit\u00e0 pompa di calore.
+  /// Restituisce icona e colore in base alla modalità pompa di calore.
   (IconData, Color) _heatpumpIconAndColor(String mode) {
     switch (mode.toLowerCase()) {
       case 'riscaldamento':
@@ -193,9 +118,6 @@ class _ResultsPageState extends State<ResultsPage> {
         return db.compareTo(da);
       });
 
-    final lastRecord = sortedRecords.first;
-    final todayCost = lastRecord.consumption * _costPerKwh;
-
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -210,95 +132,6 @@ class _ResultsPageState extends State<ResultsPage> {
                     ),
               ),
               const SizedBox(height: 16),
-
-              // --- Energy Wallet ---
-              GestureDetector(
-                onTap: () => _editCost(context),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF263238),
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.wallet_rounded,
-                                  color: Colors.amberAccent, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                'ENERGY WALLET',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Icon(Icons.edit,
-                              color: Colors.white54, size: 18),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _costPerKwh > 0
-                                    ? '\u20ac ${todayCost.toStringAsFixed(2)}'
-                                    : 'Configura',
-                                style: const TextStyle(
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Text(
-                                'Spesa stimata oggi',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '${lastRecord.consumption} kWh',
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
 
               if (widget.suggestion != null) ...[
                 _buildAiCard(context, widget.suggestion!),
@@ -386,7 +219,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                         size: 14, color: Colors.orange),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Esterna: ${r.externalTemp}\u00b0C',
+                                      'Esterna: ${r.externalTemp}°C',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: cs.onSurface,
@@ -428,7 +261,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                     ],
                                   ),
                                 ],
-                                // Modalit\u00e0 pompa di calore (solo se presente)
+                                // Modalità pompa di calore (solo se presente)
                                 if (hasMode) ...[
                                   const SizedBox(height: 4),
                                   Row(
