@@ -16,9 +16,6 @@ class AppStorage {
   /// + trasporto 0.01473 + oneri 0.03030 + ASOS 0.02866 = 0.13537 × 1.10
   static const double _defaultCostPerKwh = 0.14891;
 
-  /// Valori legacy da sovrascrivere automaticamente con la migrazione.
-  static const Set<double> _legacyCostValues = {0.25, 0.28};
-
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
   static String _stagingKey(DailyRecordDTO r) => '$_stagingPrefix${_recordKey(r)}';
 
@@ -48,12 +45,13 @@ class AppStorage {
     await _migrateCostPerKwh();
   }
 
-  /// Migrazione: se il prezzo salvato è ancora un valore legacy (0.25 o 0.28)
-  /// lo sovrascrive con il valore reale A2A.
+  /// Migrazione: sovrascrive i valori legacy 0.25 e 0.28 con il prezzo A2A reale.
   static Future<void> _migrateCostPerKwh() async {
     final box = Hive.box(_boxName);
     final stored = box.get('costPerKwh');
-    if (stored == null || _legacyCostValues.contains(stored)) {
+    final isLegacy = stored == null ||
+        (stored is double && (stored == 0.25 || stored == 0.28));
+    if (isLegacy) {
       await box.put('costPerKwh', _defaultCostPerKwh);
     }
   }
