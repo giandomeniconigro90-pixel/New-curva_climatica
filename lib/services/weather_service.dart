@@ -4,9 +4,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
+
+// geocoding importato solo su piattaforme mobili
+import 'weather_service_geocoding.dart';
 
 class WeatherData {
   final double temp;
@@ -17,8 +19,6 @@ class WeatherData {
 
 class WeatherService {
   static const Duration _timeout = Duration(seconds: 10);
-
-  /// Durata massima della cache meteo locale.
   static const Duration cacheDuration = Duration(minutes: 30);
 
   static const String _cacheBoxName = 'clima_sense_box';
@@ -26,25 +26,16 @@ class WeatherService {
   static const String _keyCity = 'weatherCacheCity';
   static const String _keyTimestamp = 'weatherCacheTimestamp';
 
-  // ---------------------------------------------------------------------------
-  // CACHE
-  // ---------------------------------------------------------------------------
-
-  /// Restituisce i dati meteo dalla cache se ancora validi, altrimenti null.
   static WeatherData? _readCache() {
     final box = Hive.box(_cacheBoxName);
     final String? tsStr = box.get(_keyTimestamp);
     if (tsStr == null) return null;
-
     final DateTime? ts = DateTime.tryParse(tsStr);
     if (ts == null) return null;
-
     if (DateTime.now().difference(ts) > cacheDuration) return null;
-
     final double? temp = box.get(_keyTemp);
     final String? city = box.get(_keyCity);
     if (temp == null || city == null) return null;
-
     if (kDebugMode) debugPrint('\u2600\ufe0f Cache meteo valida (aggiornata: $tsStr)');
     return WeatherData(temp: temp, locationName: city);
   }
@@ -56,7 +47,6 @@ class WeatherService {
     await box.put(_keyTimestamp, DateTime.now().toIso8601String());
   }
 
-  /// Invalida manualmente la cache.
   static Future<void> clearCache() async {
     final box = Hive.box(_cacheBoxName);
     await box.delete(_keyTemp);
@@ -64,8 +54,6 @@ class WeatherService {
     await box.delete(_keyTimestamp);
   }
 
-  /// Restituisce quanti minuti fa è stata aggiornata la cache.
-  /// Restituisce null se la cache è vuota o scaduta.
   static int? getCacheAgeMinutes() {
     final box = Hive.box(_cacheBoxName);
     final String? tsStr = box.get(_keyTimestamp);
@@ -77,14 +65,11 @@ class WeatherService {
     return age.inMinutes;
   }
 
-  // ---------------------------------------------------------------------------
-  // FETCH
-  // ---------------------------------------------------------------------------
+  static bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
-  /// Ottieni temperatura media giornaliera e nome città attuale.
-  ///
-  /// Se i dati in cache sono più recenti di [cacheDuration] (30 min),
-  /// vengono restituiti direttamente senza accedere a GPS o rete.
   static Future<WeatherData?> getDailyAvgTemp() async {
     final cached = _readCache();
     if (cached != null) return cached;
@@ -113,23 +98,20 @@ class WeatherService {
       ).timeout(_timeout);
       if (kDebugMode) debugPrint('\ud83c\udf0d Posizione ottenuta');
 
+      // Geocoding non supportato su desktop: si usa la label coordinate
       String cityName = 'Tua Posizione';
-      try {
-        final placemarks = await placemarkFromCoordinates(
+      if (!_isDesktop) {
+        cityName = await GeocodingHelper.cityFromCoordinates(
           position.latitude,
           position.longitude,
-        ).timeout(_timeout);
-        if (placemarks.isNotEmpty) {
-          final p = placemarks.first;
-          cityName = p.locality ??
-              p.subAdministrativeArea ??
-              p.administrativeArea ??
-              'Tua Posizione';
-        }
-        if (kDebugMode) debugPrint('\ud83c\udf0d Citt\u00e0 rilevata: $cityName');
-      } catch (e) {
-        if (kDebugMode) debugPrint('\ud83c\udf0d Errore geocoding: $e');
+          timeout: _timeout,
+        );
+      } else {
+        final lat = position.latitude.toStringAsFixed(2);
+        final lon = position.longitude.toStringAsFixed(2);
+        cityName = '$lat\u00b0N, $lon\u00b0E';
       }
+      if (kDebugMode) debugPrint('\ud83c\udf0d Localit\u00e0: $cityName');
 
       final url = Uri.parse(
         'https://api.open-meteo.com/v1/forecast'
