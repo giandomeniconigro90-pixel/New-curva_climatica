@@ -66,6 +66,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
         final bool isCooling = notifier.currentMode == SystemMode.cooling;
 
         final List<Widget> pages = [
+          // 0 — Registra
           InputPage(
             externalTempController: notifier.externalTempController,
             consumptionController: notifier.consumptionController,
@@ -87,6 +88,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onExportPdf: notifier.exportPdf,
             onDeleteToday: notifier.deleteToday,
           ),
+          // 1 — AI Storico
           ResultsPage(
             records: notifier.records,
             slope: notifier.slope,
@@ -97,6 +99,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onEditRecordByDateIso: notifier.startEditRecordByDateIso,
             onDeleteRecordByDateIso: notifier.deleteRecordByDateIso,
           ),
+          // 2 — Grafico
           CurveChartPage(
             slope: notifier.slope,
             offset: notifier.offset,
@@ -104,6 +107,9 @@ class _ClimateCurveHomeView extends StatelessWidget {
             windowRecords: windowRecords,
             chartKey: notifier.chartKey,
           ),
+          // 3 — Energia & Costi
+          EnergyPage(records: notifier.records),
+          // 4 — Guida
           HelpPage(
             onManageRooms: () => notifier.manageRooms(context),
             onResetCalibration: () async {
@@ -144,8 +150,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onExportCsv: notifier.exportCsv,
             onExportPdf: notifier.exportPdf,
           ),
-          // Tab 4 — Energia & Costi
-          EnergyPage(records: notifier.records),
         ];
 
         return Scaffold(
@@ -177,15 +181,15 @@ class _ClimateCurveHomeView extends StatelessWidget {
                 ),
                 _TabItem(
                   index: 3,
-                  icon: Icons.help_outline_rounded,
-                  label: 'Guida',
+                  icon: Icons.bolt_outlined,
+                  label: 'Energia',
                   currentPage: notifier.currentPage,
                   onTap: notifier.onNavDestinationSelected,
                 ),
                 _TabItem(
                   index: 4,
-                  icon: Icons.bolt_outlined,
-                  label: 'Energia',
+                  icon: Icons.help_outline_rounded,
+                  label: 'Guida',
                   currentPage: notifier.currentPage,
                   onTap: notifier.onNavDestinationSelected,
                 ),
