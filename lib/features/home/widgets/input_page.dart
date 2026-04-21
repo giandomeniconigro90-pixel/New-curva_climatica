@@ -2,10 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
-import 'package:fluttertoast/fluttertoast.dart';
 import '../../../../models/daily_record_dto.dart';
 import '../../../../services/hive_storage.dart';
 import '../../../../services/weather_service.dart';
+import '../../../../utils/app_toast.dart';
 import 'room_control_page.dart';
 
 class InputPage extends StatefulWidget {
@@ -66,11 +66,10 @@ class _InputPageState extends State<InputPage> {
   static const Color _colorRete         = Color(0xFFF57C00);
   static const Color _colorFotovoltaico = Color(0xFFFDD835);
 
-  bool get _isDesktop {
-    return defaultTargetPlatform == TargetPlatform.windows ||
-        defaultTargetPlatform == TargetPlatform.macOS ||
-        defaultTargetPlatform == TargetPlatform.linux;
-  }
+  bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
 
   Color _cardColor(BuildContext context, Color base) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -95,28 +94,25 @@ class _InputPageState extends State<InputPage> {
           widget.externalTempController.text = result.temp.toStringAsFixed(1);
           _weatherLocation = result.locationName;
         });
-        Fluttertoast.showToast(
-          msg: 'Meteo aggiornato da $_weatherLocation',
-          backgroundColor: Colors.green.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
+        AppToast.show(
+          'Meteo aggiornato da $_weatherLocation',
+          context: context,
+          level: ToastLevel.success,
         );
       } else {
-        Fluttertoast.showToast(
-          msg: 'Meteo non disponibile. Controlla GPS e connessione.',
-          backgroundColor: Colors.orange.shade700,
-          textColor: Colors.white,
-          fontSize: 14,
-          toastLength: Toast.LENGTH_LONG,
+        AppToast.show(
+          'Meteo non disponibile. Controlla GPS e connessione.',
+          context: context,
+          level: ToastLevel.warning,
+          duration: const Duration(seconds: 5),
         );
       }
     } catch (e) {
       if (mounted) {
-        Fluttertoast.showToast(
-          msg: 'Errore recupero meteo',
-          backgroundColor: Colors.red.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
+        AppToast.show(
+          'Errore recupero meteo',
+          context: context,
+          level: ToastLevel.error,
         );
       }
     } finally {
@@ -129,79 +125,18 @@ class _InputPageState extends State<InputPage> {
     final cs = Theme.of(context).colorScheme;
     final bool hasGridMeter = AppStorage.getHasGridMeter();
     final bool hasPv        = AppStorage.getHasPv();
-
     final List<Widget> gridItems = [];
 
-    gridItems.add(_buildTadoTile(
-      title: 'Esterna',
-      subtitle: _weatherSubtitle,
-      controller: widget.externalTempController,
-      icon: Icons.cloud_sync,
-      color: _colorEsterna,
-      isRoom: false,
-      isWeatherTile: true,
-      suffix: '\u00b0',
-    ));
-
-    gridItems.add(_buildTadoTile(
-      title: 'Consumo',
-      subtitle: 'ShinePhone',
-      controller: widget.consumptionController,
-      icon: Icons.eco_outlined,
-      color: _colorConsumo,
-      isRoom: false,
-      suffix: 'kWh',
-    ));
-
-    gridItems.add(_buildTadoTile(
-      title: 'ACS',
-      subtitle: 'Cozytouch',
-      controller: widget.consumptionAcsController,
-      icon: Icons.water_drop_outlined,
-      color: _colorAcs,
-      isRoom: false,
-      suffix: 'kWh',
-    ));
-
-    if (hasGridMeter)
-      gridItems.add(_buildTadoTile(
-        title: 'Rete',
-        subtitle: 'ShinePhone',
-        controller: widget.energyFromGridController,
-        icon: Icons.electrical_services_outlined,
-        color: _colorRete,
-        isRoom: false,
-        suffix: 'kWh',
-      ));
-
-    if (hasPv)
-      gridItems.add(_buildTadoTile(
-        title: 'Fotovoltaico',
-        subtitle: 'ShinePhone',
-        controller: widget.pvProductionController,
-        icon: Icons.wb_sunny_outlined,
-        color: _colorFotovoltaico,
-        isRoom: false,
-        suffix: 'kWh',
-      ));
-
+    gridItems.add(_buildTadoTile(title: 'Esterna', subtitle: _weatherSubtitle, controller: widget.externalTempController, icon: Icons.cloud_sync, color: _colorEsterna, isRoom: false, isWeatherTile: true, suffix: '\u00b0'));
+    gridItems.add(_buildTadoTile(title: 'Consumo', subtitle: 'ShinePhone', controller: widget.consumptionController, icon: Icons.eco_outlined, color: _colorConsumo, isRoom: false, suffix: 'kWh'));
+    gridItems.add(_buildTadoTile(title: 'ACS', subtitle: 'Cozytouch', controller: widget.consumptionAcsController, icon: Icons.water_drop_outlined, color: _colorAcs, isRoom: false, suffix: 'kWh'));
+    if (hasGridMeter) gridItems.add(_buildTadoTile(title: 'Rete', subtitle: 'ShinePhone', controller: widget.energyFromGridController, icon: Icons.electrical_services_outlined, color: _colorRete, isRoom: false, suffix: 'kWh'));
+    if (hasPv) gridItems.add(_buildTadoTile(title: 'Fotovoltaico', subtitle: 'ShinePhone', controller: widget.pvProductionController, icon: Icons.wb_sunny_outlined, color: _colorFotovoltaico, isRoom: false, suffix: 'kWh'));
     gridItems.add(_buildHeatpumpModeTile());
     gridItems.add(_buildBoilerModeTile());
-
     for (final room in widget.rooms) {
-      final ctrl = widget.internalTempControllers[room] ??
-          (widget.internalTempControllers[room] = TextEditingController());
-      gridItems.add(_buildTadoTile(
-        title: room,
-        subtitle: widget.isCooling ? 'Raffrescamento' : 'Riscaldamento',
-        controller: ctrl,
-        icon: null,
-        color: widget.isCooling
-            ? const Color(0xFF4DB6AC)
-            : const Color(0xFFFFB74D),
-        isRoom: true,
-        suffix: '\u00b0',
-      ));
+      final ctrl = widget.internalTempControllers[room] ?? (widget.internalTempControllers[room] = TextEditingController());
+      gridItems.add(_buildTadoTile(title: room, subtitle: widget.isCooling ? 'Raffrescamento' : 'Riscaldamento', controller: ctrl, icon: null, color: widget.isCooling ? const Color(0xFF4DB6AC) : const Color(0xFFFFB74D), isRoom: true, suffix: '\u00b0'));
     }
 
     final screenWidth = MediaQuery.of(context).size.width;
@@ -211,14 +146,8 @@ class _InputPageState extends State<InputPage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: widget.onAddRecord,
         backgroundColor: cs.primary,
-        icon: Icon(
-          widget.isEditing ? Icons.save_as : Icons.check,
-          color: cs.onPrimary,
-        ),
-        label: Text(
-          widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
-          style: TextStyle(fontWeight: FontWeight.bold, color: cs.onPrimary),
-        ),
+        icon: Icon(widget.isEditing ? Icons.save_as : Icons.check, color: cs.onPrimary),
+        label: Text(widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO', style: TextStyle(fontWeight: FontWeight.bold, color: cs.onPrimary)),
       ),
       body: CustomScrollView(
         slivers: [
@@ -228,20 +157,11 @@ class _InputPageState extends State<InputPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'Home',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
+                  Text('Home', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
                   if (widget.records.isNotEmpty)
                     Tooltip(
                       message: "Copia dall'ultima registrazione",
-                      child: IconButton(
-                        icon: Icon(Icons.copy_all_outlined, color: cs.onSurface),
-                        onPressed: widget.onDuplicateFromYesterday,
-                      ),
+                      child: IconButton(icon: Icon(Icons.copy_all_outlined, color: cs.onSurface), onPressed: widget.onDuplicateFromYesterday),
                     ),
                 ],
               ),
@@ -251,22 +171,9 @@ class _InputPageState extends State<InputPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverGrid(
               gridDelegate: isPhone
-                  ? const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 1.35,
-                    )
-                  : const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 200,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 1.1,
-                    ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => gridItems[index],
-                childCount: gridItems.length,
-              ),
+                  ? const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 1.35)
+                  : const SliverGridDelegateWithMaxCrossAxisExtent(maxCrossAxisExtent: 200, mainAxisSpacing: 16, crossAxisSpacing: 16, childAspectRatio: 1.1),
+              delegate: SliverChildBuilderDelegate((context, index) => gridItems[index], childCount: gridItems.length),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
@@ -283,29 +190,14 @@ class _InputPageState extends State<InputPage> {
         IconData icon;
         String label;
         switch (mode) {
-          case 'riscaldamento':
-            baseColor = const Color(0xFFFF9800);
-            icon = Icons.local_fire_department_outlined;
-            label = 'Riscaldamento';
-            break;
-          case 'raffrescamento':
-            baseColor = const Color(0xFF29B6F6);
-            icon = Icons.ac_unit;
-            label = 'Raffrescamento';
-            break;
-          default:
-            baseColor = const Color(0xFF90A4AE);
-            icon = Icons.power_settings_new;
-            label = 'Spenta';
+          case 'riscaldamento': baseColor = const Color(0xFFFF9800); icon = Icons.local_fire_department_outlined; label = 'Riscaldamento'; break;
+          case 'raffrescamento': baseColor = const Color(0xFF29B6F6); icon = Icons.ac_unit; label = 'Raffrescamento'; break;
+          default: baseColor = const Color(0xFF90A4AE); icon = Icons.power_settings_new; label = 'Spenta';
         }
         return _buildDropdownTile(
           color: _cardColor(context, baseColor),
           icon: icon,
-          emoji: label == 'Raffrescamento'
-              ? '\u2744\uFE0F'
-              : label == 'Riscaldamento'
-                  ? '\uD83D\uDD25'
-                  : '\u26D4',
+          emoji: label == 'Raffrescamento' ? '\u2744\uFE0F' : label == 'Riscaldamento' ? '\uD83D\uDD25' : '\u26D4',
           subtitle: 'Comfort Home',
           notifier: widget.heatpumpModeNotifier,
           items: const [
@@ -326,20 +218,9 @@ class _InputPageState extends State<InputPage> {
         IconData icon;
         String emoji;
         switch (mode) {
-          case 'accesa':
-            baseColor = const Color(0xFFE53935);
-            icon = Icons.local_fire_department;
-            emoji = '\uD83D\uDD25';
-            break;
-          case 'standby':
-            baseColor = const Color(0xFFFFB300);
-            icon = Icons.pause_circle_outline;
-            emoji = '\u23F8';
-            break;
-          default:
-            baseColor = const Color(0xFF78909C);
-            icon = Icons.power_settings_new;
-            emoji = '\u26D4';
+          case 'accesa': baseColor = const Color(0xFFE53935); icon = Icons.local_fire_department; emoji = '\uD83D\uDD25'; break;
+          case 'standby': baseColor = const Color(0xFFFFB300); icon = Icons.pause_circle_outline; emoji = '\u23F8'; break;
+          default: baseColor = const Color(0xFF78909C); icon = Icons.power_settings_new; emoji = '\u26D4';
         }
         return _buildDropdownTile(
           color: _cardColor(context, baseColor),
@@ -370,13 +251,7 @@ class _InputPageState extends State<InputPage> {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.25),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: color.withOpacity(0.25), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -393,14 +268,7 @@ class _InputPageState extends State<InputPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                subtitle,
-                style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 9,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 9, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
               DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -408,15 +276,9 @@ class _InputPageState extends State<InputPage> {
                   isExpanded: true,
                   dropdownColor: color,
                   iconEnabledColor: Colors.white,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                   items: items,
-                  onChanged: (value) {
-                    if (value != null) notifier.value = value;
-                  },
+                  onChanged: (value) { if (value != null) notifier.value = value; },
                 ),
               ),
             ],
@@ -439,11 +301,9 @@ class _InputPageState extends State<InputPage> {
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
-        final double? val =
-            double.tryParse(controller.text.replaceAll(',', '.'));
+        final double? val = double.tryParse(controller.text.replaceAll(',', '.'));
         final String displayVal = val != null ? val.toStringAsFixed(1) : '--';
         final Color effectiveColor = _cardColor(context, color);
-
         return GestureDetector(
           onTap: () => _openControlPage(title, controller, suffix == 'kWh', isRoom, color),
           child: Container(
@@ -451,13 +311,7 @@ class _InputPageState extends State<InputPage> {
             decoration: BoxDecoration(
               color: effectiveColor,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: effectiveColor.withOpacity(0.25),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: effectiveColor.withOpacity(0.25), blurRadius: 4, offset: const Offset(0, 2))],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -471,25 +325,10 @@ class _InputPageState extends State<InputPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            displayVal,
-                            style: const TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              height: 1.0,
-                            ),
-                          ),
+                          Text(displayVal, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0)),
                           Padding(
                             padding: const EdgeInsets.only(top: 2, left: 2),
-                            child: Text(
-                              suffix,
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.white.withOpacity(0.8),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                            child: Text(suffix, style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold)),
                           ),
                         ],
                       )
@@ -504,55 +343,24 @@ class _InputPageState extends State<InputPage> {
                           child: Padding(
                             padding: const EdgeInsets.all(4.0),
                             child: _isLoadingWeather
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.cloud_sync,
-                                    size: 28,
-                                    color: Colors.white.withOpacity(0.8),
-                                  ),
+                                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : Icon(Icons.cloud_sync, size: 28, color: Colors.white.withOpacity(0.8)),
                           ),
                         ),
                       )
                     else if (!isRoom && val == null)
                       Align(
                         alignment: Alignment.topRight,
-                        child: Icon(
-                          icon ?? Icons.help_outline,
-                          size: 36,
-                          color: Colors.white.withOpacity(0.3),
-                        ),
+                        child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
                       ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 9, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 1),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ],
@@ -563,16 +371,9 @@ class _InputPageState extends State<InputPage> {
     );
   }
 
-  void _openControlPage(
-    String title,
-    TextEditingController controller,
-    bool isConsumption,
-    bool isRoom,
-    Color cardColor,
-  ) {
+  void _openControlPage(String title, TextEditingController controller, bool isConsumption, bool isRoom, Color cardColor) {
     final shortestSide = MediaQuery.of(context).size.shortestSide;
     final bool isTablet = shortestSide >= 550;
-
     final roomPage = RoomControlPage(
       title: title,
       controller: controller,
@@ -583,9 +384,7 @@ class _InputPageState extends State<InputPage> {
       isCooling: widget.isCooling,
       cardColor: cardColor,
     );
-
     if (isTablet) {
-      // Tablet: dialog centrato
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
@@ -593,32 +392,21 @@ class _InputPageState extends State<InputPage> {
           insetPadding: const EdgeInsets.all(10),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(24),
-            child: SizedBox(
-              width: 450,
-              height: MediaQuery.of(context).size.height * 0.98,
-              child: roomPage,
-            ),
+            child: SizedBox(width: 450, height: MediaQuery.of(context).size.height * 0.98, child: roomPage),
           ),
         ),
       );
     } else if (_isDesktop) {
-      // Desktop (Windows/macOS/Linux): MaterialPageRoute semplice, nessuna animazione custom
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => roomPage),
-      );
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => roomPage));
     } else {
-      // Mobile: animazione slide dal basso originale
       Navigator.of(context).push(
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) => roomPage,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const begin = Offset(0.0, 1.0);
             const end = Offset.zero;
-            const curve = Curves.easeOutQuint;
-            final tween =
-                Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            return SlideTransition(
-                position: animation.drive(tween), child: child);
+            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.easeOutQuint));
+            return SlideTransition(position: animation.drive(tween), child: child);
           },
         ),
       );
