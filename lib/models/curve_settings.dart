@@ -22,9 +22,9 @@ class CurveSettings {
   });
 
   /// Valori di default al primo avvio.
-  /// heatingSlope 0.8 ottimizzato per casa X-LAM ben isolata con VMC+recuperatore.
+  /// heatingSlope 1.0 ottimizzato per casa X-LAM con fan coil e VMC+recuperatore.
   factory CurveSettings.defaults() => const CurveSettings(
-        heatingSlope: 0.8,
+        heatingSlope: 1.0,
         heatingOffset: 0.0,
         coolingSlope: 0.5,
         coolingOffset: 0.0,
