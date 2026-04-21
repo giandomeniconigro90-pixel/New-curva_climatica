@@ -32,6 +32,12 @@ class DailyRecordDTO extends HiveObject {
   @HiveField(7)
   final String? heatpumpMode;
 
+  /// Consumo giornaliero acqua calda sanitaria in kWh (Atlantic Calypso VM 150).
+  /// Leggibile dall'app Cozytouch (Atlantic).
+  /// Null se non inserito dall'utente.
+  @HiveField(8)
+  final double? consumptionACS;
+
   /// Valori ammessi per il campo [mode].
   static const Set<String> validModes = {'heating', 'cooling'};
 
@@ -51,6 +57,7 @@ class DailyRecordDTO extends HiveObject {
     String? note,
     String? mode,
     this.heatpumpMode,
+    this.consumptionACS,
   })  : note = note ?? '',
         mode = (mode != null && validModes.contains(mode)) ? mode : 'heating';
 
@@ -65,6 +72,8 @@ class DailyRecordDTO extends HiveObject {
     String? mode,
     String? heatpumpMode,
     bool clearHeatpumpMode = false,
+    double? consumptionACS,
+    bool clearConsumptionACS = false,
   }) {
     return DailyRecordDTO(
       dateIso: dateIso ?? this.dateIso,
@@ -81,18 +90,13 @@ class DailyRecordDTO extends HiveObject {
       heatpumpMode: clearHeatpumpMode
           ? null
           : (heatpumpMode ?? this.heatpumpMode),
+      consumptionACS: clearConsumptionACS
+          ? null
+          : (consumptionACS ?? this.consumptionACS),
     );
   }
 
   /// Costruisce un [DailyRecordDTO] da una mappa JSON.
-  ///
-  /// Gestisce in modo difensivo:
-  /// - campi mancanti o null (usa valori di default)
-  /// - tipi numerici errati (usa 0.0)
-  /// - campo [mode] non valido (usa 'heating')
-  ///
-  /// Lancia [FormatException] solo se [dateIso] è assente o non è una stringa,
-  /// perché è la chiave primaria del record e senza di essa il dato è inutilizzabile.
   factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
     final rawDate = json['dateIso'];
     if (rawDate == null || rawDate is! String || rawDate.trim().isEmpty) {
@@ -115,6 +119,9 @@ class DailyRecordDTO extends HiveObject {
               validHeatpumpModes.contains(rawHeatpumpMode))
           ? rawHeatpumpMode
           : null,
+      consumptionACS: json['consumptionACS'] != null
+          ? _parseDouble(json['consumptionACS'])
+          : null,
     );
   }
 
@@ -128,6 +135,7 @@ class DailyRecordDTO extends HiveObject {
       'note': note,
       'mode': mode,
       if (heatpumpMode != null) 'heatpumpMode': heatpumpMode,
+      if (consumptionACS != null) 'consumptionACS': consumptionACS,
     };
   }
 
@@ -187,13 +195,14 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       note: fields[5] as String? ?? '',
       mode: fields[6] as String? ?? 'heating',
       heatpumpMode: fields[7] as String?,
+      consumptionACS: fields[8] as double?,
     );
   }
 
   @override
   void write(BinaryWriter writer, DailyRecordDTO obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.dateIso)
       ..writeByte(1)
@@ -209,7 +218,9 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       ..writeByte(6)
       ..write(obj.mode)
       ..writeByte(7)
-      ..write(obj.heatpumpMode);
+      ..write(obj.heatpumpMode)
+      ..writeByte(8)
+      ..write(obj.consumptionACS);
   }
 
   @override
