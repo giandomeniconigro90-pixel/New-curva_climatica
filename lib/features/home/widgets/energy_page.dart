@@ -18,6 +18,8 @@ class EnergyPage extends StatefulWidget {
 
 class _EnergyPageState extends State<EnergyPage> {
   late double _costPerKwh;
+  late bool   _hasGridMeter;
+  late bool   _hasPv;
   final TextEditingController _priceController = TextEditingController();
 
   static const Color _colGrid = Color(0xFFFFB74D);
@@ -27,7 +29,9 @@ class _EnergyPageState extends State<EnergyPage> {
   @override
   void initState() {
     super.initState();
-    _costPerKwh = AppStorage.getCostPerKwh();
+    _costPerKwh   = AppStorage.getCostPerKwh();
+    _hasGridMeter = AppStorage.getHasGridMeter();
+    _hasPv        = AppStorage.getHasPv();
     _priceController.text = _costPerKwh.toStringAsFixed(4);
   }
 
@@ -131,6 +135,53 @@ class _EnergyPageState extends State<EnergyPage> {
 
     if (records.isEmpty) return _buildEmpty(cs);
 
+    // KPI cards visibili in base alle impostazioni wizard
+    final List<Widget> kpiCards = [];
+    if (_hasGridMeter) {
+      kpiCards.add(_KpiCard(
+        label: 'Rete',
+        value: _totalGrid.toStringAsFixed(1),
+        unit: 'kWh',
+        sub: '${_totalCost.toStringAsFixed(2)} \u20ac',
+        icon: Icons.electrical_services_outlined,
+        accentColor: _colGrid,
+      ));
+      if (kpiCards.length > 1) kpiCards.add(const SizedBox(width: 8));
+    }
+    if (_hasPv) {
+      if (kpiCards.isNotEmpty) kpiCards.add(const SizedBox(width: 8));
+      kpiCards.add(_KpiCard(
+        label: 'Fotovoltaico',
+        value: _totalPv.toStringAsFixed(1),
+        unit: 'kWh',
+        sub: '\u2193 ${_savedCost.toStringAsFixed(2)} \u20ac',
+        icon: Icons.wb_sunny_outlined,
+        accentColor: _colPv,
+      ));
+    }
+    if (kpiCards.isNotEmpty) kpiCards.add(const SizedBox(width: 8));
+    kpiCards.add(_KpiCard(
+      label: 'PDC',
+      value: _totalPdc.toStringAsFixed(1),
+      unit: 'kWh',
+      sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} \u20ac',
+      icon: Icons.heat_pump_outlined,
+      accentColor: _colPdc,
+    ));
+
+    // Legend bar chart
+    final List<Widget> barLegend = [
+      if (_hasGridMeter) const _LegendDot(color: _colGrid, label: 'Rete'),
+      if (_hasPv)        const _LegendDot(color: _colPv,   label: 'FV'),
+                         const _LegendDot(color: _colPdc,  label: 'PDC'),
+    ];
+
+    // Legend cost chart
+    final List<Widget> costLegend = [
+      if (_hasGridMeter) const _LegendDot(color: _colGrid, label: 'Costo rete'),
+      if (_hasPv)        const _LegendDot(color: _colPv,   label: 'Risparmio FV'),
+    ];
+
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
@@ -184,42 +235,15 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
+        // KPI row
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Row(
-              children: [
-                _KpiCard(
-                  label: 'Rete',
-                  value: _totalGrid.toStringAsFixed(1),
-                  unit: 'kWh',
-                  sub: '${_totalCost.toStringAsFixed(2)} \u20ac',
-                  icon: Icons.electrical_services_outlined,
-                  accentColor: _colGrid,
-                ),
-                const SizedBox(width: 8),
-                _KpiCard(
-                  label: 'Fotovoltaico',
-                  value: _totalPv.toStringAsFixed(1),
-                  unit: 'kWh',
-                  sub: '\u2193 ${_savedCost.toStringAsFixed(2)} \u20ac',
-                  icon: Icons.wb_sunny_outlined,
-                  accentColor: _colPv,
-                ),
-                const SizedBox(width: 8),
-                _KpiCard(
-                  label: 'PDC',
-                  value: _totalPdc.toStringAsFixed(1),
-                  unit: 'kWh',
-                  sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} \u20ac',
-                  icon: Icons.heat_pump_outlined,
-                  accentColor: _colPdc,
-                ),
-              ],
-            ),
+            child: Row(children: kpiCards),
           ),
         ),
 
+        // Bar chart energia
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -227,31 +251,26 @@ class _EnergyPageState extends State<EnergyPage> {
               title: 'Energia giornaliera',
               unit: 'kWh',
               icon: Icons.bar_chart_rounded,
-              legend: const [
-                _LegendDot(color: _colGrid, label: 'Rete'),
-                _LegendDot(color: _colPv,   label: 'FV'),
-                _LegendDot(color: _colPdc,  label: 'PDC'),
-              ],
+              legend: barLegend,
               child: _buildBarChart(records, cs),
             ),
           ),
         ),
 
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: _ChartCard(
-              title: 'Costi giornalieri',
-              unit: '\u20ac',
-              icon: Icons.show_chart_rounded,
-              legend: const [
-                _LegendDot(color: _colGrid, label: 'Costo rete'),
-                _LegendDot(color: _colPv,   label: 'Risparmio FV'),
-              ],
-              child: _buildCostChart(records, cs),
+        // Cost chart — mostrato solo se almeno una serie è attiva
+        if (_hasGridMeter || _hasPv)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _ChartCard(
+                title: 'Costi giornalieri',
+                unit: '\u20ac',
+                icon: Icons.show_chart_rounded,
+                legend: costLegend,
+                child: _buildCostChart(records, cs),
+              ),
             ),
           ),
-        ),
 
         SliverToBoxAdapter(
           child: Padding(
@@ -263,13 +282,11 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Colori tooltip adattativi al tema ──
-  Color _tooltipBg(ColorScheme cs)    => cs.inverseSurface;
-  Color _tooltipText(ColorScheme cs)  => cs.onInverseSurface;
-  Color _shadowColor(ColorScheme cs)  => cs.shadow.withOpacity(0.12);
-  Color _dotStroke(ColorScheme cs)    => cs.surface;
+  Color _tooltipBg(ColorScheme cs)   => cs.inverseSurface;
+  Color _tooltipText(ColorScheme cs) => cs.onInverseSurface;
+  Color _shadowColor(ColorScheme cs) => cs.shadow.withOpacity(0.12);
+  Color _dotStroke(ColorScheme cs)   => cs.surface;
 
-  // ── border inferiore stiloso ──
   FlBorderData _styledBorder(ColorScheme cs) => FlBorderData(
         show: true,
         border: Border(
@@ -280,24 +297,29 @@ class _EnergyPageState extends State<EnergyPage> {
         ),
       );
 
-  // ── Grafico a barre ──
   Widget _buildBarChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final groups = <BarChartGroupData>[];
     for (int i = 0; i < records.length; i++) {
       final r = records[i];
-      groups.add(BarChartGroupData(
-        x: i,
-        barsSpace: 2,
-        barRods: [
+      final rods = <BarChartRodData>[
+        if (_hasGridMeter)
           BarChartRodData(toY: r.energyFromGrid ?? 0.0, color: _colGrid, width: 6,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-          BarChartRodData(toY: r.pvProduction ?? 0.0,   color: _colPv,   width: 6,
+        if (_hasPv)
+          BarChartRodData(toY: r.pvProduction ?? 0.0, color: _colPv, width: 6,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-          BarChartRodData(toY: r.consumption,           color: _colPdc,  width: 6,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-        ],
-      ));
+        BarChartRodData(toY: r.consumption, color: _colPdc, width: 6,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
+      ];
+      groups.add(BarChartGroupData(x: i, barsSpace: 2, barRods: rods));
     }
+
+    final rodLabels = [
+      if (_hasGridMeter) 'Rete',
+      if (_hasPv)        'FV',
+      'PDC',
+    ];
+
     return SizedBox(
       height: 220,
       child: BarChart(BarChartData(
@@ -346,13 +368,11 @@ class _EnergyPageState extends State<EnergyPage> {
         ),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
-            // FIX: sfondo tooltip adattivo al tema (non bianco hardcodato)
             getTooltipColor: (_) => _tooltipBg(cs),
             getTooltipItem: (group, _, rod, rodIndex) {
-              final labels = ['Rete', 'FV', 'PDC'];
+              final label = rodIndex < rodLabels.length ? rodLabels[rodIndex] : 'PDC';
               return BarTooltipItem(
-                '${labels[rodIndex]}: ${rod.toY.toStringAsFixed(1)} kWh',
-                // FIX: testo tooltip adattivo (non Colors.white hardcodato)
+                '$label: ${rod.toY.toStringAsFixed(1)} kWh',
                 TextStyle(color: _tooltipText(cs), fontSize: 11, fontWeight: FontWeight.w600),
               );
             },
@@ -362,18 +382,46 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Grafico costi ──
   Widget _buildCostChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final gridSpots = <FlSpot>[];
     final pvSpots   = <FlSpot>[];
     for (int i = 0; i < records.length; i++) {
       final r = records[i];
-      gridSpots.add(FlSpot(i.toDouble(), (r.energyFromGrid ?? 0.0) * _costPerKwh));
-      pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
+      if (_hasGridMeter) gridSpots.add(FlSpot(i.toDouble(), (r.energyFromGrid ?? 0.0) * _costPerKwh));
+      if (_hasPv)        pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
     }
 
     final step     = (records.length / 6).ceil().clamp(1, records.length);
     final showDots = records.length <= 3;
+
+    final bars = <LineChartBarData>[
+      if (_hasGridMeter)
+        LineChartBarData(
+          spots: gridSpots,
+          isCurved: records.length > 1,
+          color: _colGrid,
+          barWidth: 2.5,
+          dotData: FlDotData(
+            show: showDots,
+            getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+              radius: 5, color: _colGrid, strokeWidth: 2, strokeColor: _dotStroke(cs)),
+          ),
+          belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
+        ),
+      if (_hasPv)
+        LineChartBarData(
+          spots: pvSpots,
+          isCurved: records.length > 1,
+          color: _colPv,
+          barWidth: 2.5,
+          dotData: FlDotData(
+            show: showDots,
+            getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+              radius: 5, color: _colPv, strokeWidth: 2, strokeColor: _dotStroke(cs)),
+          ),
+          belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
+        ),
+    ];
 
     return SizedBox(
       height: 210,
@@ -427,50 +475,13 @@ class _EnergyPageState extends State<EnergyPage> {
           topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        lineBarsData: [
-          LineChartBarData(
-            spots: gridSpots,
-            isCurved: records.length > 1,
-            color: _colGrid,
-            barWidth: 2.5,
-            dotData: FlDotData(
-              show: showDots,
-              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                radius: 5,
-                color: _colGrid,
-                strokeWidth: 2,
-                // FIX: stroke del dot usa il colore surface del tema (non Colors.white)
-                strokeColor: _dotStroke(cs),
-              ),
-            ),
-            belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
-          ),
-          LineChartBarData(
-            spots: pvSpots,
-            isCurved: records.length > 1,
-            color: _colPv,
-            barWidth: 2.5,
-            dotData: FlDotData(
-              show: showDots,
-              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-                radius: 5,
-                color: _colPv,
-                strokeWidth: 2,
-                // FIX: stroke del dot usa il colore surface del tema (non Colors.white)
-                strokeColor: _dotStroke(cs),
-              ),
-            ),
-            belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
-          ),
-        ],
+        lineBarsData: bars,
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            // FIX: sfondo tooltip adattivo al tema
             getTooltipColor: (_) => _tooltipBg(cs),
             getTooltipItems: (spots) => spots
                 .map((s) => LineTooltipItem(
                       '${s.y.toStringAsFixed(3)} \u20ac',
-                      // FIX: testo tooltip adattivo
                       TextStyle(color: _tooltipText(cs), fontSize: 11, fontWeight: FontWeight.w600),
                     ))
                 .toList(),
@@ -480,12 +491,10 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Tabella ──
   Widget _buildTable(List<DailyRecordDTO> records, ColorScheme cs) {
     final rows = records.reversed.toList();
     return Card(
       elevation: 1,
-      // FIX: shadowColor adattivo al tema (non Colors.black hardcodato)
       shadowColor: _shadowColor(cs),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Column(
@@ -511,10 +520,10 @@ class _EnergyPageState extends State<EnergyPage> {
             child: Row(
               children: [
                 _TH('Data', flex: 2),
-                _TH('Rete', color: _colGrid),
-                _TH('FV',   color: _colPv),
-                _TH('PDC',  color: _colPdc),
-                _TH('\u20ac Costo'),
+                if (_hasGridMeter) _TH('Rete', color: _colGrid),
+                if (_hasPv)        _TH('FV',   color: _colPv),
+                                   _TH('PDC',  color: _colPdc),
+                                   _TH('\u20ac Costo'),
               ],
             ),
           ),
@@ -537,10 +546,10 @@ class _EnergyPageState extends State<EnergyPage> {
                   Expanded(flex: 2,
                     child: Text(r.dateIso,
                         style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500))),
-                  _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '\u2013', color: _colGrid),
-                  _TD(r.pvProduction?.toStringAsFixed(1)   ?? '\u2013', color: _colPv),
-                  _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
-                  _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
+                  if (_hasGridMeter) _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '\u2013', color: _colGrid),
+                  if (_hasPv)        _TD(r.pvProduction?.toStringAsFixed(1)   ?? '\u2013', color: _colPv),
+                                     _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
+                                     _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
                 ],
               ),
             );
@@ -550,7 +559,6 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Empty state ──
   Widget _buildEmpty(ColorScheme cs) {
     return Center(
       child: Padding(
@@ -568,7 +576,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: cs.onSurface)),
             const SizedBox(height: 10),
             Text(
-              'Vai nella scheda "Registra" e inserisci\nkWh rete (ShinePhone) e FV (ShinePhone)\nper vedere grafici e costi.',
+              'Vai nella scheda "Registra" e inserisci\ni dati di consumo per vedere grafici e costi.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant, height: 1.5),
             ),
@@ -600,7 +608,6 @@ class _ChartCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Card(
       elevation: 2,
-      // FIX: shadowColor adattivo al tema
       shadowColor: cs.shadow.withOpacity(0.12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
@@ -653,7 +660,6 @@ class _KpiCard extends StatelessWidget {
     return Expanded(
       child: Card(
         elevation: 2,
-        // FIX: shadowColor adattivo al tema
         shadowColor: cs.shadow.withOpacity(0.12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: ClipRRect(
