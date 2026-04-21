@@ -11,6 +11,14 @@ class AppStorage {
 
   static const String _stagingPrefix = '__new__';
 
+  /// Prezzo reale A2A Click Luce Monoraria (IVA 10% inclusa).
+  /// energia 0.112 + disp. 0.01173 + cap. 0.01164
+  /// + trasporto 0.01473 + oneri 0.03030 + ASOS 0.02866 = 0.13537 × 1.10
+  static const double _defaultCostPerKwh = 0.14891;
+
+  /// Valori legacy da sovrascrivere automaticamente con la migrazione.
+  static const Set<double> _legacyCostValues = {0.25, 0.28};
+
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
   static String _stagingKey(DailyRecordDTO r) => '$_stagingPrefix${_recordKey(r)}';
 
@@ -37,6 +45,17 @@ class AppStorage {
     await Hive.openBox(_boxName);
     await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
     await _recoverStagingIfNeeded();
+    await _migrateCostPerKwh();
+  }
+
+  /// Migrazione: se il prezzo salvato è ancora un valore legacy (0.25 o 0.28)
+  /// lo sovrascrive con il valore reale A2A.
+  static Future<void> _migrateCostPerKwh() async {
+    final box = Hive.box(_boxName);
+    final stored = box.get('costPerKwh');
+    if (stored == null || _legacyCostValues.contains(stored)) {
+      await box.put('costPerKwh', _defaultCostPerKwh);
+    }
   }
 
   static Future<void> _recoverStagingIfNeeded() async {
@@ -182,12 +201,8 @@ class AppStorage {
   }
 
   // --- COSTI ---
-  // Default: 0.1489 €/kWh — A2A Click Luce Monoraria (IVA 10% inclusa)
-  // Componenti: energia 0.112 + disp. 0.01173 + cap. 0.01164
-  //             + trasporto 0.01473 + oneri 0.03030 + ASOS 0.02866 = 0.13537
-  //             × 1.10 IVA = 0.14891 arrotondato a 0.1489
   static double getCostPerKwh() {
-    return Hive.box(_boxName).get('costPerKwh', defaultValue: 0.1489);
+    return Hive.box(_boxName).get('costPerKwh', defaultValue: _defaultCostPerKwh);
   }
 
   static Future<void> saveCostPerKwh(double value) async {
@@ -225,26 +240,22 @@ class AppStorage {
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
 
-    // Passo 1 — staging
     final Map<String, DailyRecordDTO> staging = {
       for (final r in records) _stagingKey(r): _cloneRecord(r),
     };
     await box.putAll(staging);
 
-    // Passo 2 — rimuovi definitivi
     final definitiveKeys = box.keys
         .whereType<String>()
         .where((k) => !k.startsWith(_stagingPrefix))
         .toList();
     await box.deleteAll(definitiveKeys);
 
-    // Passo 3 — promuovi staging
     final Map<String, DailyRecordDTO> promoted = {
       for (final r in records) _recordKey(r): _cloneRecord(r),
     };
     await box.putAll(promoted);
 
-    // Passo 4 — rimuovi staging
     await box.deleteAll(staging.keys.toList());
   }
 
