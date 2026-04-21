@@ -32,7 +32,11 @@ class HomeNotifier extends ChangeNotifier {
   final TextEditingController consumptionController = TextEditingController();
   final TextEditingController consumptionAcsController = TextEditingController();
   final TextEditingController noteController = TextEditingController();
+  final TextEditingController energyFromGridController = TextEditingController();
+  final TextEditingController pvProductionController = TextEditingController();
   final ValueNotifier<String> heatpumpModeNotifier =
+      ValueNotifier<String>('spenta');
+  final ValueNotifier<String> boilerModeNotifier =
       ValueNotifier<String>('spenta');
   final Map<String, TextEditingController> internalTempControllers = {};
   final Map<String, String> comfortRatings = {};
@@ -86,7 +90,10 @@ class HomeNotifier extends ChangeNotifier {
     consumptionController.dispose();
     consumptionAcsController.dispose();
     noteController.dispose();
+    energyFromGridController.dispose();
+    pvProductionController.dispose();
     heatpumpModeNotifier.dispose();
+    boilerModeNotifier.dispose();
     for (final c in internalTempControllers.values) {
       c.dispose();
     }
@@ -204,7 +211,10 @@ class HomeNotifier extends ChangeNotifier {
     consumptionController.clear();
     consumptionAcsController.clear();
     noteController.clear();
+    energyFromGridController.clear();
+    pvProductionController.clear();
     heatpumpModeNotifier.value = 'spenta';
+    boilerModeNotifier.value = 'spenta';
     internalTempControllers.forEach((_, c) => c.clear());
 
     if (preFillFromLast && records.isNotEmpty) {
@@ -239,7 +249,10 @@ class HomeNotifier extends ChangeNotifier {
     consumptionController.text = r.consumption.toString();
     consumptionAcsController.text = r.consumptionACS?.toString() ?? '';
     noteController.text = r.note;
+    energyFromGridController.text = r.energyFromGrid?.toString() ?? '';
+    pvProductionController.text = r.pvProduction?.toString() ?? '';
     heatpumpModeNotifier.value = r.heatpumpMode ?? 'spenta';
+    boilerModeNotifier.value = r.boilerMode ?? 'spenta';
 
     r.internalTemps.forEach((room, value) {
       if (internalTempControllers.containsKey(room)) {
@@ -278,6 +291,10 @@ class HomeNotifier extends ChangeNotifier {
     final modeStr = currentMode.toModeString();
     final consumptionAcs =
         double.tryParse(consumptionAcsController.text.replaceAll(',', '.'));
+    final energyFromGrid =
+        double.tryParse(energyFromGridController.text.replaceAll(',', '.'));
+    final pvProduction =
+        double.tryParse(pvProductionController.text.replaceAll(',', '.'));
 
     if (editingIndex != null) {
       final originalDate = allRecords[editingIndex!].dateIso;
@@ -292,6 +309,9 @@ class HomeNotifier extends ChangeNotifier {
         mode: modeStr,
         heatpumpMode: heatpumpModeNotifier.value,
         consumptionACS: consumptionAcs,
+        boilerMode: boilerModeNotifier.value,
+        energyFromGrid: energyFromGrid,
+        pvProduction: pvProduction,
       );
       editingIndex = null;
       notifyListeners();
@@ -325,6 +345,9 @@ class HomeNotifier extends ChangeNotifier {
         mode: modeStr,
         heatpumpMode: heatpumpModeNotifier.value,
         consumptionACS: consumptionAcs,
+        boilerMode: boilerModeNotifier.value,
+        energyFromGrid: energyFromGrid,
+        pvProduction: pvProduction,
       ));
       notifyListeners();
       Fluttertoast.showToast(
@@ -394,7 +417,10 @@ class HomeNotifier extends ChangeNotifier {
       ..clear()
       ..addAll(last.comfortRatings);
     heatpumpModeNotifier.value = last.heatpumpMode ?? 'spenta';
+    boilerModeNotifier.value = last.boilerMode ?? 'spenta';
     consumptionAcsController.text = last.consumptionACS?.toString() ?? '';
+    energyFromGridController.text = last.energyFromGrid?.toString() ?? '';
+    pvProductionController.text = last.pvProduction?.toString() ?? '';
     notifyListeners();
 
     Fluttertoast.showToast(
@@ -627,7 +653,7 @@ class HomeNotifier extends ChangeNotifier {
 
       await AppStorage.saveRecords(newRecords);
       await _settingsRepo.save(CurveSettings(
-        heatingSlope: (settings['heatingSlope'] as num?)?.toDouble() ?? 1.2,
+        heatingSlope: (settings['heatingSlope'] as num?)?.toDouble() ?? 1.0,
         heatingOffset: (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
         coolingSlope: (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
         coolingOffset: (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
