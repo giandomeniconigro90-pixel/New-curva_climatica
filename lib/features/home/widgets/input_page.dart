@@ -10,8 +10,11 @@ class InputPage extends StatefulWidget {
   final TextEditingController externalTempController;
   final TextEditingController consumptionController;
   final TextEditingController consumptionAcsController;
+  final TextEditingController energyFromGridController;
+  final TextEditingController pvProductionController;
   final TextEditingController noteController;
   final ValueNotifier<String> heatpumpModeNotifier;
+  final ValueNotifier<String> boilerModeNotifier;
   final Map<String, TextEditingController> internalTempControllers;
   final Map<String, String> comfortRatings;
   final List<DailyRecordDTO> records;
@@ -29,8 +32,11 @@ class InputPage extends StatefulWidget {
     required this.externalTempController,
     required this.consumptionController,
     required this.consumptionAcsController,
+    required this.energyFromGridController,
+    required this.pvProductionController,
     required this.noteController,
     required this.heatpumpModeNotifier,
+    required this.boilerModeNotifier,
     required this.internalTempControllers,
     required this.comfortRatings,
     required this.records,
@@ -137,7 +143,28 @@ class _InputPageState extends State<InputPage> {
       suffix: 'kWh',
     ));
 
+    gridItems.add(_buildTadoTile(
+      title: 'Rete',
+      subtitle: 'ShinePhone',
+      controller: widget.energyFromGridController,
+      icon: Icons.electrical_services_outlined,
+      color: const Color(0xFFF57C00),
+      isRoom: false,
+      suffix: 'kWh',
+    ));
+
+    gridItems.add(_buildTadoTile(
+      title: 'Fotovoltaico',
+      subtitle: 'ShinePhone',
+      controller: widget.pvProductionController,
+      icon: Icons.wb_sunny_outlined,
+      color: const Color(0xFFFDD835),
+      isRoom: false,
+      suffix: 'kWh',
+    ));
+
     gridItems.add(_buildHeatpumpModeTile());
+    gridItems.add(_buildBoilerModeTile());
 
     for (final room in widget.rooms) {
       final ctrl = widget.internalTempControllers[room] ??
@@ -256,84 +283,133 @@ class _InputPageState extends State<InputPage> {
             label = 'Spenta';
         }
 
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.3),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(icon, size: 30, color: Colors.white),
-                  Text(
-                    label == 'Raffrescamento' ? '❄️' : label == 'Riscaldamento' ? '🔥' : '⏸',
-                    style: const TextStyle(fontSize: 22),
-                  ),
-                ],
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Comfort Home',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: mode,
-                      isExpanded: true,
-                      dropdownColor: color,
-                      iconEnabledColor: Colors.white,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'riscaldamento',
-                          child: Text('🔥 Riscaldamento'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'raffrescamento',
-                          child: Text('❄️ Raffrescamento'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'spenta',
-                          child: Text('⏸ Spenta'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          widget.heatpumpModeNotifier.value = value;
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+        return _buildDropdownTile(
+          color: color,
+          icon: icon,
+          emoji: label == 'Raffrescamento'
+              ? '❄️'
+              : label == 'Riscaldamento'
+                  ? '🔥'
+                  : '⏸',
+          subtitle: 'Comfort Home',
+          notifier: widget.heatpumpModeNotifier,
+          items: const [
+            DropdownMenuItem(value: 'riscaldamento', child: Text('🔥 Riscaldamento')),
+            DropdownMenuItem(value: 'raffrescamento', child: Text('❄️ Raffrescamento')),
+            DropdownMenuItem(value: 'spenta', child: Text('⏸ Spenta')),
+          ],
         );
       },
+    );
+  }
+
+  Widget _buildBoilerModeTile() {
+    return ValueListenableBuilder<String>(
+      valueListenable: widget.boilerModeNotifier,
+      builder: (context, mode, _) {
+        Color color;
+        IconData icon;
+        String emoji;
+
+        switch (mode) {
+          case 'accesa':
+            color = const Color(0xFFE53935);
+            icon = Icons.local_fire_department;
+            emoji = '🔥';
+            break;
+          case 'standby':
+            color = const Color(0xFFFFB300);
+            icon = Icons.pause_circle_outline;
+            emoji = '⏸';
+            break;
+          default:
+            color = const Color(0xFF78909C);
+            icon = Icons.power_settings_new;
+            emoji = '⛔';
+        }
+
+        return _buildDropdownTile(
+          color: color,
+          icon: icon,
+          emoji: emoji,
+          subtitle: 'Cozytouch',
+          notifier: widget.boilerModeNotifier,
+          items: const [
+            DropdownMenuItem(value: 'accesa', child: Text('🔥 Accesa')),
+            DropdownMenuItem(value: 'standby', child: Text('⏸ Standby')),
+            DropdownMenuItem(value: 'spenta', child: Text('⛔ Spenta')),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDropdownTile({
+    required Color color,
+    required IconData icon,
+    required String emoji,
+    required String subtitle,
+    required ValueNotifier<String> notifier,
+    required List<DropdownMenuItem<String>> items,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.3),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, size: 30, color: Colors.white),
+              Text(emoji, style: const TextStyle(fontSize: 22)),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                subtitle,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: notifier.value,
+                  isExpanded: true,
+                  dropdownColor: color,
+                  iconEnabledColor: Colors.white,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  items: items,
+                  onChanged: (value) {
+                    if (value != null) notifier.value = value;
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
