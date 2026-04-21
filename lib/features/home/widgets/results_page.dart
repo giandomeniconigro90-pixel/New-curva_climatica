@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../../models/daily_record_dto.dart';
+import '../../../services/hive_storage.dart';
 import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart';
 
@@ -88,7 +89,6 @@ class _ResultsPageState extends State<ResultsPage> {
     }
   }
 
-  /// Restituisce icona e colore in base alla modalità pompa di calore.
   (IconData, Color) _heatpumpIconAndColor(String mode) {
     switch (mode.toLowerCase()) {
       case 'riscaldamento':
@@ -103,6 +103,10 @@ class _ResultsPageState extends State<ResultsPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
+    // Letti da Hive ad ogni build
+    final bool hasPv        = AppStorage.getHasPv();
+    final bool hasGridMeter = AppStorage.getHasGridMeter();
 
     if (widget.records.isEmpty) {
       return const Center(
@@ -155,9 +159,10 @@ class _ResultsPageState extends State<ResultsPage> {
                   final r = sortedRecords[index];
                   final date =
                       parseItalianDateSafe(r.dateIso) ?? DateTime.now();
-                  final hasAcs = r.consumptionACS != null;
-                  final hasMode =
-                      r.heatpumpMode != null && r.heatpumpMode!.isNotEmpty;
+                  final hasAcs  = r.consumptionACS != null;
+                  final hasMode = r.heatpumpMode != null && r.heatpumpMode!.isNotEmpty;
+                  final showGrid = hasGridMeter && r.energyFromGrid != null;
+                  final showPv   = hasPv && r.pvProduction != null;
 
                   return InkWell(
                     onTap: widget.onEditRecordByDateIso != null
@@ -253,6 +258,42 @@ class _ResultsPageState extends State<ResultsPage> {
                                       const SizedBox(width: 4),
                                       Text(
                                         'ACS: ${r.consumptionACS} kWh',
+                                        style: TextStyle(
+                                          color: cs.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                // Energia da rete (solo se toggle ON e dato presente)
+                                if (showGrid) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.electrical_services_outlined,
+                                          size: 14, color: Color(0xFFFFB74D)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Rete: ${r.energyFromGrid!.toStringAsFixed(1)} kWh',
+                                        style: TextStyle(
+                                          color: cs.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                // Produzione FV (solo se toggle ON e dato presente)
+                                if (showPv) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.wb_sunny_outlined,
+                                          size: 14, color: Color(0xFF66BB6A)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'FV: ${r.pvProduction!.toStringAsFixed(1)} kWh',
                                         style: TextStyle(
                                           color: cs.onSurfaceVariant,
                                           fontSize: 12,
