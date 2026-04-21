@@ -271,8 +271,7 @@ class HomeNotifier extends ChangeNotifier {
   String? _buildContextualNotificationBody(CurveSuggestion suggestion) {
     final slopeDelta = suggestion.suggestedSlope - slope;
     final offsetDelta = suggestion.suggestedOffset - offset;
-    final hasChange =
-        slopeDelta.abs() >= 0.05 || offsetDelta.abs() >= 0.05;
+    final hasChange = slopeDelta.abs() >= 0.05 || offsetDelta.abs() >= 0.05;
 
     if (!hasChange) return null;
 
@@ -304,11 +303,9 @@ class HomeNotifier extends ChangeNotifier {
 
     if (result is RecordValidationError) {
       AppToast.show(
-        context,
         result.message,
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.error,
       );
       return;
     }
@@ -345,22 +342,18 @@ class HomeNotifier extends ChangeNotifier {
       notifyListeners();
       final label = isToday ? 'oggi' : originalDate;
       AppToast.show(
-        context,
         'Registrazione del $label aggiornata!',
-        backgroundColor: Colors.green.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.success,
       );
     } else {
       final exists =
           allRecords.any((r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
         AppToast.show(
-          context,
           'Esiste già una registrazione per oggi. Modifica quella esistente.',
-          backgroundColor: Colors.orange.shade600,
-          textColor: Colors.white,
-          fontSize: 14,
+          context: context,
+          level: ToastLevel.warning,
         );
         return;
       }
@@ -381,11 +374,9 @@ class HomeNotifier extends ChangeNotifier {
       ));
       notifyListeners();
       AppToast.show(
-        context,
         'Registrazione salvata!',
-        backgroundColor: Colors.green.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.success,
       );
     }
 
@@ -427,11 +418,9 @@ class HomeNotifier extends ChangeNotifier {
         allRecords.indexWhere((r) => r.dateIso == today && r.mode == modeStr);
     if (index == -1) {
       AppToast.show(
-        context,
         'Nessuna registrazione trovata per oggi',
-        backgroundColor: Colors.orange.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.warning,
       );
       return;
     }
@@ -471,11 +460,9 @@ class HomeNotifier extends ChangeNotifier {
     notifyListeners();
 
     AppToast.show(
-      context,
       "Dati copiati dall'ultima registrazione",
-      backgroundColor: Colors.blue.shade600,
-      textColor: Colors.white,
-      fontSize: 14,
+      context: context,
+      level: ToastLevel.info,
     );
   }
 
@@ -484,11 +471,9 @@ class HomeNotifier extends ChangeNotifier {
 
     if (windowRecords.length < 5) {
       AppToast.show(
-        context,
         'Serve almeno 5 rilevamenti nuovi (${windowRecords.length}/5)',
-        backgroundColor: Colors.orange.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.warning,
       );
       return;
     }
@@ -499,11 +484,9 @@ class HomeNotifier extends ChangeNotifier {
     if ((suggestion.suggestedSlope - slope).abs() < 0.05 &&
         (suggestion.suggestedOffset - offset).abs() < 0.05) {
       AppToast.show(
-        context,
         'I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.',
-        backgroundColor: Colors.orange.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.warning,
       );
       return;
     }
@@ -525,22 +508,18 @@ class HomeNotifier extends ChangeNotifier {
     Future.microtask(_saveSettings);
 
     AppToast.show(
-      context,
       'Nuova curva AI applicata!',
-      backgroundColor: Colors.indigo,
-      textColor: Colors.white,
-      fontSize: 14,
+      context: context,
+      level: ToastLevel.success,
     );
   }
 
   Future<void> exportCsv(BuildContext context) async {
     if (records.isEmpty) {
       AppToast.show(
-        context,
         'Nessun dato da esportare!',
-        backgroundColor: Colors.orange.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.warning,
       );
       return;
     }
@@ -555,11 +534,9 @@ class HomeNotifier extends ChangeNotifier {
       await ExportUtils.shareCsv(csv, 'ClimaSense_$dateStr.csv');
     } catch (e) {
       AppToast.show(
-        context,
         'Errore export CSV: $e',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.error,
       );
     }
   }
@@ -567,11 +544,9 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> exportPdf(BuildContext context) async {
     if (records.isEmpty) {
       AppToast.show(
-        context,
         'Nessun dato da esportare!',
-        backgroundColor: Colors.orange.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.warning,
       );
       return;
     }
@@ -602,11 +577,9 @@ class HomeNotifier extends ChangeNotifier {
       );
     } catch (e) {
       AppToast.show(
-        context,
         'Errore export PDF: $e',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.error,
       );
     } finally {
       if (originalPage != 2) {
@@ -645,11 +618,9 @@ class HomeNotifier extends ChangeNotifier {
           backupJson, 'ClimaSenseBackup_$date.json');
     } catch (e) {
       AppToast.show(
-        context,
         'Errore backup: $e',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.error,
       );
     }
   }
@@ -719,19 +690,15 @@ class HomeNotifier extends ChangeNotifier {
       await loadFromHive();
 
       AppToast.show(
-        context,
         'Ripristino completato!',
-        backgroundColor: Colors.green.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.success,
       );
     } catch (e) {
       AppToast.show(
-        context,
         'Errore ripristino: $e',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.error,
       );
     }
   }
@@ -755,11 +722,9 @@ class HomeNotifier extends ChangeNotifier {
 
     if (context.mounted) {
       AppToast.show(
-        context,
         'Notifica impostata alle ${picked.format(context)}',
-        backgroundColor: Colors.blue.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.info,
       );
     }
   }
