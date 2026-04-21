@@ -1,6 +1,7 @@
 // lib/features/home/widgets/input_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../../../models/daily_record_dto.dart';
 import '../../../../services/hive_storage.dart';
@@ -59,15 +60,18 @@ class _InputPageState extends State<InputPage> {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  // Colori card — usati sia nella grid che nel popup
   static const Color _colorEsterna      = Color(0xFF1976D2);
   static const Color _colorConsumo      = Color(0xFF66BB6A);
   static const Color _colorAcs          = Color(0xFF26A69A);
   static const Color _colorRete         = Color(0xFFF57C00);
   static const Color _colorFotovoltaico = Color(0xFFFDD835);
 
-  /// Restituisce il colore della card adattato al tema:
-  /// in dark mode applica opacity ridotta per un effetto traslucido.
+  bool get _isDesktop {
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+  }
+
   Color _cardColor(BuildContext context, Color base) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return isDark ? base.withOpacity(0.55) : base;
@@ -88,8 +92,7 @@ class _InputPageState extends State<InputPage> {
       if (!mounted) return;
       if (result != null) {
         setState(() {
-          widget.externalTempController.text =
-              result.temp.toStringAsFixed(1);
+          widget.externalTempController.text = result.temp.toStringAsFixed(1);
           _weatherLocation = result.locationName;
         });
         Fluttertoast.showToast(
@@ -124,7 +127,6 @@ class _InputPageState extends State<InputPage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     final bool hasGridMeter = AppStorage.getHasGridMeter();
     final bool hasPv        = AppStorage.getHasPv();
 
@@ -215,10 +217,7 @@ class _InputPageState extends State<InputPage> {
         ),
         label: Text(
           widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: cs.onPrimary,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: cs.onPrimary),
         ),
       ),
       body: CustomScrollView(
@@ -231,18 +230,16 @@ class _InputPageState extends State<InputPage> {
                 children: [
                   Text(
                     'Home',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   if (widget.records.isNotEmpty)
                     Tooltip(
                       message: "Copia dall'ultima registrazione",
                       child: IconButton(
-                        icon: Icon(
-                          Icons.copy_all_outlined,
-                          color: cs.onSurface,
-                        ),
+                        icon: Icon(Icons.copy_all_outlined, color: cs.onSurface),
                         onPressed: widget.onDuplicateFromYesterday,
                       ),
                     ),
@@ -285,7 +282,6 @@ class _InputPageState extends State<InputPage> {
         Color baseColor;
         IconData icon;
         String label;
-
         switch (mode) {
           case 'riscaldamento':
             baseColor = const Color(0xFFFF9800);
@@ -302,7 +298,6 @@ class _InputPageState extends State<InputPage> {
             icon = Icons.power_settings_new;
             label = 'Spenta';
         }
-
         return _buildDropdownTile(
           color: _cardColor(context, baseColor),
           icon: icon,
@@ -330,7 +325,6 @@ class _InputPageState extends State<InputPage> {
         Color baseColor;
         IconData icon;
         String emoji;
-
         switch (mode) {
           case 'accesa':
             baseColor = const Color(0xFFE53935);
@@ -347,7 +341,6 @@ class _InputPageState extends State<InputPage> {
             icon = Icons.power_settings_new;
             emoji = '\u26D4';
         }
-
         return _buildDropdownTile(
           color: _cardColor(context, baseColor),
           icon: icon,
@@ -580,7 +573,19 @@ class _InputPageState extends State<InputPage> {
     final shortestSide = MediaQuery.of(context).size.shortestSide;
     final bool isTablet = shortestSide >= 550;
 
+    final roomPage = RoomControlPage(
+      title: title,
+      controller: controller,
+      isConsumption: isConsumption,
+      isRoom: isRoom,
+      comfortRatings: widget.comfortRatings,
+      onSave: () => setState(() {}),
+      isCooling: widget.isCooling,
+      cardColor: cardColor,
+    );
+
     if (isTablet) {
+      // Tablet: dialog centrato
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
@@ -591,36 +596,22 @@ class _InputPageState extends State<InputPage> {
             child: SizedBox(
               width: 450,
               height: MediaQuery.of(context).size.height * 0.98,
-              child: RoomControlPage(
-                title: title,
-                controller: controller,
-                isConsumption: isConsumption,
-                isRoom: isRoom,
-                comfortRatings: widget.comfortRatings,
-                onSave: () => setState(() {}),
-                isCooling: widget.isCooling,
-                cardColor: cardColor,
-              ),
+              child: roomPage,
             ),
           ),
         ),
       );
+    } else if (_isDesktop) {
+      // Desktop (Windows/macOS/Linux): MaterialPageRoute semplice, nessuna animazione custom
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => roomPage),
+      );
     } else {
+      // Mobile: animazione slide dal basso originale
       Navigator.of(context).push(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              RoomControlPage(
-            title: title,
-            controller: controller,
-            isConsumption: isConsumption,
-            isRoom: isRoom,
-            comfortRatings: widget.comfortRatings,
-            onSave: () => setState(() {}),
-            isCooling: widget.isCooling,
-            cardColor: cardColor,
-          ),
-          transitionsBuilder:
-              (context, animation, secondaryAnimation, child) {
+          pageBuilder: (context, animation, secondaryAnimation) => roomPage,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const begin = Offset(0.0, 1.0);
             const end = Offset.zero;
             const curve = Curves.easeOutQuint;
