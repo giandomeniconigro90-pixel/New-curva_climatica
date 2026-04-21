@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../../../../models/daily_record_dto.dart';
+import '../../../../services/hive_storage.dart';
 import '../../../../services/weather_service.dart';
 import 'room_control_page.dart';
 
@@ -110,6 +111,10 @@ class _InputPageState extends State<InputPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    // Letti da Hive ad ogni build
+    final bool hasGridMeter = AppStorage.getHasGridMeter();
+    final bool hasPv        = AppStorage.getHasPv();
+
     final List<Widget> gridItems = [];
 
     gridItems.add(_buildTadoTile(
@@ -143,25 +148,27 @@ class _InputPageState extends State<InputPage> {
       suffix: 'kWh',
     ));
 
-    gridItems.add(_buildTadoTile(
-      title: 'Rete',
-      subtitle: 'ShinePhone',
-      controller: widget.energyFromGridController,
-      icon: Icons.electrical_services_outlined,
-      color: const Color(0xFFF57C00),
-      isRoom: false,
-      suffix: 'kWh',
-    ));
+    if (hasGridMeter)
+      gridItems.add(_buildTadoTile(
+        title: 'Rete',
+        subtitle: 'ShinePhone',
+        controller: widget.energyFromGridController,
+        icon: Icons.electrical_services_outlined,
+        color: const Color(0xFFF57C00),
+        isRoom: false,
+        suffix: 'kWh',
+      ));
 
-    gridItems.add(_buildTadoTile(
-      title: 'Fotovoltaico',
-      subtitle: 'ShinePhone',
-      controller: widget.pvProductionController,
-      icon: Icons.wb_sunny_outlined,
-      color: const Color(0xFFFDD835),
-      isRoom: false,
-      suffix: 'kWh',
-    ));
+    if (hasPv)
+      gridItems.add(_buildTadoTile(
+        title: 'Fotovoltaico',
+        subtitle: 'ShinePhone',
+        controller: widget.pvProductionController,
+        icon: Icons.wb_sunny_outlined,
+        color: const Color(0xFFFDD835),
+        isRoom: false,
+        suffix: 'kWh',
+      ));
 
     gridItems.add(_buildHeatpumpModeTile());
     gridItems.add(_buildBoilerModeTile());
