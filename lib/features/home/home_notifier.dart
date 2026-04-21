@@ -30,7 +30,10 @@ class HomeNotifier extends ChangeNotifier {
 
   final TextEditingController externalTempController = TextEditingController();
   final TextEditingController consumptionController = TextEditingController();
+  final TextEditingController consumptionAcsController = TextEditingController();
   final TextEditingController noteController = TextEditingController();
+  final ValueNotifier<String> heatpumpModeNotifier =
+      ValueNotifier<String>('spenta');
   final Map<String, TextEditingController> internalTempControllers = {};
   final Map<String, String> comfortRatings = {};
 
@@ -81,16 +84,14 @@ class HomeNotifier extends ChangeNotifier {
     pageController.dispose();
     externalTempController.dispose();
     consumptionController.dispose();
+    consumptionAcsController.dispose();
     noteController.dispose();
+    heatpumpModeNotifier.dispose();
     for (final c in internalTempControllers.values) {
       c.dispose();
     }
     super.dispose();
   }
-
-  // ---------------------------------------------------------------------------
-  // PERSISTENZA
-  // ---------------------------------------------------------------------------
 
   Future<void> loadFromHive() async {
     final storedRecords = await AppStorage.loadRecords();
@@ -130,10 +131,6 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<void> _saveSettings() => _settingsRepo.save(_settings);
 
-  // ---------------------------------------------------------------------------
-  // GESTIONE STANZE
-  // ---------------------------------------------------------------------------
-
   Future<void> manageRooms(BuildContext context) async {
     await showModalBottomSheet(
       context: context,
@@ -145,10 +142,6 @@ class HomeNotifier extends ChangeNotifier {
     _syncRoomControllers(updated);
     notifyListeners();
   }
-
-  // ---------------------------------------------------------------------------
-  // SISTEMA
-  // ---------------------------------------------------------------------------
 
   void updateSystemOverlay() {
     final themeMode = AppStorage.getThemeMode();
@@ -193,10 +186,6 @@ class HomeNotifier extends ChangeNotifier {
     Future.microtask(_saveSettings);
   }
 
-  // ---------------------------------------------------------------------------
-  // RECORDS
-  // ---------------------------------------------------------------------------
-
   List<DailyRecordDTO> recordsSinceLastApply(SystemMode mode) {
     final last = mode == SystemMode.heating
         ? _settings.lastAiApplyHeating
@@ -213,7 +202,9 @@ class HomeNotifier extends ChangeNotifier {
     editingIndex = null;
     externalTempController.clear();
     consumptionController.clear();
+    consumptionAcsController.clear();
     noteController.clear();
+    heatpumpModeNotifier.value = 'spenta';
     internalTempControllers.forEach((_, c) => c.clear());
 
     if (preFillFromLast && records.isNotEmpty) {
@@ -246,7 +237,9 @@ class HomeNotifier extends ChangeNotifier {
     editingIndex = allIndex;
     externalTempController.text = r.externalTemp.toString();
     consumptionController.text = r.consumption.toString();
+    consumptionAcsController.text = r.consumptionACS?.toString() ?? '';
     noteController.text = r.note;
+    heatpumpModeNotifier.value = r.heatpumpMode ?? 'spenta';
 
     r.internalTemps.forEach((room, value) {
       if (internalTempControllers.containsKey(room)) {
@@ -283,6 +276,8 @@ class HomeNotifier extends ChangeNotifier {
     final now = DateTime.now();
     final dateIso = formatItalianDate(now);
     final modeStr = currentMode.toModeString();
+    final consumptionAcs =
+        double.tryParse(consumptionAcsController.text.replaceAll(',', '.'));
 
     if (editingIndex != null) {
       final originalDate = allRecords[editingIndex!].dateIso;
@@ -295,6 +290,8 @@ class HomeNotifier extends ChangeNotifier {
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
         mode: modeStr,
+        heatpumpMode: heatpumpModeNotifier.value,
+        consumptionACS: consumptionAcs,
       );
       editingIndex = null;
       notifyListeners();
@@ -326,6 +323,8 @@ class HomeNotifier extends ChangeNotifier {
         comfortRatings: Map.from(comfortRatings),
         note: noteController.text,
         mode: modeStr,
+        heatpumpMode: heatpumpModeNotifier.value,
+        consumptionACS: consumptionAcs,
       ));
       notifyListeners();
       Fluttertoast.showToast(
@@ -340,10 +339,6 @@ class HomeNotifier extends ChangeNotifier {
     clearFields();
     if (context.mounted) FocusScope.of(context).unfocus();
   }
-
-  // ---------------------------------------------------------------------------
-  // DELETE
-  // ---------------------------------------------------------------------------
 
   Future<void> deleteRecordByDateIso(String dateIso) async {
     final modeStr = currentMode.toModeString();
@@ -374,7 +369,6 @@ class HomeNotifier extends ChangeNotifier {
     allRecords.removeAt(index);
     notifyListeners();
     await saveToHive();
-    // Torna alla pagina Registra dopo la cancellazione
     currentPage = 0;
     pageController.jumpToPage(0);
   }
@@ -399,6 +393,8 @@ class HomeNotifier extends ChangeNotifier {
     comfortRatings
       ..clear()
       ..addAll(last.comfortRatings);
+    heatpumpModeNotifier.value = last.heatpumpMode ?? 'spenta';
+    consumptionAcsController.text = last.consumptionACS?.toString() ?? '';
     notifyListeners();
 
     Fluttertoast.showToast(
@@ -408,10 +404,6 @@ class HomeNotifier extends ChangeNotifier {
       fontSize: 14,
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // AI CURVE
-  // ---------------------------------------------------------------------------
 
   void onApplyAiCurve() {
     final windowRecords = recordsSinceLastApply(currentMode);
@@ -463,10 +455,6 @@ class HomeNotifier extends ChangeNotifier {
       fontSize: 14,
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // EXPORT
-  // ---------------------------------------------------------------------------
 
   Future<void> exportCsv() async {
     if (records.isEmpty) {
@@ -560,10 +548,6 @@ class HomeNotifier extends ChangeNotifier {
       return null;
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // BACKUP / RESTORE
-  // ---------------------------------------------------------------------------
 
   Future<void> doBackup() async {
     try {
@@ -668,10 +652,6 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // NOTIFICHE
-  // ---------------------------------------------------------------------------
-
   Future<void> setNotificationTime(BuildContext context) async {
     final picked = await showTimePicker(
       context: context,
@@ -699,10 +679,6 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // NAVIGAZIONE
-  // ---------------------------------------------------------------------------
-
   void onPageChanged(int index) {
     currentPage = index;
     notifyListeners();
@@ -711,10 +687,6 @@ class HomeNotifier extends ChangeNotifier {
   void onNavDestinationSelected(int index) {
     pageController.jumpToPage(index);
   }
-
-  // ---------------------------------------------------------------------------
-  // RESET CALIBRAZIONE
-  // ---------------------------------------------------------------------------
 
   Future<void> resetCalibration() async {
     await _settingsRepo.reset();

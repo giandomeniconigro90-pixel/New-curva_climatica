@@ -68,7 +68,9 @@ class _ClimateCurveHomeView extends StatelessWidget {
           InputPage(
             externalTempController: notifier.externalTempController,
             consumptionController: notifier.consumptionController,
+            consumptionAcsController: notifier.consumptionAcsController,
             noteController: notifier.noteController,
+            heatpumpModeNotifier: notifier.heatpumpModeNotifier,
             internalTempControllers: notifier.internalTempControllers,
             comfortRatings: notifier.comfortRatings,
             records: notifier.records,

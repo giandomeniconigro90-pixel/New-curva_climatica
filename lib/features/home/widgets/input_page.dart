@@ -9,7 +9,9 @@ import 'room_control_page.dart';
 class InputPage extends StatefulWidget {
   final TextEditingController externalTempController;
   final TextEditingController consumptionController;
+  final TextEditingController consumptionAcsController;
   final TextEditingController noteController;
+  final ValueNotifier<String> heatpumpModeNotifier;
   final Map<String, TextEditingController> internalTempControllers;
   final Map<String, String> comfortRatings;
   final List<DailyRecordDTO> records;
@@ -26,7 +28,9 @@ class InputPage extends StatefulWidget {
     super.key,
     required this.externalTempController,
     required this.consumptionController,
+    required this.consumptionAcsController,
     required this.noteController,
+    required this.heatpumpModeNotifier,
     required this.internalTempControllers,
     required this.comfortRatings,
     required this.records,
@@ -48,7 +52,6 @@ class _InputPageState extends State<InputPage> {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  /// Restituisce il testo da mostrare come subtitle della tile Esterna.
   String get _weatherSubtitle {
     if (_weatherLocation != null) return _weatherLocation!;
     final age = WeatherService.getCacheAgeMinutes();
@@ -116,13 +119,25 @@ class _InputPageState extends State<InputPage> {
 
     gridItems.add(_buildTadoTile(
       title: 'Consumo',
-      subtitle: 'Energy Cockpit',
+      subtitle: 'ShinePhone',
       controller: widget.consumptionController,
       icon: Icons.eco_outlined,
       color: const Color(0xFF66BB6A),
       isRoom: false,
       suffix: 'kWh',
     ));
+
+    gridItems.add(_buildTadoTile(
+      title: 'ACS',
+      subtitle: 'Cozytouch',
+      controller: widget.consumptionAcsController,
+      icon: Icons.water_drop_outlined,
+      color: const Color(0xFF26A69A),
+      isRoom: false,
+      suffix: 'kWh',
+    ));
+
+    gridItems.add(_buildHeatpumpModeTile());
 
     for (final room in widget.rooms) {
       final ctrl = widget.internalTempControllers[room] ??
@@ -213,6 +228,112 @@ class _InputPageState extends State<InputPage> {
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeatpumpModeTile() {
+    return ValueListenableBuilder<String>(
+      valueListenable: widget.heatpumpModeNotifier,
+      builder: (context, mode, _) {
+        Color color;
+        IconData icon;
+        String label;
+
+        switch (mode) {
+          case 'riscaldamento':
+            color = const Color(0xFFFF9800);
+            icon = Icons.local_fire_department_outlined;
+            label = 'Riscaldamento';
+            break;
+          case 'raffrescamento':
+            color = const Color(0xFF29B6F6);
+            icon = Icons.ac_unit;
+            label = 'Raffrescamento';
+            break;
+          default:
+            color = const Color(0xFF90A4AE);
+            icon = Icons.power_settings_new;
+            label = 'Spenta';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.3),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, size: 30, color: Colors.white),
+                  Text(
+                    label == 'Raffrescamento' ? '❄️' : label == 'Riscaldamento' ? '🔥' : '⏸',
+                    style: const TextStyle(fontSize: 22),
+                  ),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comfort Home',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: mode,
+                      isExpanded: true,
+                      dropdownColor: color,
+                      iconEnabledColor: Colors.white,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'riscaldamento',
+                          child: Text('🔥 Riscaldamento'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'raffrescamento',
+                          child: Text('❄️ Raffrescamento'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'spenta',
+                          child: Text('⏸ Spenta'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          widget.heatpumpModeNotifier.value = value;
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
