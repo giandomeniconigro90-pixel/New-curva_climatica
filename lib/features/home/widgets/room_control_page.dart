@@ -1,5 +1,6 @@
 // lib/features/home/widgets/room_control_page.dart
 
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 class DegreePainter extends CustomPainter {
@@ -32,7 +33,7 @@ class RoomControlPage extends StatefulWidget {
   final Map<String, String>? comfortRatings;
   final VoidCallback onSave;
   final bool isCooling;
-  final Color? cardColor; // colore opzionale dalla card chiamante
+  final Color? cardColor;
 
   const RoomControlPage({
     super.key,
@@ -99,165 +100,178 @@ class _RoomControlPageState extends State<RoomControlPage> {
     String decimalPart = parts.length > 1 ? parts[1] : "0";
 
     return Scaffold(
-      backgroundColor: _mainColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                  IconButton(
-                    icon: const Icon(Icons.check, color: Colors.white, size: 28),
-                    onPressed: _saveAndExit,
-                  ),
-                ],
-              ),
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Blur layer
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              color: _mainColor.withOpacity(0.75),
             ),
-
-            const Spacer(flex: 1),
-
-            Column(
+          ),
+          // Contenuto
+          SafeArea(
+            child: Column(
               children: [
-                Text(_headerText, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 2),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      integerPart,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 50,
-                        fontWeight: FontWeight.bold,
-                        height: 1.0,
-                      ),
-                    ),
-                    if (widget.isConsumption)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 25),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Text(
-                              ".$decimalPart",
-                              style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "kWh",
-                              style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Transform.translate(
-                        offset: const Offset(-1.0, 0.0),
-                        child: CustomPaint(
-                          foregroundPainter: DegreePainter(color: Colors.white),
-                          child: Text(
-                            ".$decimalPart",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 25,
-                              fontWeight: FontWeight.bold,
-                              height: 1.0,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-
-            const Spacer(flex: 1),
-
-            Center(
-              child: Container(
-                width: 220,
-                height: sliderHeight,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(40),
-                  child: Stack(
-                    alignment: Alignment.bottomCenter,
+                Padding(
+                  padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        width: double.infinity,
-                        height: sliderHeight * percentage,
-                        color: Colors.white,
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                        onPressed: () => Navigator.pop(context),
                       ),
-                      RotatedBox(
-                        quarterTurns: 3,
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 220,
-                            thumbShape: SliderComponentShape.noThumb,
-                            overlayShape: SliderComponentShape.noOverlay,
-                            activeTrackColor: Colors.transparent,
-                            inactiveTrackColor: Colors.transparent,
-                          ),
-                          child: Slider(
-                            value: _currentValue,
-                            min: _min,
-                            max: _max,
-                            onChanged: (val) {
-                              setState(() { _currentValue = val; });
-                            },
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: (sliderHeight * percentage) - 10,
-                        child: Container(
-                          width: 40,
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: _mainColor.withOpacity(0.8),
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                        ),
+                      Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                      IconButton(
+                        icon: const Icon(Icons.check, color: Colors.white, size: 28),
+                        onPressed: _saveAndExit,
                       ),
                     ],
                   ),
                 ),
-              ),
-            ),
 
-            const Spacer(flex: 5),
+                const Spacer(flex: 1),
 
-            if (widget.isRoom)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Column(
                   children: [
-                    _buildComfortOption('freddo', Icons.ac_unit),
-                    const SizedBox(width: 40),
-                    _buildComfortOption('ok', Icons.sentiment_satisfied_alt),
-                    const SizedBox(width: 40),
-                    _buildComfortOption('caldo', Icons.local_fire_department),
+                    Text(_headerText, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          integerPart,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 50,
+                            fontWeight: FontWeight.bold,
+                            height: 1.0,
+                          ),
+                        ),
+                        if (widget.isConsumption)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 25),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  ".$decimalPart",
+                                  style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "kWh",
+                                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 18, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Transform.translate(
+                            offset: const Offset(-1.0, 0.0),
+                            child: CustomPaint(
+                              foregroundPainter: DegreePainter(color: Colors.white),
+                              child: Text(
+                                ".$decimalPart",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
-              )
-            else
-              const SizedBox(height: 50),
-          ],
-        ),
+
+                const Spacer(flex: 1),
+
+                Center(
+                  child: Container(
+                    width: 220,
+                    height: sliderHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(40),
+                      child: Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            height: sliderHeight * percentage,
+                            color: Colors.white,
+                          ),
+                          RotatedBox(
+                            quarterTurns: 3,
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 220,
+                                thumbShape: SliderComponentShape.noThumb,
+                                overlayShape: SliderComponentShape.noOverlay,
+                                activeTrackColor: Colors.transparent,
+                                inactiveTrackColor: Colors.transparent,
+                              ),
+                              child: Slider(
+                                value: _currentValue,
+                                min: _min,
+                                max: _max,
+                                onChanged: (val) {
+                                  setState(() { _currentValue = val; });
+                                },
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: (sliderHeight * percentage) - 10,
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: _mainColor.withOpacity(0.8),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const Spacer(flex: 5),
+
+                if (widget.isRoom)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildComfortOption('freddo', Icons.ac_unit),
+                        const SizedBox(width: 40),
+                        _buildComfortOption('ok', Icons.sentiment_satisfied_alt),
+                        const SizedBox(width: 40),
+                        _buildComfortOption('caldo', Icons.local_fire_department),
+                      ],
+                    ),
+                  )
+                else
+                  const SizedBox(height: 50),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
