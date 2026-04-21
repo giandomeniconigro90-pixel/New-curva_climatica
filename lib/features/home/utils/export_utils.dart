@@ -36,7 +36,12 @@ class ExportUtils {
   static void _appendDataRows(List<List<dynamic>> rows, List<DailyRecordDTO> records) {
     if (records.isEmpty) return;
     final sortedRecords = List<DailyRecordDTO>.from(records);
-    sortedRecords.sort((a, b) => b.dateIso.compareTo(a.dateIso));
+    // Ordine cronologico decrescente (più recente prima) usando DateTime reale
+    sortedRecords.sort((a, b) {
+      final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+      final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+      return dB.compareTo(dA);
+    });
     final Set<String> allRooms = {};
     for (var r in sortedRecords) {
       allRooms.addAll(r.internalTemps.keys);
@@ -79,8 +84,6 @@ class ExportUtils {
     }
   }
 
-  /// Lancia eccezione in caso di errore: il chiamante deve gestirla
-  /// (tipicamente con Fluttertoast) per dare feedback all'utente.
   static Future<void> shareCsv(String csvData, String fileName) async {
     final directory = await getApplicationDocumentsDirectory();
     final path = '${directory.path}/$fileName';
@@ -122,7 +125,12 @@ class ExportUtils {
       }) async {
     final pdf = pw.Document();
     final sortedRecords = List<DailyRecordDTO>.from(records);
-    sortedRecords.sort((a, b) => b.dateIso.compareTo(a.dateIso));
+    // Stesso fix: ordinamento cronologico reale anche nel PDF
+    sortedRecords.sort((a, b) {
+      final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+      final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+      return dB.compareTo(dA);
+    });
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -180,8 +188,6 @@ class ExportUtils {
 
   // ================= BACKUP JSON =================
 
-  /// Legge la versione dell'app da [PackageInfo] in modo asincrono.
-  /// In caso di errore (es. piattaforma non supportata) restituisce 'unknown'.
   static Future<String> _getAppVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
@@ -191,7 +197,6 @@ class ExportUtils {
     }
   }
 
-  /// Genera il JSON di backup includendo la versione reale dell'app.
   static Future<String> generateBackupJson({
     required List<DailyRecordDTO> records,
     required SystemMode mode,
@@ -217,7 +222,6 @@ class ExportUtils {
     return jsonEncode(backupMap);
   }
 
-  /// Lancia eccezione in caso di errore: il chiamante deve gestirla.
   static Future<void> shareBackupJsonString(String jsonString, [String? fileName]) async {
     final directory = await getApplicationDocumentsDirectory();
     final name = fileName ?? 'ClimaSense_Backup.json';
@@ -228,7 +232,6 @@ class ExportUtils {
     _deleteFileSilently(file);
   }
 
-  /// Elimina un file silenziosamente (best-effort, non blocca il flusso).
   static void _deleteFileSilently(File file) {
     file.delete().catchError((e) {
       debugPrint('ExportUtils: impossibile eliminare file temp: $e');
