@@ -47,10 +47,9 @@ class ExportUtils {
     }
     final sortedRooms = allRooms.toList()..sort();
 
-    // Header
     List<String> header = [
       "Data",
-      "T. Esterna (°C)",
+      "T. Esterna (\u00b0C)",
       "Consumo (kWh)",
       "ACS (kWh)",
       "Energia Rete (kWh)",
@@ -60,12 +59,11 @@ class ExportUtils {
       "Note",
     ];
     for (var room in sortedRooms) {
-      header.add("$room T. (°C)");
+      header.add("$room T. (\u00b0C)");
       header.add("$room Comfort");
     }
     rows.add(header);
 
-    // Righe dati
     for (var r in sortedRecords) {
       final DateTime date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
       List<dynamic> row = [
@@ -140,7 +138,6 @@ class ExportUtils {
       return dB.compareTo(dA);
     });
 
-    // Calcola statistiche energetiche aggregate
     final recordsWithGrid = sortedRecords.where((r) => r.energyFromGrid != null);
     final recordsWithPv = sortedRecords.where((r) => r.pvProduction != null);
     final recordsWithAcs = sortedRecords.where((r) => r.consumptionACS != null);
@@ -187,7 +184,7 @@ class ExportUtils {
                   slope?.toStringAsFixed(2) ?? '-',
                   offset?.toStringAsFixed(2) ?? '-',
                   suggestion != null
-                      ? 'Slope ${suggestion.newSlope.toStringAsFixed(2)} / Offset ${suggestion.newOffset.toStringAsFixed(2)}'
+                      ? 'Slope ${suggestion.suggestedSlope.toStringAsFixed(2)} / Offset ${suggestion.suggestedOffset.toStringAsFixed(2)}'
                       : '-',
                 ],
               ],
