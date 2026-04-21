@@ -14,7 +14,6 @@ class NotificationService {
 
   static bool _initialized = false;
 
-  /// Orario di fallback usato se il valore salvato è assente o malformato.
   static const String _fallbackTime = '20:00';
 
   static Future init() async {
@@ -51,8 +50,6 @@ class NotificationService {
     }
   }
 
-  /// Parsa una stringa "HH:mm" e restituisce [hour, minute].
-  /// Se la stringa è malformata o fuori range restituisce il fallback [20, 0].
   static (int hour, int minute) _parseTimeStr(String? raw) {
     const fallbackHour = 20;
     const fallbackMinute = 0;
@@ -68,8 +65,8 @@ class NotificationService {
     final mm = int.tryParse(parts[1]);
 
     if (hh == null || mm == null) return (fallbackHour, fallbackMinute);
-    if (hh < 0 || hh > 23)       return (fallbackHour, fallbackMinute);
-    if (mm < 0 || mm > 59)       return (fallbackHour, fallbackMinute);
+    if (hh < 0 || hh > 23) return (fallbackHour, fallbackMinute);
+    if (mm < 0 || mm > 59) return (fallbackHour, fallbackMinute);
 
     return (hh, mm);
   }
@@ -124,6 +121,46 @@ class NotificationService {
         textColor: Colors.white,
         toastLength: Toast.LENGTH_LONG,
       );
+    }
+  }
+
+  /// Mostra immediatamente una notifica contestuale con il suggerimento AI.
+  /// Viene chiamata dopo ogni salvataggio record, solo se l'AI ha un tip
+  /// significativo (non in fase di apprendimento).
+  static Future showContextualNotification({
+    required String title,
+    required String body,
+  }) async {
+    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
+
+    await init();
+
+    try {
+      const AndroidNotificationDetails androidDetails =
+          AndroidNotificationDetails(
+        'contextual_channel',
+        'Suggerimenti AI ClimaSense',
+        channelDescription: 'Feedback intelligente dopo il salvataggio dati',
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        icon: '@mipmap/ic_launcher',
+        enableVibration: false,
+        playSound: false,
+        // Usa un colore di sfondo teal per distinguerla dal promemoria
+        color: Color(0xFF00838F),
+      );
+      const NotificationDetails details =
+          NotificationDetails(android: androidDetails);
+
+      await _notifications.show(
+        2, // ID fisso: sovrascrive sempre la precedente notifica contestuale
+        title,
+        body,
+        details,
+      );
+    } catch (e) {
+      // Notifica contestuale non critica: fallisce silenziosamente
+      debugPrint('NotificationService.showContextualNotification error: $e');
     }
   }
 
