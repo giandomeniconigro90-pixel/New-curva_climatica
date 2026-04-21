@@ -60,11 +60,18 @@ class _InputPageState extends State<InputPage> {
   String? _weatherLocation;
 
   // Colori card — usati sia nella grid che nel popup
-  static const Color _colorEsterna     = Color(0xFF1976D2);
-  static const Color _colorConsumo     = Color(0xFF66BB6A);
-  static const Color _colorAcs         = Color(0xFF26A69A);
-  static const Color _colorRete        = Color(0xFFF57C00);
+  static const Color _colorEsterna      = Color(0xFF1976D2);
+  static const Color _colorConsumo      = Color(0xFF66BB6A);
+  static const Color _colorAcs          = Color(0xFF26A69A);
+  static const Color _colorRete         = Color(0xFFF57C00);
   static const Color _colorFotovoltaico = Color(0xFFFDD835);
+
+  /// Restituisce il colore della card adattato al tema:
+  /// in dark mode applica opacity ridotta per un effetto traslucido.
+  Color _cardColor(BuildContext context, Color base) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? base.withOpacity(0.55) : base;
+  }
 
   String get _weatherSubtitle {
     if (_weatherLocation != null) return _weatherLocation!;
@@ -275,29 +282,29 @@ class _InputPageState extends State<InputPage> {
     return ValueListenableBuilder<String>(
       valueListenable: widget.heatpumpModeNotifier,
       builder: (context, mode, _) {
-        Color color;
+        Color baseColor;
         IconData icon;
         String label;
 
         switch (mode) {
           case 'riscaldamento':
-            color = const Color(0xFFFF9800);
+            baseColor = const Color(0xFFFF9800);
             icon = Icons.local_fire_department_outlined;
             label = 'Riscaldamento';
             break;
           case 'raffrescamento':
-            color = const Color(0xFF29B6F6);
+            baseColor = const Color(0xFF29B6F6);
             icon = Icons.ac_unit;
             label = 'Raffrescamento';
             break;
           default:
-            color = const Color(0xFF90A4AE);
+            baseColor = const Color(0xFF90A4AE);
             icon = Icons.power_settings_new;
             label = 'Spenta';
         }
 
         return _buildDropdownTile(
-          color: color,
+          color: _cardColor(context, baseColor),
           icon: icon,
           emoji: label == 'Raffrescamento'
               ? '\u2744\uFE0F'
@@ -320,29 +327,29 @@ class _InputPageState extends State<InputPage> {
     return ValueListenableBuilder<String>(
       valueListenable: widget.boilerModeNotifier,
       builder: (context, mode, _) {
-        Color color;
+        Color baseColor;
         IconData icon;
         String emoji;
 
         switch (mode) {
           case 'accesa':
-            color = const Color(0xFFE53935);
+            baseColor = const Color(0xFFE53935);
             icon = Icons.local_fire_department;
             emoji = '\uD83D\uDD25';
             break;
           case 'standby':
-            color = const Color(0xFFFFB300);
+            baseColor = const Color(0xFFFFB300);
             icon = Icons.pause_circle_outline;
             emoji = '\u23F8';
             break;
           default:
-            color = const Color(0xFF78909C);
+            baseColor = const Color(0xFF78909C);
             icon = Icons.power_settings_new;
             emoji = '\u26D4';
         }
 
         return _buildDropdownTile(
-          color: color,
+          color: _cardColor(context, baseColor),
           icon: icon,
           emoji: emoji,
           subtitle: 'Cozytouch',
@@ -372,7 +379,7 @@ class _InputPageState extends State<InputPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3),
+            color: color.withOpacity(0.25),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -442,17 +449,18 @@ class _InputPageState extends State<InputPage> {
         final double? val =
             double.tryParse(controller.text.replaceAll(',', '.'));
         final String displayVal = val != null ? val.toStringAsFixed(1) : '--';
+        final Color effectiveColor = _cardColor(context, color);
 
         return GestureDetector(
           onTap: () => _openControlPage(title, controller, suffix == 'kWh', isRoom, color),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color,
+              color: effectiveColor,
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.3),
+                  color: effectiveColor.withOpacity(0.25),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
