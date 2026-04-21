@@ -83,10 +83,11 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onAddRecord: () => notifier.addRecord(context),
             isEditing: notifier.editingIndex != null,
             isCooling: isCooling,
-            onDuplicateFromYesterday: notifier.duplicateFromYesterday,
-            onExportCsv: notifier.exportCsv,
-            onExportPdf: notifier.exportPdf,
-            onDeleteToday: notifier.deleteToday,
+            onDuplicateFromYesterday: () =>
+                notifier.duplicateFromYesterday(context),
+            onExportCsv: () => notifier.exportCsv(context),
+            onExportPdf: () => notifier.exportPdf(context),
+            onDeleteToday: () => notifier.deleteToday(context),
           ),
           // 1 — AI Storico
           ResultsPage(
@@ -95,7 +96,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             offset: notifier.offset,
             suggestion: suggestion,
             stats: stats,
-            onApplyAiCurve: notifier.onApplyAiCurve,
+            onApplyAiCurve: () => notifier.onApplyAiCurve(context),
             onEditRecordByDateIso: notifier.startEditRecordByDateIso,
             onDeleteRecordByDateIso: notifier.deleteRecordByDateIso,
           ),
@@ -145,10 +146,10 @@ class _ClimateCurveHomeView extends StatelessWidget {
                 }
               }
             },
-            onBackup: notifier.doBackup,
+            onBackup: () => notifier.doBackup(context),
             onRestore: () => notifier.doRestore(context),
-            onExportCsv: notifier.exportCsv,
-            onExportPdf: notifier.exportPdf,
+            onExportCsv: () => notifier.exportCsv(context),
+            onExportPdf: () => notifier.exportPdf(context),
           ),
         ];
 
