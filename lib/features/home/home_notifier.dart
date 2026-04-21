@@ -268,6 +268,36 @@ class HomeNotifier extends ChangeNotifier {
     pageController.jumpToPage(0);
   }
 
+  /// Costruisce il testo della notifica contestuale in base alla suggestion AI.
+  /// Ritorna null se non c'è nulla di significativo da dire (fase apprendimento).
+  String? _buildContextualNotificationBody(CurveSuggestion suggestion) {
+    final slopeDelta = suggestion.suggestedSlope - slope;
+    final offsetDelta = suggestion.suggestedOffset - offset;
+    final hasChange =
+        slopeDelta.abs() >= 0.05 || offsetDelta.abs() >= 0.05;
+
+    if (!hasChange) return null;
+
+    // Usa lo smartTip se disponibile, altrimenti costruisce un testo sintetico
+    if (suggestion.smartTip != null &&
+        suggestion.smartTip!.isNotEmpty &&
+        !suggestion.smartTip!.toLowerCase().contains('apprendimento')) {
+      return suggestion.smartTip;
+    }
+
+    final modeLabel =
+        currentMode == SystemMode.heating ? 'riscaldamento' : 'raffrescamento';
+    if (slopeDelta > 0) {
+      return 'La curva di $modeLabel potrebbe essere incrementata. Valuta di applicare il suggerimento AI.';
+    } else if (slopeDelta < 0) {
+      return 'La curva di $modeLabel potrebbe essere ridotta. Valuta di applicare il suggerimento AI.';
+    } else if (offsetDelta > 0) {
+      return 'Offset $modeLabel in aumento suggerito. Controlla il grafico AI.';
+    } else {
+      return 'Offset $modeLabel in diminuzione suggerito. Controlla il grafico AI.';
+    }
+  }
+
   Future<void> addRecord(BuildContext context) async {
     final result = RecordFormValidator.validate(
       externalTempController: externalTempController,
@@ -361,6 +391,26 @@ class HomeNotifier extends ChangeNotifier {
     await saveToHive();
     clearFields();
     if (context.mounted) FocusScope.of(context).unfocus();
+
+    // ---- Notifica contestuale AI ----
+    // Calcola la suggestion sui record aggiornati e invia una notifica
+    // locale solo se l'AI ha un suggerimento significativo.
+    try {
+      final windowRecords = recordsSinceLastApply(currentMode);
+      if (windowRecords.length >= 5) {
+        final suggestion = computeOptimalCurveSuggestion(
+            windowRecords, slope, offset, currentMode);
+        final body = _buildContextualNotificationBody(suggestion);
+        if (body != null) {
+          await NotificationService.showContextualNotification(
+            title: '🧠 ClimaSense AI',
+            body: body,
+          );
+        }
+      }
+    } catch (_) {
+      // Non critico: ignora eventuali errori nella notifica contestuale
+    }
   }
 
   Future<void> deleteRecordByDateIso(String dateIso) async {
@@ -458,17 +508,17 @@ class HomeNotifier extends ChangeNotifier {
       return;
     }
 
-    final now = DateTime.now();
+    final nowApply = DateTime.now();
     _settings = currentMode == SystemMode.heating
         ? _settings.copyWith(
             heatingSlope: suggestion.suggestedSlope,
             heatingOffset: suggestion.suggestedOffset,
-            lastAiApplyHeating: now,
+            lastAiApplyHeating: nowApply,
           )
         : _settings.copyWith(
             coolingSlope: suggestion.suggestedSlope,
             coolingOffset: suggestion.suggestedOffset,
-            lastAiApplyCooling: now,
+            lastAiApplyCooling: nowApply,
           );
 
     notifyListeners();
