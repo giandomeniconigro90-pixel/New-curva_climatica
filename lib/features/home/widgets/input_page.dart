@@ -290,13 +290,13 @@ class _InputPageState extends State<InputPage> {
               ? '❄️'
               : label == 'Riscaldamento'
                   ? '🔥'
-                  : '⏸',
+                  : '⛔',
           subtitle: 'Comfort Home',
           notifier: widget.heatpumpModeNotifier,
           items: const [
             DropdownMenuItem(value: 'riscaldamento', child: Text('🔥 Riscaldamento')),
             DropdownMenuItem(value: 'raffrescamento', child: Text('❄️ Raffrescamento')),
-            DropdownMenuItem(value: 'spenta', child: Text('⏸ Spenta')),
+            DropdownMenuItem(value: 'spenta', child: Text('⛔ Spenta')),
           ],
         );
       },
