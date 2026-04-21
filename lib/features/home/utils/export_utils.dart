@@ -36,7 +36,6 @@ class ExportUtils {
   static void _appendDataRows(List<List<dynamic>> rows, List<DailyRecordDTO> records) {
     if (records.isEmpty) return;
     final sortedRecords = List<DailyRecordDTO>.from(records);
-    // Ordine cronologico decrescente (più recente prima) usando DateTime reale
     sortedRecords.sort((a, b) {
       final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
       final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
@@ -51,14 +50,17 @@ class ExportUtils {
     // Header
     List<String> header = [
       "Data",
-      "T. Esterna",
+      "T. Esterna (°C)",
       "Consumo (kWh)",
       "ACS (kWh)",
+      "Energia Rete (kWh)",
+      "Fotovoltaico (kWh)",
       "Pompa di Calore",
+      "Caldaia",
       "Note",
     ];
     for (var room in sortedRooms) {
-      header.add("$room T.");
+      header.add("$room T. (°C)");
       header.add("$room Comfort");
     }
     rows.add(header);
@@ -73,7 +75,14 @@ class ExportUtils {
         r.consumptionACS != null
             ? r.consumptionACS!.toString().replaceAll('.', ',')
             : "",
+        r.energyFromGrid != null
+            ? r.energyFromGrid!.toString().replaceAll('.', ',')
+            : "",
+        r.pvProduction != null
+            ? r.pvProduction!.toString().replaceAll('.', ',')
+            : "",
         r.heatpumpMode ?? "",
+        r.boilerMode ?? "",
         r.note.replaceAll('\n', ' '),
       ];
       for (var room in sortedRooms) {
@@ -125,64 +134,192 @@ class ExportUtils {
       }) async {
     final pdf = pw.Document();
     final sortedRecords = List<DailyRecordDTO>.from(records);
-    // Stesso fix: ordinamento cronologico reale anche nel PDF
     sortedRecords.sort((a, b) {
       final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
       final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
       return dB.compareTo(dA);
     });
+
+    // Calcola statistiche energetiche aggregate
+    final recordsWithGrid = sortedRecords.where((r) => r.energyFromGrid != null);
+    final recordsWithPv = sortedRecords.where((r) => r.pvProduction != null);
+    final recordsWithAcs = sortedRecords.where((r) => r.consumptionACS != null);
+
+    final totalConsumption = sortedRecords.fold(0.0, (s, r) => s + r.consumption);
+    final totalAcs = recordsWithAcs.fold(0.0, (s, r) => s + r.consumptionACS!);
+    final totalGrid = recordsWithGrid.fold(0.0, (s, r) => s + r.energyFromGrid!);
+    final totalPv = recordsWithPv.fold(0.0, (s, r) => s + r.pvProduction!);
+
+    final modeLabel = currentMode == SystemMode.heating ? 'Riscaldamento' : 'Raffrescamento';
+    final exportDate = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(20),
+        margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
-            pw.Header(
-              level: 0,
-              child: pw.Text(
-                'ClimaSense Report',
-                style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
-              ),
+            // ── Intestazione ──
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  'ClimaSense Report',
+                  style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text(
+                  exportDate,
+                  style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+                ),
+              ],
             ),
-            pw.SizedBox(height: 10),
-            if (chartImage != null)
+            pw.Divider(thickness: 1.5),
+            pw.SizedBox(height: 8),
+
+            // ── Parametri curva ──
+            pw.Text('Parametri Curva', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 4),
+            pw.Table.fromTextArray(
+              headers: ['Modalità', 'Pendenza (Slope)', 'Parallela (Offset)', 'Suggerimento AI'],
+              data: [
+                [
+                  modeLabel,
+                  slope?.toStringAsFixed(2) ?? '-',
+                  offset?.toStringAsFixed(2) ?? '-',
+                  suggestion != null
+                      ? 'Slope ${suggestion.newSlope.toStringAsFixed(2)} / Offset ${suggestion.newOffset.toStringAsFixed(2)}'
+                      : '-',
+                ],
+              ],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey100),
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.center,
+                3: pw.Alignment.centerLeft,
+              },
+            ),
+            pw.SizedBox(height: 12),
+
+            // ── Statistiche aggregate ──
+            pw.Text('Riepilogo Energetico (${sortedRecords.length} giorni)', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 4),
+            pw.Table.fromTextArray(
+              headers: ['Voce', 'Totale', 'Media/giorno', 'Giorni rilevati'],
+              data: [
+                [
+                  'Consumo Pompa di Calore',
+                  '${totalConsumption.toStringAsFixed(1)} kWh',
+                  sortedRecords.isNotEmpty ? '${(totalConsumption / sortedRecords.length).toStringAsFixed(1)} kWh' : '-',
+                  '${sortedRecords.length}',
+                ],
+                if (recordsWithAcs.isNotEmpty)
+                  [
+                    'ACS (Atlantic Calypso)',
+                    '${totalAcs.toStringAsFixed(1)} kWh',
+                    '${(totalAcs / recordsWithAcs.length).toStringAsFixed(1)} kWh',
+                    '${recordsWithAcs.length}',
+                  ],
+                if (recordsWithGrid.isNotEmpty)
+                  [
+                    'Energia da Rete',
+                    '${totalGrid.toStringAsFixed(1)} kWh',
+                    '${(totalGrid / recordsWithGrid.length).toStringAsFixed(1)} kWh',
+                    '${recordsWithGrid.length}',
+                  ],
+                if (recordsWithPv.isNotEmpty)
+                  [
+                    'Produzione Fotovoltaico',
+                    '${totalPv.toStringAsFixed(1)} kWh',
+                    '${(totalPv / recordsWithPv.length).toStringAsFixed(1)} kWh',
+                    '${recordsWithPv.length}',
+                  ],
+              ],
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey100),
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+            ),
+            pw.SizedBox(height: 12),
+
+            // ── Grafico curva (se disponibile) ──
+            if (chartImage != null) ...[
+              pw.Text('Grafico Curva Climatica', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 6),
               pw.Container(
                 height: 200,
-                width: 400,
+                width: double.infinity,
                 child: pw.Image(pw.MemoryImage(chartImage)),
               ),
-            pw.SizedBox(height: 20),
+              pw.SizedBox(height: 12),
+            ],
+
+            // ── Tabella giornaliera ──
+            pw.Text('Registrazioni Giornaliere', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 4),
             pw.Table.fromTextArray(
               context: context,
               headers: <String>[
                 'Data',
-                'Ext \u00b0C',
-                'Consumo',
-                'ACS (kWh)',
-                'Pompa di Calore',
+                'Ext\n°C',
+                'HP\nkWh',
+                'ACS\nkWh',
+                'Rete\nkWh',
+                'PV\nkWh',
+                'Pompa\ndi Calore',
+                'Caldaia',
                 'Note',
               ],
               data: sortedRecords.map((r) {
                 final date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
                 return [
-                  DateFormat('dd/MM/yyyy').format(date),
+                  DateFormat('dd/MM/yy').format(date),
                   '${r.externalTemp}',
                   '${r.consumption}',
                   r.consumptionACS != null ? '${r.consumptionACS}' : '-',
+                  r.energyFromGrid != null ? '${r.energyFromGrid}' : '-',
+                  r.pvProduction != null ? '${r.pvProduction}' : '-',
                   r.heatpumpMode ?? '-',
-                  r.note,
+                  r.boilerMode ?? '-',
+                  r.note.length > 40 ? '${r.note.substring(0, 40)}…' : r.note,
                 ];
               }).toList(),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
+              cellStyle: const pw.TextStyle(fontSize: 8),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey100),
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              columnWidths: {
+                0: const pw.FixedColumnWidth(52),
+                1: const pw.FixedColumnWidth(28),
+                2: const pw.FixedColumnWidth(28),
+                3: const pw.FixedColumnWidth(28),
+                4: const pw.FixedColumnWidth(28),
+                5: const pw.FixedColumnWidth(28),
+                6: const pw.FixedColumnWidth(52),
+                7: const pw.FixedColumnWidth(40),
+                8: const pw.FlexColumnWidth(),
+              },
             ),
           ];
         },
+        footer: (pw.Context context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('ClimaSense — Export automatico', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text('Pag. ${context.pageNumber} / ${context.pagesCount}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+          ],
+        ),
       ),
     );
+
     final directory = await getApplicationDocumentsDirectory();
     final path = '${directory.path}/ClimaSense_Report.pdf';
     final file = File(path);
     await file.writeAsBytes(await pdf.save());
-    await Share.shareXFiles([XFile(path)], text: 'Export PDF');
+    await Share.shareXFiles([XFile(path)], text: 'Export PDF ClimaSense');
     _deleteFileSilently(file);
   }
 
