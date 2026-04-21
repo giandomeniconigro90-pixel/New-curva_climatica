@@ -182,8 +182,12 @@ class AppStorage {
   }
 
   // --- COSTI ---
+  // Default: 0.1489 €/kWh — A2A Click Luce Monoraria (IVA 10% inclusa)
+  // Componenti: energia 0.112 + disp. 0.01173 + cap. 0.01164
+  //             + trasporto 0.01473 + oneri 0.03030 + ASOS 0.02866 = 0.13537
+  //             × 1.10 IVA = 0.14891 arrotondato a 0.1489
   static double getCostPerKwh() {
-    return Hive.box(_boxName).get('costPerKwh', defaultValue: 0.25);
+    return Hive.box(_boxName).get('costPerKwh', defaultValue: 0.1489);
   }
 
   static Future<void> saveCostPerKwh(double value) async {

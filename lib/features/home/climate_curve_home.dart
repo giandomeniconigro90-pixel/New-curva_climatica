@@ -10,6 +10,7 @@ import 'widgets/input_page.dart';
 import 'widgets/results_page.dart';
 import 'widgets/help_page.dart';
 import 'widgets/curve_chart_page.dart';
+import 'widgets/energy_page.dart';
 
 class ClimateCurveOfflineHome extends StatelessWidget {
   final double initialSlope;
@@ -143,6 +144,8 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onExportCsv: notifier.exportCsv,
             onExportPdf: notifier.exportPdf,
           ),
+          // Tab 4 — Energia & Costi
+          EnergyPage(records: notifier.records),
         ];
 
         return Scaffold(
@@ -176,6 +179,13 @@ class _ClimateCurveHomeView extends StatelessWidget {
                   index: 3,
                   icon: Icons.help_outline_rounded,
                   label: 'Guida',
+                  currentPage: notifier.currentPage,
+                  onTap: notifier.onNavDestinationSelected,
+                ),
+                _TabItem(
+                  index: 4,
+                  icon: Icons.bolt_outlined,
+                  label: 'Energia',
                   currentPage: notifier.currentPage,
                   onTap: notifier.onNavDestinationSelected,
                 ),
@@ -278,7 +288,7 @@ class _TabItem extends StatelessWidget {
       onTap: () => onTap(index),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: isSelected ? active.withOpacity(0.08) : Colors.transparent,
@@ -292,7 +302,7 @@ class _TabItem extends StatelessWidget {
               label,
               style: TextStyle(
                 color: isSelected ? active : inactive,
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.bold,
               ),
             ),
