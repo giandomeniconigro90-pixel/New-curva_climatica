@@ -9,7 +9,6 @@ class AppStorage {
   static const String _boxName = 'clima_sense_box';
   static const String _recordsBoxName = 'daily_records_box';
 
-  /// Prefisso usato durante la fase di staging dell'atomic write.
   static const String _stagingPrefix = '__new__';
 
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
@@ -22,19 +21,9 @@ class AppStorage {
     }
     await Hive.openBox(_boxName);
     await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
-
-    // Recovery: se l'app è crashata durante un atomic write,
-    // troveremo chiavi con prefisso _stagingPrefix e nessuna chiave definitiva.
-    // In quel caso completiamo il write promuovendo i record in staging.
     await _recoverStagingIfNeeded();
   }
 
-  /// Completa un atomic write interrotto: promuove i record in staging
-  /// a record definitivi e poi rimuove le chiavi di staging.
-  ///
-  /// IMPORTANTE: usa [DailyRecordDTO.clone()] per creare una nuova istanza
-  /// senza legame alla vecchia chiave Hive, evitando il crash
-  /// "same HiveObject stored with two different keys".
   static Future<void> _recoverStagingIfNeeded() async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
     final stagingKeys = box.keys
@@ -44,22 +33,16 @@ class AppStorage {
 
     if (stagingKeys.isEmpty) return;
 
-    // Controlla se esistono anche record definitivi:
-    // se sì, lo staging era già stato completato parzialmente → pulisci solo staging.
-    // Se no, lo staging è tutto ciò che abbiamo → promuovi.
     final definitiveKeys = box.keys
         .whereType<String>()
         .where((k) => !k.startsWith(_stagingPrefix))
         .toSet();
 
     if (definitiveKeys.isEmpty) {
-      // Nessun record definitivo → promuovi dallo staging
       for (final sk in stagingKeys) {
         final record = box.get(sk);
         if (record != null) {
           final definitiveKey = sk.substring(_stagingPrefix.length);
-          // Crea una nuova istanza: un HiveObject non può essere salvato
-          // con una chiave diversa da quella con cui è stato inserito.
           final fresh = DailyRecordDTO(
             dateIso: record.dateIso,
             externalTemp: record.externalTemp,
@@ -68,13 +51,14 @@ class AppStorage {
             comfortRatings: Map<String, String>.from(record.comfortRatings),
             note: record.note,
             mode: record.mode,
+            heatpumpMode: record.heatpumpMode,
+            consumptionACS: record.consumptionACS,
           );
           await box.put(definitiveKey, fresh);
         }
       }
     }
 
-    // Rimuovi tutte le chiavi di staging
     await box.deleteAll(stagingKeys);
   }
 
@@ -230,20 +214,10 @@ class AppStorage {
     await box.put(_recordKey(record), record);
   }
 
-  /// Salvataggio atomico (write-then-swap).
-  ///
-  /// Sequenza:
-  ///   1. Scrivi tutti i nuovi record con prefisso __new__  (staging)
-  ///   2. Cancella i record definitivi esistenti
-  ///   3. Promuovi i record di staging a definitivi (nuova istanza)
-  ///   4. Cancella le chiavi di staging
-  ///
-  /// Se l'app crasha tra i passi 2 e 3, all'avvio successivo
-  /// [_recoverStagingIfNeeded] completa automaticamente la promozione.
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
 
-    // Passo 1 — staging: salva copie fresh con chiave __new__
+    // Passo 1 — staging
     final Map<String, DailyRecordDTO> staging = {
       for (final r in records)
         _stagingKey(r): DailyRecordDTO(
@@ -254,6 +228,8 @@ class AppStorage {
           comfortRatings: Map<String, String>.from(r.comfortRatings),
           note: r.note,
           mode: r.mode,
+          heatpumpMode: r.heatpumpMode,
+          consumptionACS: r.consumptionACS,
         ),
     };
     await box.putAll(staging);
@@ -265,7 +241,7 @@ class AppStorage {
         .toList();
     await box.deleteAll(definitiveKeys);
 
-    // Passo 3 — promuovi staging con nuove istanze
+    // Passo 3 — promuovi staging
     final Map<String, DailyRecordDTO> promoted = {
       for (final r in records)
         _recordKey(r): DailyRecordDTO(
@@ -276,6 +252,8 @@ class AppStorage {
           comfortRatings: Map<String, String>.from(r.comfortRatings),
           note: r.note,
           mode: r.mode,
+          heatpumpMode: r.heatpumpMode,
+          consumptionACS: r.consumptionACS,
         ),
     };
     await box.putAll(promoted);
@@ -285,8 +263,6 @@ class AppStorage {
   }
 
   static List<DailyRecordDTO> getRecords() {
-    // Esclude eventuali chiavi di staging residue (non dovrebbero esserci
-    // dopo la recovery in init(), ma per sicurezza filtriamo)
     return Hive.box<DailyRecordDTO>(_recordsBoxName)
         .toMap()
         .entries
