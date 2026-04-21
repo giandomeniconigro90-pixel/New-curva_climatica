@@ -14,6 +14,21 @@ class AppStorage {
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
   static String _stagingKey(DailyRecordDTO r) => '$_stagingPrefix${_recordKey(r)}';
 
+  static DailyRecordDTO _cloneRecord(DailyRecordDTO r) => DailyRecordDTO(
+        dateIso: r.dateIso,
+        externalTemp: r.externalTemp,
+        internalTemps: Map<String, double>.from(r.internalTemps),
+        consumption: r.consumption,
+        comfortRatings: Map<String, String>.from(r.comfortRatings),
+        note: r.note,
+        mode: r.mode,
+        heatpumpMode: r.heatpumpMode,
+        consumptionACS: r.consumptionACS,
+        boilerMode: r.boilerMode,
+        energyFromGrid: r.energyFromGrid,
+        pvProduction: r.pvProduction,
+      );
+
   static Future<void> init() async {
     await Hive.initFlutter();
     if (!Hive.isAdapterRegistered(0)) {
@@ -43,18 +58,7 @@ class AppStorage {
         final record = box.get(sk);
         if (record != null) {
           final definitiveKey = sk.substring(_stagingPrefix.length);
-          final fresh = DailyRecordDTO(
-            dateIso: record.dateIso,
-            externalTemp: record.externalTemp,
-            internalTemps: Map<String, double>.from(record.internalTemps),
-            consumption: record.consumption,
-            comfortRatings: Map<String, String>.from(record.comfortRatings),
-            note: record.note,
-            mode: record.mode,
-            heatpumpMode: record.heatpumpMode,
-            consumptionACS: record.consumptionACS,
-          );
-          await box.put(definitiveKey, fresh);
+          await box.put(definitiveKey, _cloneRecord(record));
         }
       }
     }
@@ -76,7 +80,6 @@ class AppStorage {
     await Hive.box(_boxName).put('heatingSlope', value);
   }
 
-  /// Default allineato a CurveSettings.defaults() → 1.0
   static double getSlope() {
     return Hive.box(_boxName).get('heatingSlope', defaultValue: 1.0);
   }
@@ -169,7 +172,6 @@ class AppStorage {
     return Hive.box(_boxName).get('lastAiApplyCooling');
   }
 
-  /// Reset calibrazione: usa 1.0 come default allineato a CurveSettings.defaults()
   static Future<void> resetCalibration() async {
     await saveSlope(1.0);
     await saveOffset(0.0);
@@ -221,18 +223,7 @@ class AppStorage {
 
     // Passo 1 — staging
     final Map<String, DailyRecordDTO> staging = {
-      for (final r in records)
-        _stagingKey(r): DailyRecordDTO(
-          dateIso: r.dateIso,
-          externalTemp: r.externalTemp,
-          internalTemps: Map<String, double>.from(r.internalTemps),
-          consumption: r.consumption,
-          comfortRatings: Map<String, String>.from(r.comfortRatings),
-          note: r.note,
-          mode: r.mode,
-          heatpumpMode: r.heatpumpMode,
-          consumptionACS: r.consumptionACS,
-        ),
+      for (final r in records) _stagingKey(r): _cloneRecord(r),
     };
     await box.putAll(staging);
 
@@ -245,18 +236,7 @@ class AppStorage {
 
     // Passo 3 — promuovi staging
     final Map<String, DailyRecordDTO> promoted = {
-      for (final r in records)
-        _recordKey(r): DailyRecordDTO(
-          dateIso: r.dateIso,
-          externalTemp: r.externalTemp,
-          internalTemps: Map<String, double>.from(r.internalTemps),
-          consumption: r.consumption,
-          comfortRatings: Map<String, String>.from(r.comfortRatings),
-          note: r.note,
-          mode: r.mode,
-          heatpumpMode: r.heatpumpMode,
-          consumptionACS: r.consumptionACS,
-        ),
+      for (final r in records) _recordKey(r): _cloneRecord(r),
     };
     await box.putAll(promoted);
 
