@@ -82,7 +82,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                'A2A Click Luce – Monoraria\nTutte le componenti variabili + IVA 10%',
+                'A2A Click Luce \u2013 Monoraria\nTutte le componenti variabili + IVA 10%',
                 style: TextStyle(fontSize: 12),
               ),
             ),
@@ -94,9 +94,9 @@ class _EnergyPageState extends State<EnergyPage> {
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
               ],
               decoration: InputDecoration(
-                labelText: 'Prezzo (€/kWh)',
+                labelText: 'Prezzo (\u20ac/kWh)',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                suffixText: '€/kWh',
+                suffixText: '\u20ac/kWh',
                 prefixIcon: const Icon(Icons.euro_outlined, size: 18),
               ),
             ),
@@ -133,7 +133,7 @@ class _EnergyPageState extends State<EnergyPage> {
 
     return CustomScrollView(
       slivers: [
-        // ── Header ──────────────────────────────────────────────────────
+        // \u2500\u2500 Header
         SliverToBoxAdapter(
           child: Container(
             margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -155,14 +155,9 @@ class _EnergyPageState extends State<EnergyPage> {
                 const SizedBox(width: 10),
                 Text(
                   'Energia & Costi',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: cs.onSurface),
                 ),
                 const Spacer(),
-                // chip prezzo
                 GestureDetector(
                   onTap: _editPrice,
                   child: Container(
@@ -178,12 +173,8 @@ class _EnergyPageState extends State<EnergyPage> {
                         Icon(Icons.edit_outlined, size: 12, color: cs.primary),
                         const SizedBox(width: 5),
                         Text(
-                          '${_costPerKwh.toStringAsFixed(4)} €/kWh',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: cs.primary,
-                          ),
+                          '${_costPerKwh.toStringAsFixed(4)} \u20ac/kWh',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.primary),
                         ),
                       ],
                     ),
@@ -194,7 +185,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // ── KPI Cards ───────────────────────────────────────────────────
+        // \u2500\u2500 KPI Cards
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -204,7 +195,7 @@ class _EnergyPageState extends State<EnergyPage> {
                   label: 'Rete',
                   value: _totalGrid.toStringAsFixed(1),
                   unit: 'kWh',
-                  sub: '${_totalCost.toStringAsFixed(2)} €',
+                  sub: '${_totalCost.toStringAsFixed(2)} \u20ac',
                   icon: Icons.electrical_services_outlined,
                   accentColor: _colGrid,
                 ),
@@ -213,7 +204,7 @@ class _EnergyPageState extends State<EnergyPage> {
                   label: 'Fotovoltaico',
                   value: _totalPv.toStringAsFixed(1),
                   unit: 'kWh',
-                  sub: '↓ ${_savedCost.toStringAsFixed(2)} €',
+                  sub: '\u2193 ${_savedCost.toStringAsFixed(2)} \u20ac',
                   icon: Icons.wb_sunny_outlined,
                   accentColor: _colPv,
                 ),
@@ -222,7 +213,7 @@ class _EnergyPageState extends State<EnergyPage> {
                   label: 'PDC',
                   value: _totalPdc.toStringAsFixed(1),
                   unit: 'kWh',
-                  sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} €',
+                  sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} \u20ac',
                   icon: Icons.heat_pump_outlined,
                   accentColor: _colPdc,
                 ),
@@ -231,7 +222,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // ── Grafico barre ────────────────────────────────────────────────
+        // \u2500\u2500 Grafico barre
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -249,13 +240,13 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // ── Grafico costi ────────────────────────────────────────────────
+        // \u2500\u2500 Grafico costi
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             child: _ChartCard(
               title: 'Costi giornalieri',
-              unit: '€',
+              unit: '\u20ac',
               icon: Icons.show_chart_rounded,
               legend: const [
                 _LegendDot(color: _colGrid, label: 'Costo rete'),
@@ -266,7 +257,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // ── Tabella ──────────────────────────────────────────────────────
+        // \u2500\u2500 Tabella
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
@@ -277,7 +268,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Grafico a barre ──────────────────────────────────────────────────────
+  // \u2500\u2500 Grafico a barre
   Widget _buildBarChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final groups = <BarChartGroupData>[];
     for (int i = 0; i < records.length; i++) {
@@ -296,7 +287,7 @@ class _EnergyPageState extends State<EnergyPage> {
       ));
     }
     return SizedBox(
-      height: 200,
+      height: 220,
       child: BarChart(BarChartData(
         barGroups: groups,
         borderData: FlBorderData(show: false),
@@ -318,15 +309,18 @@ class _EnergyPageState extends State<EnergyPage> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 28,
+              reservedSize: 44,  // aumentato per dare spazio alle date
               getTitlesWidget: (v, _) {
                 final idx = v.toInt();
                 if (idx < 0 || idx >= records.length) return const SizedBox.shrink();
                 final parts = records[idx].dateIso.split('/');
                 final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
-                return Transform.rotate(
-                  angle: -0.5,
-                  child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),  // distanza dalle barre
+                  child: Transform.rotate(
+                    angle: -0.6,
+                    child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
+                  ),
                 );
               },
             ),
@@ -349,7 +343,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Grafico costi ────────────────────────────────────────────────────────
+  // \u2500\u2500 Grafico costi
   Widget _buildCostChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final gridSpots = <FlSpot>[];
     final pvSpots   = <FlSpot>[];
@@ -359,7 +353,7 @@ class _EnergyPageState extends State<EnergyPage> {
       pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
     }
     return SizedBox(
-      height: 180,
+      height: 200,
       child: LineChart(LineChartData(
         borderData: FlBorderData(show: false),
         gridData: FlGridData(
@@ -373,22 +367,25 @@ class _EnergyPageState extends State<EnergyPage> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 38,
-              getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(2)}€',
+              getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(2)}\u20ac',
                   style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
             ),
           ),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 28,
+              reservedSize: 44,  // aumentato per dare spazio alle date
               getTitlesWidget: (v, _) {
                 final idx = v.toInt();
                 if (idx < 0 || idx >= records.length || idx % 2 != 0) return const SizedBox.shrink();
                 final parts = records[idx].dateIso.split('/');
                 final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
-                return Transform.rotate(
-                  angle: -0.5,
-                  child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),  // distanza dalla linea
+                  child: Transform.rotate(
+                    angle: -0.6,
+                    child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
+                  ),
                 );
               },
             ),
@@ -418,7 +415,7 @@ class _EnergyPageState extends State<EnergyPage> {
           touchTooltipData: LineTouchTooltipData(
             getTooltipItems: (spots) => spots
                 .map((s) => LineTooltipItem(
-                      '${s.y.toStringAsFixed(3)} €',
+                      '${s.y.toStringAsFixed(3)} \u20ac',
                       const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                     ))
                 .toList(),
@@ -428,7 +425,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Tabella ──────────────────────────────────────────────────────────────
+  // \u2500\u2500 Tabella
   Widget _buildTable(List<DailyRecordDTO> records, ColorScheme cs) {
     final rows = records.reversed.toList();
     return Card(
@@ -437,31 +434,22 @@ class _EnergyPageState extends State<EnergyPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // header sezione
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: Row(
               children: [
                 Icon(Icons.table_rows_outlined, size: 15, color: cs.primary),
                 const SizedBox(width: 6),
-                Text(
-                  'Dettaglio giornaliero',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
+                Text('Dettaglio giornaliero',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.onSurface)),
               ],
             ),
           ),
           const SizedBox(height: 8),
-          // intestazioni colonne
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
               color: cs.surfaceContainerHighest.withOpacity(0.6),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(0)),
             ),
             child: Row(
               children: [
@@ -469,11 +457,10 @@ class _EnergyPageState extends State<EnergyPage> {
                 _TH('Rete', color: _colGrid),
                 _TH('FV',   color: _colPv),
                 _TH('PDC',  color: _colPdc),
-                _TH('€ Costo'),
+                _TH('\u20ac Costo'),
               ],
             ),
           ),
-          // righe zebra
           ...rows.asMap().entries.map((entry) {
             final i = entry.key;
             final r = entry.value;
@@ -482,31 +469,21 @@ class _EnergyPageState extends State<EnergyPage> {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(
-                color: isEven
-                    ? Colors.transparent
-                    : cs.surfaceContainerHighest.withOpacity(0.2),
-                border: Border(
-                  bottom: BorderSide(
-                    color: cs.outlineVariant.withOpacity(0.15),
-                  ),
-                ),
+                color: isEven ? Colors.transparent : cs.surfaceContainerHighest.withOpacity(0.2),
+                border: Border(bottom: BorderSide(color: cs.outlineVariant.withOpacity(0.15))),
                 borderRadius: i == rows.length - 1
                     ? const BorderRadius.vertical(bottom: Radius.circular(14))
                     : BorderRadius.zero,
               ),
               child: Row(
                 children: [
-                  Expanded(
-                    flex: 2,
-                    child: Text(
-                      r.dateIso,
-                      style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                  _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '–', color: _colGrid),
-                  _TD(r.pvProduction?.toStringAsFixed(1)   ?? '–', color: _colPv),
-                  _TD(r.consumption.toStringAsFixed(1),              color: _colPdc),
-                  _TD(cost.toStringAsFixed(3),                       color: cs.onSurface),
+                  Expanded(flex: 2,
+                    child: Text(r.dateIso,
+                        style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500))),
+                  _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '\u2013', color: _colGrid),
+                  _TD(r.pvProduction?.toStringAsFixed(1)   ?? '\u2013', color: _colPv),
+                  _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
+                  _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
                 ],
               ),
             );
@@ -516,7 +493,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── Empty state ──────────────────────────────────────────────────────────
+  // \u2500\u2500 Empty state
   Widget _buildEmpty(ColorScheme cs) {
     return Center(
       child: Padding(
@@ -525,23 +502,13 @@ class _EnergyPageState extends State<EnergyPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: _colGrid.withOpacity(0.12),
-                shape: BoxShape.circle,
-              ),
+              width: 80, height: 80,
+              decoration: BoxDecoration(color: _colGrid.withOpacity(0.12), shape: BoxShape.circle),
               child: const Icon(Icons.bolt_outlined, size: 40, color: _colGrid),
             ),
             const SizedBox(height: 20),
-            Text(
-              'Nessun dato energia',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: cs.onSurface,
-              ),
-            ),
+            Text('Nessun dato energia',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: cs.onSurface)),
             const SizedBox(height: 10),
             Text(
               'Vai nella scheda "Registra" e inserisci\nkWh rete (ShinePhone) e FV (ShinePhone)\nper vedere grafici e costi.',
@@ -555,8 +522,7 @@ class _EnergyPageState extends State<EnergyPage> {
   }
 }
 
-// ─── Card wrapper per i grafici ──────────────────────────────────────────────
-
+// \u2500\u2500\u2500 ChartCard
 class _ChartCard extends StatelessWidget {
   final String title;
   final String unit;
@@ -588,19 +554,10 @@ class _ChartCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 15, color: cs.primary),
                 const SizedBox(width: 6),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
+                Text(title,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.onSurface)),
                 const Spacer(),
-                Text(
-                  unit,
-                  style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
-                ),
+                Text(unit, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
               ],
             ),
             const SizedBox(height: 8),
@@ -614,8 +571,7 @@ class _ChartCard extends StatelessWidget {
   }
 }
 
-// ─── KPI Card ────────────────────────────────────────────────────────────────
-
+// \u2500\u2500\u2500 KpiCard
 class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
@@ -646,7 +602,6 @@ class _KpiCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // barra colorata in cima
               Container(height: 4, color: accentColor),
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
@@ -665,46 +620,29 @@ class _KpiCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 5),
                         Flexible(
-                          child: Text(
-                            label,
-                            style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          child: Text(label,
+                              style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                              overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 6),
                     RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: value,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: cs.onSurface,
-                            ),
-                          ),
-                          TextSpan(
-                            text: ' $unit',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
+                      text: TextSpan(children: [
+                        TextSpan(
+                          text: value,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: cs.onSurface),
+                        ),
+                        TextSpan(
+                          text: ' $unit',
+                          style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+                        ),
+                      ]),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      sub,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: accentColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Text(sub,
+                        style: TextStyle(fontSize: 10, color: accentColor, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
@@ -716,8 +654,7 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
+// \u2500\u2500\u2500 helpers
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
@@ -730,8 +667,7 @@ class _LegendDot extends StatelessWidget {
       children: [
         Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
         const SizedBox(width: 4),
-        Text(label,
-            style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        Text(label, style: TextStyle(fontSize: 10, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }
@@ -748,14 +684,8 @@ class _TH extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Expanded(
       flex: flex,
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: color ?? cs.onSurfaceVariant,
-        ),
-      ),
+      child: Text(text,
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color ?? cs.onSurfaceVariant)),
     );
   }
 }
@@ -768,10 +698,8 @@ class _TD extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Text(
-        text,
-        style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500),
-      ),
+      child: Text(text,
+          style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
     );
   }
 }
