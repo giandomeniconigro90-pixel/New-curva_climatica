@@ -42,18 +42,33 @@ class ExportUtils {
       allRooms.addAll(r.internalTemps.keys);
     }
     final sortedRooms = allRooms.toList()..sort();
-    List<String> header = ["Data", "T. Esterna", "Consumo", "Note"];
+
+    // Header
+    List<String> header = [
+      "Data",
+      "T. Esterna",
+      "Consumo (kWh)",
+      "ACS (kWh)",
+      "Pompa di Calore",
+      "Note",
+    ];
     for (var room in sortedRooms) {
       header.add("$room T.");
       header.add("$room Comfort");
     }
     rows.add(header);
+
+    // Righe dati
     for (var r in sortedRecords) {
       final DateTime date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
       List<dynamic> row = [
         DateFormat('dd/MM/yyyy').format(date),
         r.externalTemp.toString().replaceAll('.', ','),
         r.consumption.toString().replaceAll('.', ','),
+        r.consumptionACS != null
+            ? r.consumptionACS!.toString().replaceAll('.', ',')
+            : "",
+        r.heatpumpMode ?? "",
         r.note.replaceAll('\n', ' '),
       ];
       for (var room in sortedRooms) {
@@ -131,13 +146,22 @@ class ExportUtils {
             pw.SizedBox(height: 20),
             pw.Table.fromTextArray(
               context: context,
-              headers: <String>['Data', 'Ext \u00b0C', 'Consumo', 'Note'],
+              headers: <String>[
+                'Data',
+                'Ext \u00b0C',
+                'Consumo',
+                'ACS (kWh)',
+                'Pompa di Calore',
+                'Note',
+              ],
               data: sortedRecords.map((r) {
                 final date = parseItalianDateSafe(r.dateIso) ?? DateTime.now();
                 return [
                   DateFormat('dd/MM/yyyy').format(date),
                   '${r.externalTemp}',
                   '${r.consumption}',
+                  r.consumptionACS != null ? '${r.consumptionACS}' : '-',
+                  r.heatpumpMode ?? '-',
                   r.note,
                 ];
               }).toList(),
@@ -161,14 +185,13 @@ class ExportUtils {
   static Future<String> _getAppVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();
-      return info.version; // es. "1.0.0"
+      return info.version;
     } catch (_) {
       return 'unknown';
     }
   }
 
   /// Genera il JSON di backup includendo la versione reale dell'app.
-  /// È diventato [async] per leggere [PackageInfo].
   static Future<String> generateBackupJson({
     required List<DailyRecordDTO> records,
     required SystemMode mode,
