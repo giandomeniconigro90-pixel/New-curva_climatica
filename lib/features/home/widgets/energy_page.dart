@@ -353,8 +353,9 @@ class _EnergyPageState extends State<EnergyPage> {
       pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
     }
 
-    // Mostra al massimo 7 etichette per non affollare
     final step = (records.length / 6).ceil().clamp(1, records.length);
+    // Con pochi punti mostra i dot per rendere visibili i dati
+    final showDots = records.length <= 3;
 
     return SizedBox(
       height: 210,
@@ -381,11 +382,9 @@ class _EnergyPageState extends State<EnergyPage> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 52,
-              // interval: 1 garantisce tick SOLO su interi → indice corretto
               interval: 1,
               getTitlesWidget: (v, meta) {
                 final idx = v.toInt();
-                // Mostra solo ogni `step` tick per non sovrapporre
                 if (idx < 0 || idx >= records.length || idx % step != 0) {
                   return const SizedBox.shrink();
                 }
@@ -410,18 +409,34 @@ class _EnergyPageState extends State<EnergyPage> {
         lineBarsData: [
           LineChartBarData(
             spots: gridSpots,
-            isCurved: true,
+            isCurved: records.length > 1,
             color: _colGrid,
             barWidth: 2.5,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(
+              show: showDots,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 5,
+                color: _colGrid,
+                strokeWidth: 2,
+                strokeColor: Colors.white.withOpacity(0.8),
+              ),
+            ),
             belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
           ),
           LineChartBarData(
             spots: pvSpots,
-            isCurved: true,
+            isCurved: records.length > 1,
             color: _colPv,
             barWidth: 2.5,
-            dotData: const FlDotData(show: false),
+            dotData: FlDotData(
+              show: showDots,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                radius: 5,
+                color: _colPv,
+                strokeWidth: 2,
+                strokeColor: Colors.white.withOpacity(0.8),
+              ),
+            ),
             belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
           ),
         ],
