@@ -76,8 +76,9 @@ class AppStorage {
     await Hive.box(_boxName).put('heatingSlope', value);
   }
 
+  /// Default allineato a CurveSettings.defaults() → 1.0
   static double getSlope() {
-    return Hive.box(_boxName).get('heatingSlope', defaultValue: 1.2);
+    return Hive.box(_boxName).get('heatingSlope', defaultValue: 1.0);
   }
 
   static Future<void> saveOffset(double value) async {
@@ -168,8 +169,9 @@ class AppStorage {
     return Hive.box(_boxName).get('lastAiApplyCooling');
   }
 
+  /// Reset calibrazione: usa 1.0 come default allineato a CurveSettings.defaults()
   static Future<void> resetCalibration() async {
-    await saveSlope(1.2);
+    await saveSlope(1.0);
     await saveOffset(0.0);
     await saveCoolingSlope(0.5);
     await saveCoolingOffset(0.0);
