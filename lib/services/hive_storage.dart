@@ -12,8 +12,6 @@ class AppStorage {
   static const String _stagingPrefix = '__new__';
 
   /// Prezzo reale A2A Click Luce Monoraria (IVA 10% inclusa).
-  /// energia 0.112 + disp. 0.01173 + cap. 0.01164
-  /// + trasporto 0.01473 + oneri 0.03030 + ASOS 0.02866 = 0.13537 × 1.10
   static const double _defaultCostPerKwh = 0.14891;
 
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
@@ -45,7 +43,6 @@ class AppStorage {
     await _migrateCostPerKwh();
   }
 
-  /// Migrazione: sovrascrive i valori legacy 0.25 e 0.28 con il prezzo A2A reale.
   static Future<void> _migrateCostPerKwh() async {
     final box = Hive.box(_boxName);
     final stored = box.get('costPerKwh');
@@ -227,6 +224,34 @@ class AppStorage {
     final stored = Hive.box(_boxName).get('customRooms');
     if (stored == null) return List<String>.from(RoomConstants.defaultRooms);
     return List<String>.from(stored as List);
+  }
+
+  // --- WIZARD IMPIANTO ---
+  /// Tipo impianto: 'heatpump' | 'boiler' | 'hybrid'
+  static String getPlantType() {
+    return Hive.box(_boxName).get('plantType', defaultValue: 'heatpump') as String;
+  }
+
+  static Future<void> savePlantType(String type) async {
+    await Hive.box(_boxName).put('plantType', type);
+  }
+
+  /// L'utente ha un impianto fotovoltaico?
+  static bool getHasPv() {
+    return Hive.box(_boxName).get('hasPv', defaultValue: false) as bool;
+  }
+
+  static Future<void> saveHasPv(bool value) async {
+    await Hive.box(_boxName).put('hasPv', value);
+  }
+
+  /// L'utente ha un contatore smart/rete con app ShinePhone?
+  static bool getHasGridMeter() {
+    return Hive.box(_boxName).get('hasGridMeter', defaultValue: false) as bool;
+  }
+
+  static Future<void> saveHasGridMeter(bool value) async {
+    await Hive.box(_boxName).put('hasGridMeter', value);
   }
 
   // --- RECORDS ---
