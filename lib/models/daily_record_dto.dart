@@ -25,8 +25,22 @@ class DailyRecordDTO extends HiveObject {
   @HiveField(6)
   final String mode; // 'heating' o 'cooling'
 
+  /// Modalità operativa della pompa di calore (Sherpa Monobloc S2 E6).
+  /// Valori ammessi: 'riscaldamento', 'raffrescamento', 'spenta'.
+  /// Leggibile dall'app Comfort Home (Olimpia Splendid).
+  /// Null per i record creati prima di questo campo.
+  @HiveField(7)
+  final String? heatpumpMode;
+
   /// Valori ammessi per il campo [mode].
   static const Set<String> validModes = {'heating', 'cooling'};
+
+  /// Valori ammessi per il campo [heatpumpMode].
+  static const Set<String> validHeatpumpModes = {
+    'riscaldamento',
+    'raffrescamento',
+    'spenta',
+  };
 
   DailyRecordDTO({
     required this.dateIso,
@@ -36,6 +50,7 @@ class DailyRecordDTO extends HiveObject {
     required this.comfortRatings,
     String? note,
     String? mode,
+    this.heatpumpMode,
   })  : note = note ?? '',
         mode = (mode != null && validModes.contains(mode)) ? mode : 'heating';
 
@@ -48,6 +63,8 @@ class DailyRecordDTO extends HiveObject {
     Map<String, String>? comfortRatings,
     String? note,
     String? mode,
+    String? heatpumpMode,
+    bool clearHeatpumpMode = false,
   }) {
     return DailyRecordDTO(
       dateIso: dateIso ?? this.dateIso,
@@ -61,6 +78,9 @@ class DailyRecordDTO extends HiveObject {
           : Map<String, String>.from(this.comfortRatings),
       note: note ?? this.note,
       mode: mode ?? this.mode,
+      heatpumpMode: clearHeatpumpMode
+          ? null
+          : (heatpumpMode ?? this.heatpumpMode),
     );
   }
 
@@ -81,6 +101,8 @@ class DailyRecordDTO extends HiveObject {
       );
     }
 
+    final rawHeatpumpMode = json['heatpumpMode'];
+
     return DailyRecordDTO(
       dateIso: rawDate.trim(),
       externalTemp: _parseDouble(json['externalTemp']),
@@ -89,6 +111,10 @@ class DailyRecordDTO extends HiveObject {
       comfortRatings: _parseStringStringMap(json['comfortRatings']),
       note: json['note'] is String ? json['note'] as String : '',
       mode: json['mode'] is String ? json['mode'] as String : 'heating',
+      heatpumpMode: (rawHeatpumpMode is String &&
+              validHeatpumpModes.contains(rawHeatpumpMode))
+          ? rawHeatpumpMode
+          : null,
     );
   }
 
@@ -101,6 +127,7 @@ class DailyRecordDTO extends HiveObject {
       'comfortRatings': comfortRatings,
       'note': note,
       'mode': mode,
+      if (heatpumpMode != null) 'heatpumpMode': heatpumpMode,
     };
   }
 
@@ -159,13 +186,14 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       comfortRatings: (fields[4] as Map).cast<String, String>(),
       note: fields[5] as String? ?? '',
       mode: fields[6] as String? ?? 'heating',
+      heatpumpMode: fields[7] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, DailyRecordDTO obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.dateIso)
       ..writeByte(1)
@@ -179,7 +207,9 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       ..writeByte(5)
       ..write(obj.note)
       ..writeByte(6)
-      ..write(obj.mode);
+      ..write(obj.mode)
+      ..writeByte(7)
+      ..write(obj.heatpumpMode);
   }
 
   @override
