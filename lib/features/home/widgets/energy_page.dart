@@ -18,20 +18,20 @@ class EnergyPage extends StatefulWidget {
 
 class _EnergyPageState extends State<EnergyPage> {
   late double _costPerKwh;
-  late bool   _hasGridMeter;
-  late bool   _hasPv;
   final TextEditingController _priceController = TextEditingController();
 
   static const Color _colGrid = Color(0xFFFFB74D);
   static const Color _colPv   = Color(0xFF66BB6A);
   static const Color _colPdc  = Color(0xFF4DB6AC);
 
+  // Letti direttamente da Hive ad ogni build — nessuno stato locale
+  bool get _hasGridMeter => AppStorage.getHasGridMeter();
+  bool get _hasPv        => AppStorage.getHasPv();
+
   @override
   void initState() {
     super.initState();
-    _costPerKwh   = AppStorage.getCostPerKwh();
-    _hasGridMeter = AppStorage.getHasGridMeter();
-    _hasPv        = AppStorage.getHasPv();
+    _costPerKwh = AppStorage.getCostPerKwh();
     _priceController.text = _costPerKwh.toStringAsFixed(4);
   }
 
@@ -130,57 +130,53 @@ class _EnergyPageState extends State<EnergyPage> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final cs      = Theme.of(context).colorScheme;
     final records = _energyRecords;
+
+    // Leggi i flag qui — ogni rebuild riflette il valore Hive corrente
+    final hasGrid = _hasGridMeter;
+    final hasPv   = _hasPv;
 
     if (records.isEmpty) return _buildEmpty(cs);
 
-    // KPI cards visibili in base alle impostazioni wizard
-    final List<Widget> kpiCards = [];
-    if (_hasGridMeter) {
-      kpiCards.add(_KpiCard(
-        label: 'Rete',
-        value: _totalGrid.toStringAsFixed(1),
+    // ── KPI cards ──
+    // Usiamo un Row con gap fisso tramite mainAxisAlignment e SizedBox intercalati
+    // solo tra card effettivamente presenti, senza logica difettosa.
+    final List<_KpiCard> activeCards = [
+      if (hasGrid)
+        _KpiCard(
+          label: 'Rete',
+          value: _totalGrid.toStringAsFixed(1),
+          unit: 'kWh',
+          sub: '${_totalCost.toStringAsFixed(2)} \u20ac',
+          icon: Icons.electrical_services_outlined,
+          accentColor: _colGrid,
+        ),
+      if (hasPv)
+        _KpiCard(
+          label: 'Fotovoltaico',
+          value: _totalPv.toStringAsFixed(1),
+          unit: 'kWh',
+          sub: '\u2193 ${_savedCost.toStringAsFixed(2)} \u20ac',
+          icon: Icons.wb_sunny_outlined,
+          accentColor: _colPv,
+        ),
+      _KpiCard(
+        label: 'PDC',
+        value: _totalPdc.toStringAsFixed(1),
         unit: 'kWh',
-        sub: '${_totalCost.toStringAsFixed(2)} \u20ac',
-        icon: Icons.electrical_services_outlined,
-        accentColor: _colGrid,
-      ));
-      if (kpiCards.length > 1) kpiCards.add(const SizedBox(width: 8));
-    }
-    if (_hasPv) {
-      if (kpiCards.isNotEmpty) kpiCards.add(const SizedBox(width: 8));
-      kpiCards.add(_KpiCard(
-        label: 'Fotovoltaico',
-        value: _totalPv.toStringAsFixed(1),
-        unit: 'kWh',
-        sub: '\u2193 ${_savedCost.toStringAsFixed(2)} \u20ac',
-        icon: Icons.wb_sunny_outlined,
-        accentColor: _colPv,
-      ));
-    }
-    if (kpiCards.isNotEmpty) kpiCards.add(const SizedBox(width: 8));
-    kpiCards.add(_KpiCard(
-      label: 'PDC',
-      value: _totalPdc.toStringAsFixed(1),
-      unit: 'kWh',
-      sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} \u20ac',
-      icon: Icons.heat_pump_outlined,
-      accentColor: _colPdc,
-    ));
-
-    // Legend bar chart
-    final List<Widget> barLegend = [
-      if (_hasGridMeter) const _LegendDot(color: _colGrid, label: 'Rete'),
-      if (_hasPv)        const _LegendDot(color: _colPv,   label: 'FV'),
-                         const _LegendDot(color: _colPdc,  label: 'PDC'),
+        sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} \u20ac',
+        icon: Icons.heat_pump_outlined,
+        accentColor: _colPdc,
+      ),
     ];
 
-    // Legend cost chart
-    final List<Widget> costLegend = [
-      if (_hasGridMeter) const _LegendDot(color: _colGrid, label: 'Costo rete'),
-      if (_hasPv)        const _LegendDot(color: _colPv,   label: 'Risparmio FV'),
-    ];
+    // Intercala SizedBox(width:8) tra le card
+    final List<Widget> kpiRow = [];
+    for (int i = 0; i < activeCards.length; i++) {
+      if (i > 0) kpiRow.add(const SizedBox(width: 8));
+      kpiRow.add(activeCards[i]);
+    }
 
     return CustomScrollView(
       slivers: [
@@ -235,15 +231,13 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // KPI row
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-            child: Row(children: kpiCards),
+            child: Row(children: kpiRow),
           ),
         ),
 
-        // Bar chart energia
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -251,14 +245,17 @@ class _EnergyPageState extends State<EnergyPage> {
               title: 'Energia giornaliera',
               unit: 'kWh',
               icon: Icons.bar_chart_rounded,
-              legend: barLegend,
-              child: _buildBarChart(records, cs),
+              legend: [
+                if (hasGrid) const _LegendDot(color: _colGrid, label: 'Rete'),
+                if (hasPv)   const _LegendDot(color: _colPv,   label: 'FV'),
+                             const _LegendDot(color: _colPdc,  label: 'PDC'),
+              ],
+              child: _buildBarChart(records, cs, hasGrid: hasGrid, hasPv: hasPv),
             ),
           ),
         ),
 
-        // Cost chart — mostrato solo se almeno una serie è attiva
-        if (_hasGridMeter || _hasPv)
+        if (hasGrid || hasPv)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -266,8 +263,11 @@ class _EnergyPageState extends State<EnergyPage> {
                 title: 'Costi giornalieri',
                 unit: '\u20ac',
                 icon: Icons.show_chart_rounded,
-                legend: costLegend,
-                child: _buildCostChart(records, cs),
+                legend: [
+                  if (hasGrid) const _LegendDot(color: _colGrid, label: 'Costo rete'),
+                  if (hasPv)   const _LegendDot(color: _colPv,   label: 'Risparmio FV'),
+                ],
+                child: _buildCostChart(records, cs, hasGrid: hasGrid, hasPv: hasPv),
               ),
             ),
           ),
@@ -275,7 +275,7 @@ class _EnergyPageState extends State<EnergyPage> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
-            child: _buildTable(records, cs),
+            child: _buildTable(records, cs, hasGrid: hasGrid, hasPv: hasPv),
           ),
         ),
       ],
@@ -297,28 +297,36 @@ class _EnergyPageState extends State<EnergyPage> {
         ),
       );
 
-  Widget _buildBarChart(List<DailyRecordDTO> records, ColorScheme cs) {
+  Widget _buildBarChart(
+    List<DailyRecordDTO> records,
+    ColorScheme cs, {
+    required bool hasGrid,
+    required bool hasPv,
+  }) {
+    final rodLabels = [
+      if (hasGrid) 'Rete',
+      if (hasPv)   'FV',
+      'PDC',
+    ];
+
     final groups = <BarChartGroupData>[];
     for (int i = 0; i < records.length; i++) {
       final r = records[i];
-      final rods = <BarChartRodData>[
-        if (_hasGridMeter)
-          BarChartRodData(toY: r.energyFromGrid ?? 0.0, color: _colGrid, width: 6,
+      groups.add(BarChartGroupData(
+        x: i,
+        barsSpace: 2,
+        barRods: [
+          if (hasGrid)
+            BarChartRodData(toY: r.energyFromGrid ?? 0.0, color: _colGrid, width: 6,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
+          if (hasPv)
+            BarChartRodData(toY: r.pvProduction ?? 0.0, color: _colPv, width: 6,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
+          BarChartRodData(toY: r.consumption, color: _colPdc, width: 6,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-        if (_hasPv)
-          BarChartRodData(toY: r.pvProduction ?? 0.0, color: _colPv, width: 6,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-        BarChartRodData(toY: r.consumption, color: _colPdc, width: 6,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(3))),
-      ];
-      groups.add(BarChartGroupData(x: i, barsSpace: 2, barRods: rods));
+        ],
+      ));
     }
-
-    final rodLabels = [
-      if (_hasGridMeter) 'Rete',
-      if (_hasPv)        'FV',
-      'PDC',
-    ];
 
     return SizedBox(
       height: 220,
@@ -382,46 +390,22 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  Widget _buildCostChart(List<DailyRecordDTO> records, ColorScheme cs) {
+  Widget _buildCostChart(
+    List<DailyRecordDTO> records,
+    ColorScheme cs, {
+    required bool hasGrid,
+    required bool hasPv,
+  }) {
     final gridSpots = <FlSpot>[];
     final pvSpots   = <FlSpot>[];
     for (int i = 0; i < records.length; i++) {
       final r = records[i];
-      if (_hasGridMeter) gridSpots.add(FlSpot(i.toDouble(), (r.energyFromGrid ?? 0.0) * _costPerKwh));
-      if (_hasPv)        pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
+      if (hasGrid) gridSpots.add(FlSpot(i.toDouble(), (r.energyFromGrid ?? 0.0) * _costPerKwh));
+      if (hasPv)   pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
     }
 
     final step     = (records.length / 6).ceil().clamp(1, records.length);
     final showDots = records.length <= 3;
-
-    final bars = <LineChartBarData>[
-      if (_hasGridMeter)
-        LineChartBarData(
-          spots: gridSpots,
-          isCurved: records.length > 1,
-          color: _colGrid,
-          barWidth: 2.5,
-          dotData: FlDotData(
-            show: showDots,
-            getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-              radius: 5, color: _colGrid, strokeWidth: 2, strokeColor: _dotStroke(cs)),
-          ),
-          belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
-        ),
-      if (_hasPv)
-        LineChartBarData(
-          spots: pvSpots,
-          isCurved: records.length > 1,
-          color: _colPv,
-          barWidth: 2.5,
-          dotData: FlDotData(
-            show: showDots,
-            getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
-              radius: 5, color: _colPv, strokeWidth: 2, strokeColor: _dotStroke(cs)),
-          ),
-          belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
-        ),
-    ];
 
     return SizedBox(
       height: 210,
@@ -452,7 +436,7 @@ class _EnergyPageState extends State<EnergyPage> {
               showTitles: true,
               reservedSize: 52,
               interval: 1,
-              getTitlesWidget: (v, meta) {
+              getTitlesWidget: (v, _) {
                 final idx = v.toInt();
                 if (idx < 0 || idx >= records.length || idx % step != 0) {
                   return const SizedBox.shrink();
@@ -475,7 +459,34 @@ class _EnergyPageState extends State<EnergyPage> {
           topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        lineBarsData: bars,
+        lineBarsData: [
+          if (hasGrid)
+            LineChartBarData(
+              spots: gridSpots,
+              isCurved: records.length > 1,
+              color: _colGrid,
+              barWidth: 2.5,
+              dotData: FlDotData(
+                show: showDots,
+                getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                    radius: 5, color: _colGrid, strokeWidth: 2, strokeColor: _dotStroke(cs)),
+              ),
+              belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
+            ),
+          if (hasPv)
+            LineChartBarData(
+              spots: pvSpots,
+              isCurved: records.length > 1,
+              color: _colPv,
+              barWidth: 2.5,
+              dotData: FlDotData(
+                show: showDots,
+                getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                    radius: 5, color: _colPv, strokeWidth: 2, strokeColor: _dotStroke(cs)),
+              ),
+              belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
+            ),
+        ],
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
             getTooltipColor: (_) => _tooltipBg(cs),
@@ -491,7 +502,12 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  Widget _buildTable(List<DailyRecordDTO> records, ColorScheme cs) {
+  Widget _buildTable(
+    List<DailyRecordDTO> records,
+    ColorScheme cs, {
+    required bool hasGrid,
+    required bool hasPv,
+  }) {
     final rows = records.reversed.toList();
     return Card(
       elevation: 1,
@@ -520,10 +536,10 @@ class _EnergyPageState extends State<EnergyPage> {
             child: Row(
               children: [
                 _TH('Data', flex: 2),
-                if (_hasGridMeter) _TH('Rete', color: _colGrid),
-                if (_hasPv)        _TH('FV',   color: _colPv),
-                                   _TH('PDC',  color: _colPdc),
-                                   _TH('\u20ac Costo'),
+                if (hasGrid) _TH('Rete', color: _colGrid),
+                if (hasPv)   _TH('FV',   color: _colPv),
+                             _TH('PDC',  color: _colPdc),
+                             _TH('\u20ac Costo'),
               ],
             ),
           ),
@@ -546,10 +562,10 @@ class _EnergyPageState extends State<EnergyPage> {
                   Expanded(flex: 2,
                     child: Text(r.dateIso,
                         style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500))),
-                  if (_hasGridMeter) _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '\u2013', color: _colGrid),
-                  if (_hasPv)        _TD(r.pvProduction?.toStringAsFixed(1)   ?? '\u2013', color: _colPv),
-                                     _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
-                                     _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
+                  if (hasGrid) _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '\u2013', color: _colGrid),
+                  if (hasPv)   _TD(r.pvProduction?.toStringAsFixed(1)   ?? '\u2013', color: _colPv),
+                               _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
+                               _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
                 ],
               ),
             );
