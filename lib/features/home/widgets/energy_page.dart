@@ -263,7 +263,13 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // ── border inferiore stiloso (sostituisce baseline y=0) ──
+  // ── Colori tooltip adattativi al tema ──
+  Color _tooltipBg(ColorScheme cs)    => cs.inverseSurface;
+  Color _tooltipText(ColorScheme cs)  => cs.onInverseSurface;
+  Color _shadowColor(ColorScheme cs)  => cs.shadow.withOpacity(0.12);
+  Color _dotStroke(ColorScheme cs)    => cs.surface;
+
+  // ── border inferiore stiloso ──
   FlBorderData _styledBorder(ColorScheme cs) => FlBorderData(
         show: true,
         border: Border(
@@ -340,11 +346,14 @@ class _EnergyPageState extends State<EnergyPage> {
         ),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
+            // FIX: sfondo tooltip adattivo al tema (non bianco hardcodato)
+            getTooltipColor: (_) => _tooltipBg(cs),
             getTooltipItem: (group, _, rod, rodIndex) {
               final labels = ['Rete', 'FV', 'PDC'];
               return BarTooltipItem(
                 '${labels[rodIndex]}: ${rod.toY.toStringAsFixed(1)} kWh',
-                const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                // FIX: testo tooltip adattivo (non Colors.white hardcodato)
+                TextStyle(color: _tooltipText(cs), fontSize: 11, fontWeight: FontWeight.w600),
               );
             },
           ),
@@ -430,7 +439,8 @@ class _EnergyPageState extends State<EnergyPage> {
                 radius: 5,
                 color: _colGrid,
                 strokeWidth: 2,
-                strokeColor: Colors.white.withOpacity(0.8),
+                // FIX: stroke del dot usa il colore surface del tema (non Colors.white)
+                strokeColor: _dotStroke(cs),
               ),
             ),
             belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
@@ -446,7 +456,8 @@ class _EnergyPageState extends State<EnergyPage> {
                 radius: 5,
                 color: _colPv,
                 strokeWidth: 2,
-                strokeColor: Colors.white.withOpacity(0.8),
+                // FIX: stroke del dot usa il colore surface del tema (non Colors.white)
+                strokeColor: _dotStroke(cs),
               ),
             ),
             belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
@@ -454,10 +465,13 @@ class _EnergyPageState extends State<EnergyPage> {
         ],
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
+            // FIX: sfondo tooltip adattivo al tema
+            getTooltipColor: (_) => _tooltipBg(cs),
             getTooltipItems: (spots) => spots
                 .map((s) => LineTooltipItem(
                       '${s.y.toStringAsFixed(3)} \u20ac',
-                      const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                      // FIX: testo tooltip adattivo
+                      TextStyle(color: _tooltipText(cs), fontSize: 11, fontWeight: FontWeight.w600),
                     ))
                 .toList(),
           ),
@@ -471,6 +485,8 @@ class _EnergyPageState extends State<EnergyPage> {
     final rows = records.reversed.toList();
     return Card(
       elevation: 1,
+      // FIX: shadowColor adattivo al tema (non Colors.black hardcodato)
+      shadowColor: _shadowColor(cs),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,7 +600,8 @@ class _ChartCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Card(
       elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.08),
+      // FIX: shadowColor adattivo al tema
+      shadowColor: cs.shadow.withOpacity(0.12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
@@ -636,7 +653,8 @@ class _KpiCard extends StatelessWidget {
     return Expanded(
       child: Card(
         elevation: 2,
-        shadowColor: Colors.black.withOpacity(0.08),
+        // FIX: shadowColor adattivo al tema
+        shadowColor: cs.shadow.withOpacity(0.12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
