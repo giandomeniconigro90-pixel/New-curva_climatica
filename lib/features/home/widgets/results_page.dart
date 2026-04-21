@@ -82,7 +82,7 @@ class _ResultsPageState extends State<ResultsPage> {
               style:
                   const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               decoration: const InputDecoration(
-                suffixText: '€/kWh',
+                suffixText: '\u20ac/kWh',
                 hintText: '0.00',
               ),
             ),
@@ -109,7 +109,6 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  /// Mostra il dialog di conferma ed esegue la delete immediata se confermato.
   Future<void> _handleDelete(BuildContext context, DailyRecordDTO record) async {
     final date = parseItalianDateSafe(record.dateIso) ?? DateTime.now();
     final dateStr =
@@ -161,6 +160,18 @@ class _ResultsPageState extends State<ResultsPage> {
         textColor: Colors.white,
         fontSize: 14,
       );
+    }
+  }
+
+  /// Restituisce icona e colore in base alla modalit\u00e0 pompa di calore.
+  (IconData, Color) _heatpumpIconAndColor(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'riscaldamento':
+        return (Icons.local_fire_department, Colors.deepOrange);
+      case 'raffrescamento':
+        return (Icons.ac_unit, Colors.lightBlue);
+      default:
+        return (Icons.power_off, Colors.grey);
     }
   }
 
@@ -249,7 +260,7 @@ class _ResultsPageState extends State<ResultsPage> {
                             children: [
                               Text(
                                 _costPerKwh > 0
-                                    ? '€ ${todayCost.toStringAsFixed(2)}'
+                                    ? '\u20ac ${todayCost.toStringAsFixed(2)}'
                                     : 'Configura',
                                 style: const TextStyle(
                                   fontSize: 32,
@@ -311,6 +322,9 @@ class _ResultsPageState extends State<ResultsPage> {
                   final r = sortedRecords[index];
                   final date =
                       parseItalianDateSafe(r.dateIso) ?? DateTime.now();
+                  final hasAcs = r.consumptionACS != null;
+                  final hasMode =
+                      r.heatpumpMode != null && r.heatpumpMode!.isNotEmpty;
 
                   return InkWell(
                     onTap: widget.onEditRecordByDateIso != null
@@ -365,13 +379,14 @@ class _ResultsPageState extends State<ResultsPage> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // Temperatura esterna
                                 Row(
                                   children: [
                                     const Icon(Icons.thermostat,
                                         size: 14, color: Colors.orange),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Esterna: ${r.externalTemp}°C',
+                                      'Esterna: ${r.externalTemp}\u00b0C',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: cs.onSurface,
@@ -380,6 +395,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 4),
+                                // Consumo principale
                                 Row(
                                   children: [
                                     const Icon(Icons.flash_on,
@@ -394,6 +410,45 @@ class _ResultsPageState extends State<ResultsPage> {
                                     ),
                                   ],
                                 ),
+                                // ACS (solo se presente)
+                                if (hasAcs) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.water_drop,
+                                          size: 14, color: Colors.blueAccent),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'ACS: ${r.consumptionACS} kWh',
+                                        style: TextStyle(
+                                          color: cs.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                                // Modalit\u00e0 pompa di calore (solo se presente)
+                                if (hasMode) ...[
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _heatpumpIconAndColor(r.heatpumpMode!).$1,
+                                        size: 14,
+                                        color: _heatpumpIconAndColor(r.heatpumpMode!).$2,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'PDC: ${r.heatpumpMode}',
+                                        style: TextStyle(
+                                          color: cs.onSurfaceVariant,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ],
                             ),
                           ),
