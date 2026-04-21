@@ -81,11 +81,9 @@ class _ResultsPageState extends State<ResultsPage> {
 
     if (context.mounted) {
       AppToast.show(
-        context,
         'Registrazione del $dateStr eliminata',
-        backgroundColor: Colors.red.shade600,
-        textColor: Colors.white,
-        fontSize: 14,
+        context: context,
+        level: ToastLevel.error,
       );
     }
   }
