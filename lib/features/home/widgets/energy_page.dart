@@ -268,7 +268,15 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // Grafico a barre
+  // ── Baseline helper ──────────────────────────────────────────────────────
+  HorizontalLine _baseline(ColorScheme cs) => HorizontalLine(
+        y: 0,
+        color: cs.outlineVariant.withOpacity(0.70),
+        strokeWidth: 1.5,
+        dashArray: null, // linea continua
+      );
+
+  // ── Grafico a barre ──────────────────────────────────────────────────────
   Widget _buildBarChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final groups = <BarChartGroupData>[];
     for (int i = 0; i < records.length; i++) {
@@ -295,8 +303,9 @@ class _EnergyPageState extends State<EnergyPage> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              FlLine(color: cs.outlineVariant.withOpacity(0.25), strokeWidth: 1),
+              FlLine(color: cs.outlineVariant.withOpacity(0.20), strokeWidth: 1),
         ),
+        extraLinesData: ExtraLinesData(horizontalLines: [_baseline(cs)]),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -316,7 +325,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 final parts = records[idx].dateIso.split('/');
                 final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.only(top: 10),
                   child: Transform.rotate(
                     angle: -0.6,
                     child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
@@ -343,7 +352,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // Grafico costi
+  // ── Grafico costi ────────────────────────────────────────────────────────
   Widget _buildCostChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final gridSpots = <FlSpot>[];
     final pvSpots   = <FlSpot>[];
@@ -353,8 +362,7 @@ class _EnergyPageState extends State<EnergyPage> {
       pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
     }
 
-    final step = (records.length / 6).ceil().clamp(1, records.length);
-    // Con pochi punti mostra i dot per rendere visibili i dati
+    final step     = (records.length / 6).ceil().clamp(1, records.length);
     final showDots = records.length <= 3;
 
     return SizedBox(
@@ -367,8 +375,9 @@ class _EnergyPageState extends State<EnergyPage> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) =>
-              FlLine(color: cs.outlineVariant.withOpacity(0.25), strokeWidth: 1),
+              FlLine(color: cs.outlineVariant.withOpacity(0.20), strokeWidth: 1),
         ),
+        extraLinesData: ExtraLinesData(horizontalLines: [_baseline(cs)]),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -393,7 +402,7 @@ class _EnergyPageState extends State<EnergyPage> {
                     ? '${parts[0]}/${parts[1]}'
                     : records[idx].dateIso;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.only(top: 10),
                   child: Transform.rotate(
                     angle: -0.6,
                     child: Text(label,
@@ -454,7 +463,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // Tabella
+  // ── Tabella ──────────────────────────────────────────────────────────────
   Widget _buildTable(List<DailyRecordDTO> records, ColorScheme cs) {
     final rows = records.reversed.toList();
     return Card(
@@ -522,7 +531,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // Empty state
+  // ── Empty state ──────────────────────────────────────────────────────────
   Widget _buildEmpty(ColorScheme cs) {
     return Center(
       child: Padding(
@@ -551,7 +560,7 @@ class _EnergyPageState extends State<EnergyPage> {
   }
 }
 
-// ChartCard
+// ── _ChartCard ───────────────────────────────────────────────────────────────
 class _ChartCard extends StatelessWidget {
   final String title;
   final String unit;
@@ -600,7 +609,7 @@ class _ChartCard extends StatelessWidget {
   }
 }
 
-// KpiCard
+// ── _KpiCard ─────────────────────────────────────────────────────────────────
 class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
@@ -683,7 +692,7 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// helpers
+// ── helpers ───────────────────────────────────────────────────────────────────
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
