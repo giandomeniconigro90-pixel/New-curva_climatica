@@ -1,54 +1,13 @@
 // lib/features/home/widgets/energy_page.dart
 
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
 import '../../../utils/date_utils.dart';
 
-// ---------------------------------------------------------------------------
-// Enum periodo
-// ---------------------------------------------------------------------------
-enum _Period { days7, days30, months3, all }
-
-extension _PeriodLabel on _Period {
-  String get label {
-    switch (this) {
-      case _Period.days7:
-        return '7 giorni';
-      case _Period.days30:
-        return '30 giorni';
-      case _Period.months3:
-        return '3 mesi';
-      case _Period.all:
-        return 'Tutto';
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Modello barra aggregata
-// ---------------------------------------------------------------------------
-class _BarEntry {
-  final String label;
-  final double consumption;
-  final double consumptionACS;
-  final double energyFromGrid;
-  final double pvProduction;
-
-  const _BarEntry({
-    required this.label,
-    required this.consumption,
-    required this.consumptionACS,
-    required this.energyFromGrid,
-    required this.pvProduction,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Widget principale
-// ---------------------------------------------------------------------------
 class EnergyPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
 
@@ -59,14 +18,17 @@ class EnergyPage extends StatefulWidget {
 }
 
 class _EnergyPageState extends State<EnergyPage> {
-  _Period _period = _Period.days30;
+  late double _costPerKwh;
   final TextEditingController _priceController = TextEditingController();
+
+  // indice barra toccata per tooltip
+  int _touchedIndex = -1;
 
   @override
   void initState() {
     super.initState();
-    final price = AppStorage.getCostPerKwh();
-    _priceController.text = price.toStringAsFixed(4);
+    _costPerKwh = AppStorage.getCostPerKwh();
+    _priceController.text = _costPerKwh.toStringAsFixed(4);
   }
 
   @override
@@ -75,236 +37,670 @@ class _EnergyPageState extends State<EnergyPage> {
     super.dispose();
   }
 
-  // ---- Filtra e ordina record per periodo selezionato ----
-  List<DailyRecordDTO> get _filteredRecords {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    List<DailyRecordDTO> sorted = List.from(widget.records)
+  // ── record con almeno uno dei campi energia valorizzato ──
+  List<DailyRecordDTO> get _energyRecords {
+    final sorted = widget.records
+        .where((r) =>
+            r.energyFromGrid != null ||
+            r.pvProduction != null ||
+            r.consumption != null)
+        .toList()
       ..sort((a, b) {
-        final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
-        final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
-        return dA.compareTo(dB);
+        final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+        final db = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+        return da.compareTo(db);
       });
-
-    if (_period == _Period.all) return sorted;
-
-    final cutoff = _period == _Period.days7
-        ? today.subtract(const Duration(days: 6))
-        : _period == _Period.days30
-            ? today.subtract(const Duration(days: 29))
-            : today.subtract(const Duration(days: 89));
-
-    return sorted.where((r) {
-      final d = parseItalianDateSafe(r.dateIso);
-      return d != null && !d.isBefore(cutoff);
-    }).toList();
+    // ultimi 14 giorni per leggibilità
+    return sorted.length > 14 ? sorted.sublist(sorted.length - 14) : sorted;
   }
 
-  // ---- Aggregazione: giornaliera o mensile ----
-  bool get _useMonthly => _period == _Period.all || _period == _Period.months3;
-
-  List<_BarEntry> get _entries {
-    final filtered = _filteredRecords;
-    if (!_useMonthly) {
-      return filtered.map((r) {
-        final d = parseItalianDateSafe(r.dateIso);
-        final label = d != null
-            ? '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}'
-            : r.dateIso;
-        return _BarEntry(
-          label: label,
-          consumption: r.consumption,
-          consumptionACS: r.consumptionACS ?? 0,
-          energyFromGrid: r.energyFromGrid ?? 0,
-          pvProduction: r.pvProduction ?? 0,
-        );
-      }).toList();
-    }
-
-    // Aggregazione mensile
-    final Map<String, _MutableBarEntry> monthly = {};
-    for (final r in filtered) {
-      final d = parseItalianDateSafe(r.dateIso);
-      if (d == null) continue;
-      final key =
-          '${d.month.toString().padLeft(2, '0')}/${d.year.toString().substring(2)}';
-      monthly.putIfAbsent(key, () => _MutableBarEntry(key));
-      monthly[key]!.consumption += r.consumption;
-      monthly[key]!.consumptionACS += r.consumptionACS ?? 0;
-      monthly[key]!.energyFromGrid += r.energyFromGrid ?? 0;
-      monthly[key]!.pvProduction += r.pvProduction ?? 0;
-    }
-    return monthly.values
-        .map((e) => _BarEntry(
-              label: e.label,
-              consumption: e.consumption,
-              consumptionACS: e.consumptionACS,
-              energyFromGrid: e.energyFromGrid,
-              pvProduction: e.pvProduction,
-            ))
-        .toList();
-  }
-
-  // ---- KPI aggregati ----
-  double get _totalConsumption =>
-      _filteredRecords.fold(0, (s, r) => s + r.consumption);
-  double get _totalACS =>
-      _filteredRecords.fold(0, (s, r) => s + (r.consumptionACS ?? 0));
-  double get _totalGrid =>
-      _filteredRecords.fold(0, (s, r) => s + (r.energyFromGrid ?? 0));
+  // ── KPI aggregati ──
+  double get _totalGrid => _energyRecords.fold(
+      0.0, (s, r) => s + (r.energyFromGrid ?? 0.0));
   double get _totalPv =>
-      _filteredRecords.fold(0, (s, r) => s + (r.pvProduction ?? 0));
+      _energyRecords.fold(0.0, (s, r) => s + (r.pvProduction ?? 0.0));
+  double get _totalConsumption =>
+      _energyRecords.fold(0.0, (s, r) => s + r.consumption);
+  double get _totalCost => _totalGrid * _costPerKwh;
+  double get _savedCost => _totalPv * _costPerKwh;
 
-  double get _costPerKwh =>
-      double.tryParse(_priceController.text.replaceAll(',', '.')) ??
-      AppStorage.getCostPerKwh();
-
-  double get _estimatedCost => _totalGrid * _costPerKwh;
-
-  double get _selfConsumptionPct {
-    if (_totalPv <= 0) return 0;
-    final selfConsumed = (_totalPv - (_totalGrid > _totalPv
-            ? 0
-            : _totalPv - (_totalConsumption + _totalACS - _totalGrid)
-                .clamp(0, _totalPv)))
-        .clamp(0, _totalPv);
-    return (selfConsumed / _totalPv * 100).clamp(0, 100);
+  Future<void> _editPrice() async {
+    _priceController.text = _costPerKwh.toStringAsFixed(4);
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Prezzo €/kWh'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Offerta A2A Click Luce – Monoraria\n'
+              'Tutte le componenti variabili IVA incl.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _priceController,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+              ],
+              decoration: const InputDecoration(
+                labelText: 'Prezzo (€/kWh)',
+                border: OutlineInputBorder(),
+                suffixText: '€/kWh',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annulla'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final v = double.tryParse(
+                  _priceController.text.replaceAll(',', '.'));
+              if (v != null && v > 0) {
+                await AppStorage.saveCostPerKwh(v);
+                if (mounted) setState(() => _costPerKwh = v);
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Salva'),
+          ),
+        ],
+      ),
+    );
   }
-
-  // ---- Colori serie ----
-  static const Color _colConsumption = Color(0xFFFF7043);
-  static const Color _colACS = Color(0xFFFFB300);
-  static const Color _colGrid = Color(0xFF42A5F5);
-  static const Color _colPv = Color(0xFF66BB6A);
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final entries = _entries;
-    final hasData = entries.isNotEmpty;
+    final records = _energyRecords;
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ---- Titolo + prezzo kWh ----
-            Row(
-              children: [
-                Icon(Icons.bolt_rounded, color: cs.primary, size: 20),
-                const SizedBox(width: 6),
-                Text(
-                  'Energia & Costi',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: records.isEmpty
+          ? _buildEmpty(cs)
+          : CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Energia & Costi',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        const Spacer(),
+                        // pulsante modifica prezzo
+                        InkWell(
+                          onTap: _editPrice,
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              children: [
+                                Icon(Icons.edit_outlined,
+                                    size: 14, color: cs.primary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_costPerKwh.toStringAsFixed(4)} €/kWh',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: cs.primary,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const Spacer(),
-                SizedBox(
-                  width: 100,
-                  child: TextField(
-                    controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: '€/kWh',
-                      labelStyle: const TextStyle(fontSize: 12),
-                      isDense: true,
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
+                // ── KPI cards ──
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 4),
+                    child: Row(
+                      children: [
+                        _KpiCard(
+                          label: 'Rete',
+                          value: '${_totalGrid.toStringAsFixed(1)} kWh',
+                          sub: '${_totalCost.toStringAsFixed(2)} €',
+                          icon: Icons.electrical_services_outlined,
+                          color: const Color(0xFFFFB74D),
+                        ),
+                        const SizedBox(width: 8),
+                        _KpiCard(
+                          label: 'Fotovoltaico',
+                          value: '${_totalPv.toStringAsFixed(1)} kWh',
+                          sub: '${_savedCost.toStringAsFixed(2)} € risparmiati',
+                          icon: Icons.wb_sunny_outlined,
+                          color: const Color(0xFF81C784),
+                        ),
+                        const SizedBox(width: 8),
+                        _KpiCard(
+                          label: 'Consumo PDC',
+                          value:
+                              '${_totalConsumption.toStringAsFixed(1)} kWh',
+                          sub:
+                              '${(_totalConsumption * _costPerKwh).toStringAsFixed(2)} €',
+                          icon: Icons.heat_pump_outlined,
+                          color: const Color(0xFF4DB6AC),
+                        ),
+                      ],
                     ),
-                    style: const TextStyle(fontSize: 13),
-                    onEditingComplete: () async {
-                      final v = double.tryParse(
-                          _priceController.text.replaceAll(',', '.'));
-                      if (v != null && v > 0) {
-                        await AppStorage.saveCostPerKwh(v);
-                      }
-                      FocusScope.of(context).unfocus();
-                      setState(() {});
+                  ),
+                ),
+                // ── Grafico a barre raggruppate ──
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                    child: _buildBarChart(records, cs),
+                  ),
+                ),
+                // ── Grafico costi ──
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: _buildCostChart(records, cs),
+                  ),
+                ),
+                // ── Tabella dettaglio ──
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                    child: _buildTable(records, cs),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  // ─────────────────────────────────────────
+  // Grafico a barre: rete / FV / consumo PDC
+  // ─────────────────────────────────────────
+  Widget _buildBarChart(
+      List<DailyRecordDTO> records, ColorScheme cs) {
+    final groups = <BarChartGroupData>[];
+    for (int i = 0; i < records.length; i++) {
+      final r = records[i];
+      groups.add(BarChartGroupData(
+        x: i,
+        barsSpace: 2,
+        barRods: [
+          BarChartRodData(
+            toY: r.energyFromGrid ?? 0.0,
+            color: const Color(0xFFFFB74D),
+            width: 6,
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(3)),
+          ),
+          BarChartRodData(
+            toY: r.pvProduction ?? 0.0,
+            color: const Color(0xFF81C784),
+            width: 6,
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(3)),
+          ),
+          BarChartRodData(
+            toY: r.consumption,
+            color: const Color(0xFF4DB6AC),
+            width: 6,
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(3)),
+          ),
+        ],
+      ));
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 8),
+            child: Text(
+              'Energia giornaliera (kWh)',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface),
+            ),
+          ),
+          // legenda
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 12),
+            child: Wrap(
+              spacing: 16,
+              children: [
+                _LegendDot(
+                    color: const Color(0xFFFFB74D), label: 'Rete'),
+                _LegendDot(
+                    color: const Color(0xFF81C784), label: 'FV'),
+                _LegendDot(
+                    color: const Color(0xFF4DB6AC), label: 'PDC'),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 200,
+            child: BarChart(
+              BarChartData(
+                barGroups: groups,
+                borderData: FlBorderData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) => FlLine(
+                    color: cs.outlineVariant.withOpacity(0.3),
+                    strokeWidth: 1,
+                  ),
+                ),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 32,
+                      getTitlesWidget: (v, _) => Text(
+                        v.toStringAsFixed(0),
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (v, _) {
+                        final idx = v.toInt();
+                        if (idx < 0 || idx >= records.length) {
+                          return const SizedBox.shrink();
+                        }
+                        final dateStr = records[idx].dateIso;
+                        // mostra solo giorno/mese
+                        final parts = dateStr.split('/');
+                        final label = parts.length >= 2
+                            ? '${parts[0]}/${parts[1]}'
+                            : dateStr;
+                        return Transform.rotate(
+                          angle: -0.5,
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: cs.onSurfaceVariant),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                ),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final labels = ['Rete', 'FV', 'PDC'];
+                      return BarTooltipItem(
+                        '${labels[rodIndex]}: ${rod.toY.toStringAsFixed(1)} kWh',
+                        const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500),
+                      );
                     },
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // ---- Filtri periodo ----
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _Period.values.map((p) {
-                  final sel = p == _period;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ChoiceChip(
-                      label: Text(p.label,
-                          style: const TextStyle(fontSize: 12)),
-                      selected: sel,
-                      onSelected: (_) => setState(() => _period = p),
-                      selectedColor: cs.primary,
-                      labelStyle: TextStyle(
-                          color: sel ? cs.onPrimary : cs.onSurfaceVariant),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  );
-                }).toList(),
               ),
             ),
-            const SizedBox(height: 12),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // ---- KPI cards ----
-            _KpiRow(
-              totalConsumption: _totalConsumption,
-              totalPv: _totalPv,
-              estimatedCost: _estimatedCost,
-              selfPct: _selfConsumptionPct,
+  // ─────────────────────────────────────────
+  // Grafico costi (linea)
+  // ─────────────────────────────────────────
+  Widget _buildCostChart(
+      List<DailyRecordDTO> records, ColorScheme cs) {
+    final gridSpots = <FlSpot>[];
+    final pvSpots = <FlSpot>[];
+
+    for (int i = 0; i < records.length; i++) {
+      final r = records[i];
+      gridSpots.add(FlSpot(
+          i.toDouble(), (r.energyFromGrid ?? 0.0) * _costPerKwh));
+      pvSpots.add(
+          FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 8),
+            child: Text(
+              'Costi giornalieri (€)',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface),
             ),
-            const SizedBox(height: 16),
-
-            // ---- Legenda ----
-            Wrap(
-              spacing: 12,
-              runSpacing: 4,
-              children: const [
-                _LegendDot(color: _colConsumption, label: 'PdC (kWh)'),
-                _LegendDot(color: _colACS, label: 'ACS (kWh)'),
-                _LegendDot(color: _colGrid, label: 'Rete (kWh)'),
-                _LegendDot(color: _colPv, label: 'FV (kWh)'),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 12),
+            child: Wrap(
+              spacing: 16,
+              children: [
+                _LegendDot(
+                    color: const Color(0xFFFFB74D),
+                    label: 'Costo rete'),
+                _LegendDot(
+                    color: const Color(0xFF81C784),
+                    label: 'Risparmio FV'),
               ],
             ),
-            const SizedBox(height: 10),
-
-            // ---- Grafico ----
-            if (!hasData)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Column(
-                    children: [
-                      Icon(Icons.bar_chart_outlined,
-                          size: 48, color: cs.onSurfaceVariant),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Nessun dato nel periodo selezionato',
-                        style: TextStyle(
-                            color: cs.onSurfaceVariant, fontSize: 13),
-                      ),
-                    ],
+          ),
+          SizedBox(
+            height: 180,
+            child: LineChart(
+              LineChartData(
+                borderData: FlBorderData(show: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) => FlLine(
+                    color: cs.outlineVariant.withOpacity(0.3),
+                    strokeWidth: 1,
                   ),
                 ),
-              )
-            else
-              _EnergyBarChart(entries: entries),
+                titlesData: FlTitlesData(
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 38,
+                      getTitlesWidget: (v, _) => Text(
+                        '${v.toStringAsFixed(2)}€',
+                        style: TextStyle(
+                            fontSize: 9,
+                            color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      getTitlesWidget: (v, _) {
+                        final idx = v.toInt();
+                        if (idx < 0 ||
+                            idx >= records.length ||
+                            idx % 2 != 0) {
+                          return const SizedBox.shrink();
+                        }
+                        final parts =
+                            records[idx].dateIso.split('/');
+                        final label = parts.length >= 2
+                            ? '${parts[0]}/${parts[1]}'
+                            : records[idx].dateIso;
+                        return Transform.rotate(
+                          angle: -0.5,
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                                fontSize: 9,
+                                color: cs.onSurfaceVariant),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false)),
+                ),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: gridSpots,
+                    isCurved: true,
+                    color: const Color(0xFFFFB74D),
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color:
+                          const Color(0xFFFFB74D).withOpacity(0.1),
+                    ),
+                  ),
+                  LineChartBarData(
+                    spots: pvSpots,
+                    isCurved: true,
+                    color: const Color(0xFF81C784),
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color:
+                          const Color(0xFF81C784).withOpacity(0.1),
+                    ),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (spots) => spots
+                        .map((s) => LineTooltipItem(
+                              '${s.y.toStringAsFixed(3)} €',
+                              const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11),
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(height: 20),
+  // ─────────────────────────────────────────
+  // Tabella dettaglio
+  // ─────────────────────────────────────────
+  Widget _buildTable(
+      List<DailyRecordDTO> records, ColorScheme cs) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+            child: Text(
+              'Dettaglio giornaliero',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface),
+            ),
+          ),
+          // header
+          Container(
+            color: cs.surfaceContainerHighest.withOpacity(0.5),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 6),
+            child: Row(
+              children: [
+                _TH('Data', flex: 2),
+                _TH('Rete kWh'),
+                _TH('FV kWh'),
+                _TH('PDC kWh'),
+                _TH('Costo €'),
+              ],
+            ),
+          ),
+          // righe (più recenti in cima)
+          ...records.reversed.map((r) {
+            final cost =
+                (r.energyFromGrid ?? 0.0) * _costPerKwh;
+            return Container(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                      color: cs.outlineVariant.withOpacity(0.2)),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      r.dateIso,
+                      style: TextStyle(
+                          fontSize: 11, color: cs.onSurface),
+                    ),
+                  ),
+                  _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '-',
+                      color: const Color(0xFFFFB74D)),
+                  _TD(r.pvProduction?.toStringAsFixed(1) ?? '-',
+                      color: const Color(0xFF81C784)),
+                  _TD(r.consumption.toStringAsFixed(1),
+                      color: const Color(0xFF4DB6AC)),
+                  _TD(cost.toStringAsFixed(3),
+                      color: cs.onSurface),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty(ColorScheme cs) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt_outlined, size: 56,
+              color: cs.onSurfaceVariant.withOpacity(0.4)),
+          const SizedBox(height: 16),
+          Text(
+            'Nessun dato energia',
+            style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Inserisci kWh rete e FV nella scheda\n"Registra" per vedere i grafici.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 13, color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── widget helper ───────────────────────────────────────
+
+class _KpiCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String sub;
+  final IconData icon;
+  final Color color;
+
+  const _KpiCard({
+    required this.label,
+    required this.value,
+    required this.sub,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 14, color: color),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                        fontSize: 10, color: cs.onSurfaceVariant),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface),
+            ),
+            Text(
+              sub,
+              style: TextStyle(
+                  fontSize: 10, color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
@@ -312,236 +708,9 @@ class _EnergyPageState extends State<EnergyPage> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Grafico a barre raggruppate
-// ---------------------------------------------------------------------------
-class _EnergyBarChart extends StatelessWidget {
-  final List<_BarEntry> entries;
-
-  const _EnergyBarChart({required this.entries});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final count = entries.length;
-    final barWidth = count > 20 ? 4.0 : count > 10 ? 6.0 : 8.0;
-    final groupWidth = count > 20 ? 22.0 : count > 10 ? 30.0 : 38.0;
-    final chartWidth = (count * groupWidth).clamp(300.0, double.infinity);
-
-    double maxY = 0;
-    for (final e in entries) {
-      final m = [e.consumption, e.consumptionACS, e.energyFromGrid, e.pvProduction]
-          .fold(0.0, (a, b) => a > b ? a : b);
-      if (m > maxY) maxY = m;
-    }
-    maxY = ((maxY * 1.2) / 5).ceil() * 5.0;
-    if (maxY < 5) maxY = 5;
-
-    final groups = entries.asMap().entries.map((e) {
-      final i = e.key;
-      final entry = e.value;
-      return BarChartGroupData(
-        x: i,
-        groupVertically: false,
-        barRods: [
-          _rod(entry.consumption, _EnergyPage._colConsumption, barWidth),
-          _rod(entry.consumptionACS, _EnergyPage._colACS, barWidth),
-          _rod(entry.energyFromGrid, _EnergyPage._colGrid, barWidth),
-          _rod(entry.pvProduction, _EnergyPage._colPv, barWidth),
-        ],
-        barsSpace: 2,
-      );
-    }).toList();
-
-    return SizedBox(
-      height: 220,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SizedBox(
-          width: chartWidth,
-          child: BarChart(
-            BarChartData(
-              maxY: maxY,
-              barGroups: groups,
-              gridData: FlGridData(
-                show: true,
-                drawVerticalLine: false,
-                horizontalInterval: maxY / 4,
-                getDrawingHorizontalLine: (v) => FlLine(
-                  color: cs.outlineVariant.withOpacity(0.4),
-                  strokeWidth: 0.8,
-                ),
-              ),
-              borderData: FlBorderData(show: false),
-              titlesData: FlTitlesData(
-                leftTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 36,
-                    interval: maxY / 4,
-                    getTitlesWidget: (v, _) => Text(
-                      v.toStringAsFixed(0),
-                      style: TextStyle(
-                          fontSize: 10, color: cs.onSurfaceVariant),
-                    ),
-                  ),
-                ),
-                rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 28,
-                    getTitlesWidget: (v, _) {
-                      final idx = v.toInt();
-                      if (idx < 0 || idx >= entries.length) {
-                        return const SizedBox.shrink();
-                      }
-                      // Mostra etichetta solo ogni N per non sovrapporre
-                      final step = count > 20 ? 5 : count > 10 ? 3 : 1;
-                      if (idx % step != 0) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          entries[idx].label,
-                          style: TextStyle(
-                              fontSize: 9, color: cs.onSurfaceVariant),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              barTouchData: BarTouchData(
-                touchTooltipData: BarTouchTooltipData(
-                  getTooltipColor: (_) => cs.surfaceContainerHighest,
-                  getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                    final labels = ['PdC', 'ACS', 'Rete', 'FV'];
-                    final label = labels[rodIndex];
-                    return BarTooltipItem(
-                      '$label\n${rod.toY.toStringAsFixed(1)} kWh',
-                      TextStyle(color: cs.onSurface, fontSize: 11),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  BarChartRodData _rod(double y, Color color, double width) {
-    return BarChartRodData(
-      toY: y,
-      color: color,
-      width: width,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// KPI Row
-// ---------------------------------------------------------------------------
-class _KpiRow extends StatelessWidget {
-  final double totalConsumption;
-  final double totalPv;
-  final double estimatedCost;
-  final double selfPct;
-
-  const _KpiRow({
-    required this.totalConsumption,
-    required this.totalPv,
-    required this.estimatedCost,
-    required this.selfPct,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-            child: _KpiCard(
-          icon: Icons.bolt_rounded,
-          color: _EnergyPage._colConsumption,
-          label: 'Consumo PdC',
-          value: '${totalConsumption.toStringAsFixed(1)} kWh',
-        )),
-        const SizedBox(width: 6),
-        Expanded(
-            child: _KpiCard(
-          icon: Icons.solar_power_rounded,
-          color: _EnergyPage._colPv,
-          label: 'Fotovoltaico',
-          value: '${totalPv.toStringAsFixed(1)} kWh',
-        )),
-        const SizedBox(width: 6),
-        Expanded(
-            child: _KpiCard(
-          icon: Icons.euro_rounded,
-          color: const Color(0xFF26C6DA),
-          label: 'Costo stimato',
-          value: '€ ${estimatedCost.toStringAsFixed(2)}',
-        )),
-      ],
-    );
-  }
-}
-
-class _KpiCard extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String value;
-
-  const _KpiCard({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(height: 4),
-          Text(label,
-              style:
-                  TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: cs.onSurface)),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Legenda dot
-// ---------------------------------------------------------------------------
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
-
   const _LegendDot({required this.color, required this.label});
 
   @override
@@ -552,8 +721,8 @@ class _LegendDot extends StatelessWidget {
         Container(
           width: 10,
           height: 10,
-          decoration: BoxDecoration(
-              color: color, borderRadius: BorderRadius.circular(2)),
+          decoration:
+              BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
         Text(label,
@@ -565,15 +734,38 @@ class _LegendDot extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helper mutabile per aggregazione mensile
-// ---------------------------------------------------------------------------
-class _MutableBarEntry {
-  final String label;
-  double consumption = 0;
-  double consumptionACS = 0;
-  double energyFromGrid = 0;
-  double pvProduction = 0;
+class _TH extends StatelessWidget {
+  final String text;
+  final int flex;
+  const _TH(this.text, {this.flex = 1});
 
-  _MutableBarEntry(this.label);
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        text,
+        style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+class _TD extends StatelessWidget {
+  final String text;
+  final Color color;
+  const _TD(this.text, {required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 11, color: color),
+      ),
+    );
+  }
 }
