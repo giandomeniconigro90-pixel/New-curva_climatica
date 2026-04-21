@@ -59,6 +59,13 @@ class _InputPageState extends State<InputPage> {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
+  // Colori card — usati sia nella grid che nel popup
+  static const Color _colorEsterna     = Color(0xFF1976D2);
+  static const Color _colorConsumo     = Color(0xFF66BB6A);
+  static const Color _colorAcs         = Color(0xFF26A69A);
+  static const Color _colorRete        = Color(0xFFF57C00);
+  static const Color _colorFotovoltaico = Color(0xFFFDD835);
+
   String get _weatherSubtitle {
     if (_weatherLocation != null) return _weatherLocation!;
     final age = WeatherService.getCacheAgeMinutes();
@@ -111,7 +118,6 @@ class _InputPageState extends State<InputPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // Letti da Hive ad ogni build
     final bool hasGridMeter = AppStorage.getHasGridMeter();
     final bool hasPv        = AppStorage.getHasPv();
 
@@ -122,7 +128,7 @@ class _InputPageState extends State<InputPage> {
       subtitle: _weatherSubtitle,
       controller: widget.externalTempController,
       icon: Icons.cloud_sync,
-      color: const Color(0xFF1976D2),
+      color: _colorEsterna,
       isRoom: false,
       isWeatherTile: true,
       suffix: '\u00b0',
@@ -133,7 +139,7 @@ class _InputPageState extends State<InputPage> {
       subtitle: 'ShinePhone',
       controller: widget.consumptionController,
       icon: Icons.eco_outlined,
-      color: const Color(0xFF66BB6A),
+      color: _colorConsumo,
       isRoom: false,
       suffix: 'kWh',
     ));
@@ -143,7 +149,7 @@ class _InputPageState extends State<InputPage> {
       subtitle: 'Cozytouch',
       controller: widget.consumptionAcsController,
       icon: Icons.water_drop_outlined,
-      color: const Color(0xFF26A69A),
+      color: _colorAcs,
       isRoom: false,
       suffix: 'kWh',
     ));
@@ -154,7 +160,7 @@ class _InputPageState extends State<InputPage> {
         subtitle: 'ShinePhone',
         controller: widget.energyFromGridController,
         icon: Icons.electrical_services_outlined,
-        color: const Color(0xFFF57C00),
+        color: _colorRete,
         isRoom: false,
         suffix: 'kWh',
       ));
@@ -165,7 +171,7 @@ class _InputPageState extends State<InputPage> {
         subtitle: 'ShinePhone',
         controller: widget.pvProductionController,
         icon: Icons.wb_sunny_outlined,
-        color: const Color(0xFFFDD835),
+        color: _colorFotovoltaico,
         isRoom: false,
         suffix: 'kWh',
       ));
@@ -294,16 +300,16 @@ class _InputPageState extends State<InputPage> {
           color: color,
           icon: icon,
           emoji: label == 'Raffrescamento'
-              ? '❄️'
+              ? '\u2744\uFE0F'
               : label == 'Riscaldamento'
-                  ? '🔥'
-                  : '⛔',
+                  ? '\uD83D\uDD25'
+                  : '\u26D4',
           subtitle: 'Comfort Home',
           notifier: widget.heatpumpModeNotifier,
           items: const [
-            DropdownMenuItem(value: 'riscaldamento', child: Text('🔥 Riscaldamento')),
-            DropdownMenuItem(value: 'raffrescamento', child: Text('❄️ Raffrescamento')),
-            DropdownMenuItem(value: 'spenta', child: Text('⛔ Spenta')),
+            DropdownMenuItem(value: 'riscaldamento', child: Text('\uD83D\uDD25 Riscaldamento')),
+            DropdownMenuItem(value: 'raffrescamento', child: Text('\u2744\uFE0F Raffrescamento')),
+            DropdownMenuItem(value: 'spenta', child: Text('\u26D4 Spenta')),
           ],
         );
       },
@@ -322,17 +328,17 @@ class _InputPageState extends State<InputPage> {
           case 'accesa':
             color = const Color(0xFFE53935);
             icon = Icons.local_fire_department;
-            emoji = '🔥';
+            emoji = '\uD83D\uDD25';
             break;
           case 'standby':
             color = const Color(0xFFFFB300);
             icon = Icons.pause_circle_outline;
-            emoji = '⏸';
+            emoji = '\u23F8';
             break;
           default:
             color = const Color(0xFF78909C);
             icon = Icons.power_settings_new;
-            emoji = '⛔';
+            emoji = '\u26D4';
         }
 
         return _buildDropdownTile(
@@ -342,9 +348,9 @@ class _InputPageState extends State<InputPage> {
           subtitle: 'Cozytouch',
           notifier: widget.boilerModeNotifier,
           items: const [
-            DropdownMenuItem(value: 'accesa', child: Text('🔥 Accesa')),
-            DropdownMenuItem(value: 'standby', child: Text('⏸ Standby')),
-            DropdownMenuItem(value: 'spenta', child: Text('⛔ Spenta')),
+            DropdownMenuItem(value: 'accesa', child: Text('\uD83D\uDD25 Accesa')),
+            DropdownMenuItem(value: 'standby', child: Text('\u23F8 Standby')),
+            DropdownMenuItem(value: 'spenta', child: Text('\u26D4 Spenta')),
           ],
         );
       },
@@ -438,8 +444,7 @@ class _InputPageState extends State<InputPage> {
         final String displayVal = val != null ? val.toStringAsFixed(1) : '--';
 
         return GestureDetector(
-          onTap: () =>
-              _openControlPage(title, controller, suffix == 'kWh', isRoom),
+          onTap: () => _openControlPage(title, controller, suffix == 'kWh', isRoom, color),
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -562,6 +567,7 @@ class _InputPageState extends State<InputPage> {
     TextEditingController controller,
     bool isConsumption,
     bool isRoom,
+    Color cardColor,
   ) {
     final shortestSide = MediaQuery.of(context).size.shortestSide;
     final bool isTablet = shortestSide >= 550;
@@ -585,6 +591,7 @@ class _InputPageState extends State<InputPage> {
                 comfortRatings: widget.comfortRatings,
                 onSave: () => setState(() {}),
                 isCooling: widget.isCooling,
+                cardColor: cardColor,
               ),
             ),
           ),
@@ -602,6 +609,7 @@ class _InputPageState extends State<InputPage> {
             comfortRatings: widget.comfortRatings,
             onSave: () => setState(() {}),
             isCooling: widget.isCooling,
+            cardColor: cardColor,
           ),
           transitionsBuilder:
               (context, animation, secondaryAnimation, child) {

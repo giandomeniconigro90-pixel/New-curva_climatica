@@ -32,6 +32,7 @@ class RoomControlPage extends StatefulWidget {
   final Map<String, String>? comfortRatings;
   final VoidCallback onSave;
   final bool isCooling;
+  final Color? cardColor; // colore opzionale dalla card chiamante
 
   const RoomControlPage({
     super.key,
@@ -42,6 +43,7 @@ class RoomControlPage extends StatefulWidget {
     this.comfortRatings,
     required this.onSave,
     required this.isCooling,
+    this.cardColor,
   });
 
   @override
@@ -67,26 +69,24 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _currentComfort = 'ok';
     }
 
-    if (widget.isConsumption) {
-      _min = 0; _max = 25;
-      _mainColor = const Color(0xFF66BB6A);
-      _headerText = "CONSUMO GIORNALIERO";
-    } else if (widget.isRoom) {
+    if (widget.isRoom) {
       _min = 10; _max = 45;
-      _mainColor = widget.isCooling
-          ? const Color(0xFF4DB6AC)
-          : const Color(0xFFFFB74D);
+      _mainColor = widget.cardColor ??
+          (widget.isCooling ? const Color(0xFF4DB6AC) : const Color(0xFFFFB74D));
       _headerText = "TEMPERATURA INTERNA";
+    } else if (widget.isConsumption) {
+      _min = 0; _max = 25;
+      _mainColor = widget.cardColor ?? const Color(0xFF66BB6A);
+      _headerText = "CONSUMO GIORNALIERO";
     } else {
       _min = -10; _max = 40;
-      _mainColor = const Color(0xFF1976D2);
+      _mainColor = widget.cardColor ?? const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Altezza slider dinamica: 45% dell'altezza schermo, min 260, max 420
     final double sliderHeight = MediaQuery.of(context).size.height
         .clamp(260.0 / 0.45, 420.0 / 0.45) * 0.45;
 
