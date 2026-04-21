@@ -61,8 +61,8 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
   bool _isLoading  = false;
 
   // Step 1 — Impianto
-  _PlantType _plantType  = _PlantType.heatpump;
-  bool       _hasPv      = false;
+  _PlantType _plantType    = _PlantType.heatpump;
+  bool       _hasPv        = false;
   bool       _hasGridMeter = false;
 
   static const double _slopeMin  = 0.1;
@@ -77,20 +77,16 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
   }
 
   Future<void> _loadExisting() async {
-    // Curva riscaldamento
     final slope  = AppStorage.getSlope();
     final offset = AppStorage.getOffset();
     _slopeController.text  = slope.toString();
     _offsetController.text = offset.toString();
 
-    // Curva raffrescamento
     _coolingSlopeController.text  = AppStorage.getCoolingSlope().toString();
     _coolingOffsetController.text = AppStorage.getCoolingOffset().toString();
 
-    // Costo €/kWh
     _costController.text = AppStorage.getCostPerKwh().toString();
 
-    // Impianto
     final plantKey = AppStorage.getPlantType();
     setState(() {
       _plantType    = _PlantType.values.firstWhere((e) => e.key == plantKey, orElse: () => _PlantType.heatpump);
@@ -114,7 +110,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     if (val == null || val.isEmpty) return 'Campo obbligatorio';
     final v = double.tryParse(val.replaceAll(',', '.'));
     if (v == null) return 'Valore non valido';
-    if (v < _slopeMin || v > _slopeMax) return 'Pendenza: $_slopeMin – $_slopeMax';
+    if (v < _slopeMin || v > _slopeMax) return 'Pendenza: $_slopeMin \u2013 $_slopeMax';
     return null;
   }
 
@@ -122,7 +118,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     if (val == null || val.isEmpty) return 'Campo obbligatorio';
     final v = double.tryParse(val.replaceAll(',', '.'));
     if (v == null) return 'Valore non valido';
-    if (v < _offsetMin || v > _offsetMax) return 'Parallela: $_offsetMin – $_offsetMax';
+    if (v < _offsetMin || v > _offsetMax) return 'Parallela: $_offsetMin \u2013 $_offsetMax';
     return null;
   }
 
@@ -135,12 +131,10 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
 
   // --- Step continua / indietro ---
   void _onStepContinue() {
-    // Step 1 (Impianto) non ha campi form → avanza direttamente
     if (_currentStep == 0) {
       setState(() => _currentStep = 1);
       return;
     }
-    // Ultimi step: valida il form prima di avanzare
     if (!_formKey.currentState!.validate()) return;
     if (_currentStep < 3) {
       setState(() => _currentStep++);
@@ -156,7 +150,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
   Future<void> _saveAndFinish() async {
     setState(() => _isLoading = true);
     try {
-      // Curva
       final slope  = double.tryParse(_slopeController.text.replaceAll(',', '.'))  ?? 1.0;
       final offset = double.tryParse(_offsetController.text.replaceAll(',', '.')) ?? 0.0;
       final cSlope = double.tryParse(_coolingSlopeController.text.replaceAll(',', '.'))  ?? 0.5;
@@ -170,7 +163,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
       await AppStorage.saveSystemMode('heating');
       await AppStorage.saveCostPerKwh(cost);
 
-      // Impianto
       await AppStorage.savePlantType(_plantType.key);
       await AppStorage.saveHasPv(_hasPv);
       await AppStorage.saveHasGridMeter(_hasGridMeter);
@@ -220,7 +212,8 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
               ? const Center(child: CircularProgressIndicator())
               : Form(
                   key: _formKey,
-                  child: Stepper(\n                    type: StepperType.vertical,
+                  child: Stepper(
+                    type: StepperType.vertical,
                     currentStep: _currentStep,
                     onStepContinue: _onStepContinue,
                     onStepCancel: _onStepCancel,
@@ -238,7 +231,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // --- Controls (pulsanti Continua / Indietro) ---
+  // --- Controls ---
   Widget _buildControls(BuildContext context, ControlsDetails details) {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
@@ -279,7 +272,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
           ),
           const SizedBox(height: 16),
-          // Chip tipo impianto
           Wrap(
             spacing: 10,
             runSpacing: 10,
@@ -303,7 +295,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             }).toList(),
           ),
           const SizedBox(height: 24),
-          // Toggle FV
           _buildToggleTile(
             cs: cs,
             icon: Icons.solar_power,
@@ -313,7 +304,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             onChanged: (v) => setState(() => _hasPv = v),
           ),
           const SizedBox(height: 10),
-          // Toggle Rete
           _buildToggleTile(
             cs: cs,
             icon: Icons.electric_meter,
@@ -352,7 +342,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             controller: _slopeController,
             label: 'Pendenza (Slope / Curva)',
             hint: 'Es. 1.0',
-            helper: 'Valori accettati: $_slopeMin – $_slopeMax',
+            helper: 'Valori accettati: $_slopeMin \u2013 $_slopeMax',
             validator: _validateSlope,
             signed: false,
           ),
@@ -361,7 +351,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             controller: _offsetController,
             label: 'Parallela (Offset / Shift)',
             hint: 'Es. 0.0',
-            helper: 'Valori accettati: $_offsetMin – $_offsetMax',
+            helper: 'Valori accettati: $_offsetMin \u2013 $_offsetMax',
             validator: _validateOffset,
             signed: true,
           ),
@@ -395,7 +385,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             controller: _coolingSlopeController,
             label: 'Pendenza Estate',
             hint: 'Es. 0.5',
-            helper: 'Valori accettati: $_slopeMin – $_slopeMax',
+            helper: 'Valori accettati: $_slopeMin \u2013 $_slopeMax',
             validator: _validateSlope,
             signed: false,
           ),
@@ -404,7 +394,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             controller: _coolingOffsetController,
             label: 'Parallela Estate',
             hint: 'Es. 0.0',
-            helper: 'Valori accettati: $_offsetMin – $_offsetMax',
+            helper: 'Valori accettati: $_offsetMin \u2013 $_offsetMax',
             validator: _validateOffset,
             signed: true,
           ),
@@ -426,13 +416,13 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
         children: [
           Text(
             'Imposta il tuo prezzo dell\'energia elettrica. '
-            'Verrà usato per calcolare i costi stimati nel grafico.',
+            'Verr\u00e0 usato per calcolare i costi stimati nel grafico.',
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
           ),
           const SizedBox(height: 16),
           _buildNumericField(
             controller: _costController,
-            label: 'Prezzo energia (€/kWh)',
+            label: 'Prezzo energia (\u20ac/kWh)',
             hint: 'Es. 0.25',
             helper: 'Controlla la tua bolletta per il valore esatto',
             validator: _validateCost,
@@ -440,7 +430,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             prefixIcon: Icons.euro,
           ),
           const SizedBox(height: 20),
-          // Info-box riepilogo impianto
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -466,9 +455,9 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                _summaryRow(cs, Icons.device_hub,    'Impianto',     _plantType.label),
-                _summaryRow(cs, Icons.solar_power,   'Fotovoltaico', _hasPv      ? 'Sì (ShinePhone)' : 'No'),
-                _summaryRow(cs, Icons.electric_meter,'Rete',         _hasGridMeter ? 'Sì (ShinePhone)' : 'No'),
+                _summaryRow(cs, Icons.device_hub,     'Impianto',     _plantType.label),
+                _summaryRow(cs, Icons.solar_power,    'Fotovoltaico', _hasPv        ? 'S\u00ec (ShinePhone)' : 'No'),
+                _summaryRow(cs, Icons.electric_meter, 'Rete',         _hasGridMeter ? 'S\u00ec (ShinePhone)' : 'No'),
               ],
             ),
           ),
