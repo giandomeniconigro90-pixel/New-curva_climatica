@@ -105,6 +105,17 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     super.dispose();
   }
 
+  // --- Toggle handlers: salvano subito su Hive ---
+  Future<void> _onHasPvChanged(bool v) async {
+    await AppStorage.saveHasPv(v);
+    if (mounted) setState(() => _hasPv = v);
+  }
+
+  Future<void> _onHasGridMeterChanged(bool v) async {
+    await AppStorage.saveHasGridMeter(v);
+    if (mounted) setState(() => _hasGridMeter = v);
+  }
+
   // --- Validatori ---
   String? _validateSlope(String? val) {
     if (val == null || val.isEmpty) return 'Campo obbligatorio';
@@ -162,8 +173,9 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
       await AppStorage.saveCoolingOffset(cOffset);
       await AppStorage.saveSystemMode('heating');
       await AppStorage.saveCostPerKwh(cost);
-
       await AppStorage.savePlantType(_plantType.key);
+      // hasPv e hasGridMeter sono già salvati in tempo reale dai toggle handler,
+      // ma li riscriviamo comunque per coerenza con lo stato corrente del form.
       await AppStorage.saveHasPv(_hasPv);
       await AppStorage.saveHasGridMeter(_hasGridMeter);
 
@@ -301,7 +313,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             title: 'Ho un impianto fotovoltaico',
             subtitle: 'I dati vengono letti da ShinePhone',
             value: _hasPv,
-            onChanged: (v) => setState(() => _hasPv = v),
+            onChanged: _onHasPvChanged,
           ),
           const SizedBox(height: 10),
           _buildToggleTile(
@@ -310,7 +322,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
             title: 'Ho un contatore smart (rete)',
             subtitle: 'Energia da rete letta da ShinePhone',
             value: _hasGridMeter,
-            onChanged: (v) => setState(() => _hasGridMeter = v),
+            onChanged: _onHasGridMeterChanged,
           ),
         ],
       ),
@@ -475,7 +487,7 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     required String title,
     required String subtitle,
     required bool value,
-    required ValueChanged<bool> onChanged,
+    required Future<void> Function(bool) onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
