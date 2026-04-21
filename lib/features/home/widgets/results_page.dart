@@ -1,10 +1,10 @@
 // lib/features/home/widgets/results_page.dart
 
 import 'package:flutter/material.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
+import '../../../utils/app_toast.dart';
 import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart';
 
@@ -80,8 +80,9 @@ class _ResultsPageState extends State<ResultsPage> {
     await widget.onDeleteRecordByDateIso?.call(record.dateIso);
 
     if (context.mounted) {
-      Fluttertoast.showToast(
-        msg: 'Registrazione del $dateStr eliminata',
+      AppToast.show(
+        context,
+        'Registrazione del $dateStr eliminata',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -104,8 +105,7 @@ class _ResultsPageState extends State<ResultsPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // Letti da Hive ad ogni build
-    final bool hasPv        = AppStorage.getHasPv();
+    final bool hasPv = AppStorage.getHasPv();
     final bool hasGridMeter = AppStorage.getHasGridMeter();
 
     if (widget.records.isEmpty) {
@@ -136,12 +136,10 @@ class _ResultsPageState extends State<ResultsPage> {
                     ),
               ),
               const SizedBox(height: 16),
-
               if (widget.suggestion != null) ...[
                 _buildAiCard(context, widget.suggestion!),
                 const SizedBox(height: 24),
               ],
-
               Text(
                 'Storico Recente',
                 style: Theme.of(context)
@@ -150,7 +148,6 @@ class _ResultsPageState extends State<ResultsPage> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
-
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -159,10 +156,10 @@ class _ResultsPageState extends State<ResultsPage> {
                   final r = sortedRecords[index];
                   final date =
                       parseItalianDateSafe(r.dateIso) ?? DateTime.now();
-                  final hasAcs  = r.consumptionACS != null;
+                  final hasAcs = r.consumptionACS != null;
                   final hasMode = r.heatpumpMode != null && r.heatpumpMode!.isNotEmpty;
                   final showGrid = hasGridMeter && r.energyFromGrid != null;
-                  final showPv   = hasPv && r.pvProduction != null;
+                  final showPv = hasPv && r.pvProduction != null;
 
                   return InkWell(
                     onTap: widget.onEditRecordByDateIso != null
@@ -184,7 +181,6 @@ class _ResultsPageState extends State<ResultsPage> {
                       ),
                       child: Row(
                         children: [
-                          // Data box
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -212,12 +208,10 @@ class _ResultsPageState extends State<ResultsPage> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          // Dati
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Temperatura esterna
                                 Row(
                                   children: [
                                     const Icon(Icons.thermostat,
@@ -233,7 +227,6 @@ class _ResultsPageState extends State<ResultsPage> {
                                   ],
                                 ),
                                 const SizedBox(height: 4),
-                                // Consumo principale
                                 Row(
                                   children: [
                                     const Icon(Icons.flash_on,
@@ -248,7 +241,6 @@ class _ResultsPageState extends State<ResultsPage> {
                                     ),
                                   ],
                                 ),
-                                // ACS (solo se presente)
                                 if (hasAcs) ...[
                                   const SizedBox(height: 4),
                                   Row(
@@ -266,7 +258,6 @@ class _ResultsPageState extends State<ResultsPage> {
                                     ],
                                   ),
                                 ],
-                                // Energia da rete (solo se toggle ON e dato presente)
                                 if (showGrid) ...[
                                   const SizedBox(height: 4),
                                   Row(
@@ -284,7 +275,6 @@ class _ResultsPageState extends State<ResultsPage> {
                                     ],
                                   ),
                                 ],
-                                // Produzione FV (solo se toggle ON e dato presente)
                                 if (showPv) ...[
                                   const SizedBox(height: 4),
                                   Row(
@@ -302,7 +292,6 @@ class _ResultsPageState extends State<ResultsPage> {
                                     ],
                                   ),
                                 ],
-                                // Modalità pompa di calore (solo se presente)
                                 if (hasMode) ...[
                                   const SizedBox(height: 4),
                                   Row(
