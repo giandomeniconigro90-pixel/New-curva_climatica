@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 
 import '../../core/constants/room_constants.dart';
 import '../../models/curve_settings.dart';
@@ -15,6 +14,7 @@ import '../../models/daily_record_dto.dart';
 import '../../repositories/curve_settings_repository.dart';
 import '../../services/hive_storage.dart';
 import '../../services/notification_service.dart';
+import '../../utils/app_toast.dart';
 import '../../utils/date_utils.dart';
 import '../initial_settings/initial_settings_home.dart';
 
@@ -268,8 +268,6 @@ class HomeNotifier extends ChangeNotifier {
     pageController.jumpToPage(0);
   }
 
-  /// Costruisce il testo della notifica contestuale in base alla suggestion AI.
-  /// Ritorna null se non c'è nulla di significativo da dire (fase apprendimento).
   String? _buildContextualNotificationBody(CurveSuggestion suggestion) {
     final slopeDelta = suggestion.suggestedSlope - slope;
     final offsetDelta = suggestion.suggestedOffset - offset;
@@ -278,7 +276,6 @@ class HomeNotifier extends ChangeNotifier {
 
     if (!hasChange) return null;
 
-    // Usa lo smartTip se disponibile, altrimenti costruisce un testo sintetico
     if (suggestion.smartTip != null &&
         suggestion.smartTip!.isNotEmpty &&
         !suggestion.smartTip!.toLowerCase().contains('apprendimento')) {
@@ -306,8 +303,9 @@ class HomeNotifier extends ChangeNotifier {
     );
 
     if (result is RecordValidationError) {
-      Fluttertoast.showToast(
-        msg: result.message,
+      AppToast.show(
+        context,
+        result.message,
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -346,8 +344,9 @@ class HomeNotifier extends ChangeNotifier {
       editingIndex = null;
       notifyListeners();
       final label = isToday ? 'oggi' : originalDate;
-      Fluttertoast.showToast(
-        msg: 'Registrazione del $label aggiornata!',
+      AppToast.show(
+        context,
+        'Registrazione del $label aggiornata!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -356,8 +355,9 @@ class HomeNotifier extends ChangeNotifier {
       final exists =
           allRecords.any((r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
-        Fluttertoast.showToast(
-          msg: 'Esiste già una registrazione per oggi. Modifica quella esistente.',
+        AppToast.show(
+          context,
+          'Esiste già una registrazione per oggi. Modifica quella esistente.',
           backgroundColor: Colors.orange.shade600,
           textColor: Colors.white,
           fontSize: 14,
@@ -380,8 +380,9 @@ class HomeNotifier extends ChangeNotifier {
         pvProduction: pvProduction,
       ));
       notifyListeners();
-      Fluttertoast.showToast(
-        msg: 'Registrazione salvata!',
+      AppToast.show(
+        context,
+        'Registrazione salvata!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -392,9 +393,6 @@ class HomeNotifier extends ChangeNotifier {
     clearFields();
     if (context.mounted) FocusScope.of(context).unfocus();
 
-    // ---- Notifica contestuale AI ----
-    // Calcola la suggestion sui record aggiornati e invia una notifica
-    // locale solo se l'AI ha un suggerimento significativo.
     try {
       final windowRecords = recordsSinceLastApply(currentMode);
       if (windowRecords.length >= 5) {
@@ -408,9 +406,7 @@ class HomeNotifier extends ChangeNotifier {
           );
         }
       }
-    } catch (_) {
-      // Non critico: ignora eventuali errori nella notifica contestuale
-    }
+    } catch (_) {}
   }
 
   Future<void> deleteRecordByDateIso(String dateIso) async {
@@ -424,14 +420,15 @@ class HomeNotifier extends ChangeNotifier {
     await saveToHive();
   }
 
-  Future<void> deleteToday() async {
+  Future<void> deleteToday(BuildContext context) async {
     final today = formatItalianDate(DateTime.now());
     final modeStr = currentMode.toModeString();
     final index =
         allRecords.indexWhere((r) => r.dateIso == today && r.mode == modeStr);
     if (index == -1) {
-      Fluttertoast.showToast(
-        msg: 'Nessuna registrazione trovata per oggi',
+      AppToast.show(
+        context,
+        'Nessuna registrazione trovata per oggi',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -446,7 +443,7 @@ class HomeNotifier extends ChangeNotifier {
     pageController.jumpToPage(0);
   }
 
-  void duplicateFromYesterday() {
+  void duplicateFromYesterday(BuildContext context) {
     if (records.isEmpty) return;
 
     final last = (List<DailyRecordDTO>.from(records)
@@ -473,20 +470,22 @@ class HomeNotifier extends ChangeNotifier {
     pvProductionController.text = last.pvProduction?.toString() ?? '';
     notifyListeners();
 
-    Fluttertoast.showToast(
-      msg: "Dati copiati dall'ultima registrazione",
+    AppToast.show(
+      context,
+      "Dati copiati dall'ultima registrazione",
       backgroundColor: Colors.blue.shade600,
       textColor: Colors.white,
       fontSize: 14,
     );
   }
 
-  void onApplyAiCurve() {
+  void onApplyAiCurve(BuildContext context) {
     final windowRecords = recordsSinceLastApply(currentMode);
 
     if (windowRecords.length < 5) {
-      Fluttertoast.showToast(
-        msg: 'Serve almeno 5 rilevamenti nuovi (${windowRecords.length}/5)',
+      AppToast.show(
+        context,
+        'Serve almeno 5 rilevamenti nuovi (${windowRecords.length}/5)',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -499,8 +498,9 @@ class HomeNotifier extends ChangeNotifier {
 
     if ((suggestion.suggestedSlope - slope).abs() < 0.05 &&
         (suggestion.suggestedOffset - offset).abs() < 0.05) {
-      Fluttertoast.showToast(
-        msg: 'I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.',
+      AppToast.show(
+        context,
+        'I valori suggeriti sono uguali a quelli attuali. Nessuna modifica necessaria.',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -524,18 +524,20 @@ class HomeNotifier extends ChangeNotifier {
     notifyListeners();
     Future.microtask(_saveSettings);
 
-    Fluttertoast.showToast(
-      msg: 'Nuova curva AI applicata!',
+    AppToast.show(
+      context,
+      'Nuova curva AI applicata!',
       backgroundColor: Colors.indigo,
       textColor: Colors.white,
       fontSize: 14,
     );
   }
 
-  Future<void> exportCsv() async {
+  Future<void> exportCsv(BuildContext context) async {
     if (records.isEmpty) {
-      Fluttertoast.showToast(
-        msg: 'Nessun dato da esportare!',
+      AppToast.show(
+        context,
+        'Nessun dato da esportare!',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -552,8 +554,9 @@ class HomeNotifier extends ChangeNotifier {
       final dateStr = DateTime.now().toIso8601String().split('T').first;
       await ExportUtils.shareCsv(csv, 'ClimaSense_$dateStr.csv');
     } catch (e) {
-      Fluttertoast.showToast(
-        msg: 'Errore export CSV: $e',
+      AppToast.show(
+        context,
+        'Errore export CSV: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -561,10 +564,11 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> exportPdf() async {
+  Future<void> exportPdf(BuildContext context) async {
     if (records.isEmpty) {
-      Fluttertoast.showToast(
-        msg: 'Nessun dato da esportare!',
+      AppToast.show(
+        context,
+        'Nessun dato da esportare!',
         backgroundColor: Colors.orange.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -597,8 +601,9 @@ class HomeNotifier extends ChangeNotifier {
         currentMode: currentMode,
       );
     } catch (e) {
-      Fluttertoast.showToast(
-        msg: 'Errore export PDF: $e',
+      AppToast.show(
+        context,
+        'Errore export PDF: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -625,7 +630,7 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> doBackup() async {
+  Future<void> doBackup(BuildContext context) async {
     try {
       final backupJson = await ExportUtils.generateBackupJson(
         records: allRecords,
@@ -639,8 +644,9 @@ class HomeNotifier extends ChangeNotifier {
       await ExportUtils.shareBackupJsonString(
           backupJson, 'ClimaSenseBackup_$date.json');
     } catch (e) {
-      Fluttertoast.showToast(
-        msg: 'Errore backup: $e',
+      AppToast.show(
+        context,
+        'Errore backup: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -712,15 +718,17 @@ class HomeNotifier extends ChangeNotifier {
 
       await loadFromHive();
 
-      Fluttertoast.showToast(
-        msg: 'Ripristino completato!',
+      AppToast.show(
+        context,
+        'Ripristino completato!',
         backgroundColor: Colors.green.shade600,
         textColor: Colors.white,
         fontSize: 14,
       );
     } catch (e) {
-      Fluttertoast.showToast(
-        msg: 'Errore ripristino: $e',
+      AppToast.show(
+        context,
+        'Errore ripristino: $e',
         backgroundColor: Colors.red.shade600,
         textColor: Colors.white,
         fontSize: 14,
@@ -746,8 +754,9 @@ class HomeNotifier extends ChangeNotifier {
     await NotificationService.scheduleDailyReminder();
 
     if (context.mounted) {
-      Fluttertoast.showToast(
-        msg: 'Notifica impostata alle ${picked.format(context)}',
+      AppToast.show(
+        context,
+        'Notifica impostata alle ${picked.format(context)}',
         backgroundColor: Colors.blue.shade600,
         textColor: Colors.white,
         fontSize: 14,
