@@ -133,7 +133,7 @@ class _EnergyPageState extends State<EnergyPage> {
 
     return CustomScrollView(
       slivers: [
-        // \u2500\u2500 Header
+        // Header
         SliverToBoxAdapter(
           child: Container(
             margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -185,7 +185,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // \u2500\u2500 KPI Cards
+        // KPI Cards
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -222,7 +222,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // \u2500\u2500 Grafico barre
+        // Grafico barre
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -240,7 +240,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // \u2500\u2500 Grafico costi
+        // Grafico costi
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -257,7 +257,7 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
-        // \u2500\u2500 Tabella
+        // Tabella
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
@@ -268,7 +268,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // \u2500\u2500 Grafico a barre
+  // Grafico a barre
   Widget _buildBarChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final groups = <BarChartGroupData>[];
     for (int i = 0; i < records.length; i++) {
@@ -309,14 +309,14 @@ class _EnergyPageState extends State<EnergyPage> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 44,  // aumentato per dare spazio alle date
+              reservedSize: 52,
               getTitlesWidget: (v, _) {
                 final idx = v.toInt();
                 if (idx < 0 || idx >= records.length) return const SizedBox.shrink();
                 final parts = records[idx].dateIso.split('/');
                 final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8),  // distanza dalle barre
+                  padding: const EdgeInsets.only(top: 12),
                   child: Transform.rotate(
                     angle: -0.6,
                     child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
@@ -343,7 +343,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // \u2500\u2500 Grafico costi
+  // Grafico costi
   Widget _buildCostChart(List<DailyRecordDTO> records, ColorScheme cs) {
     final gridSpots = <FlSpot>[];
     final pvSpots   = <FlSpot>[];
@@ -352,9 +352,15 @@ class _EnergyPageState extends State<EnergyPage> {
       gridSpots.add(FlSpot(i.toDouble(), (r.energyFromGrid ?? 0.0) * _costPerKwh));
       pvSpots.add(FlSpot(i.toDouble(), (r.pvProduction ?? 0.0) * _costPerKwh));
     }
+
+    // Mostra al massimo 7 etichette per non affollare
+    final step = (records.length / 6).ceil().clamp(1, records.length);
+
     return SizedBox(
-      height: 200,
+      height: 210,
       child: LineChart(LineChartData(
+        minX: 0,
+        maxX: (records.length - 1).toDouble(),
         borderData: FlBorderData(show: false),
         gridData: FlGridData(
           show: true,
@@ -366,7 +372,7 @@ class _EnergyPageState extends State<EnergyPage> {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 38,
+              reservedSize: 42,
               getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(2)}\u20ac',
                   style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
             ),
@@ -374,17 +380,25 @@ class _EnergyPageState extends State<EnergyPage> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 44,  // aumentato per dare spazio alle date
-              getTitlesWidget: (v, _) {
+              reservedSize: 52,
+              // interval: 1 garantisce tick SOLO su interi → indice corretto
+              interval: 1,
+              getTitlesWidget: (v, meta) {
                 final idx = v.toInt();
-                if (idx < 0 || idx >= records.length || idx % 2 != 0) return const SizedBox.shrink();
+                // Mostra solo ogni `step` tick per non sovrapporre
+                if (idx < 0 || idx >= records.length || idx % step != 0) {
+                  return const SizedBox.shrink();
+                }
                 final parts = records[idx].dateIso.split('/');
-                final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
+                final label = parts.length >= 2
+                    ? '${parts[0]}/${parts[1]}'
+                    : records[idx].dateIso;
                 return Padding(
-                  padding: const EdgeInsets.only(top: 8),  // distanza dalla linea
+                  padding: const EdgeInsets.only(top: 12),
                   child: Transform.rotate(
                     angle: -0.6,
-                    child: Text(label, style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
+                    child: Text(label,
+                        style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant)),
                   ),
                 );
               },
@@ -425,7 +439,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // \u2500\u2500 Tabella
+  // Tabella
   Widget _buildTable(List<DailyRecordDTO> records, ColorScheme cs) {
     final rows = records.reversed.toList();
     return Card(
@@ -493,7 +507,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
-  // \u2500\u2500 Empty state
+  // Empty state
   Widget _buildEmpty(ColorScheme cs) {
     return Center(
       child: Padding(
@@ -522,7 +536,7 @@ class _EnergyPageState extends State<EnergyPage> {
   }
 }
 
-// \u2500\u2500\u2500 ChartCard
+// ChartCard
 class _ChartCard extends StatelessWidget {
   final String title;
   final String unit;
@@ -571,7 +585,7 @@ class _ChartCard extends StatelessWidget {
   }
 }
 
-// \u2500\u2500\u2500 KpiCard
+// KpiCard
 class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
@@ -654,7 +668,7 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// \u2500\u2500\u2500 helpers
+// helpers
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
