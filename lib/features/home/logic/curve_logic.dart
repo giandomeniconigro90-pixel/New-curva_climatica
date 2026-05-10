@@ -33,7 +33,6 @@ class CurveSuggestion {
   final double suggestedSlope;
   final double suggestedOffset;
   final double comfortScore;
-  final double energyScore;
   final String smartTip;
   final bool isLearning;
   final int learningProgress;
@@ -42,7 +41,6 @@ class CurveSuggestion {
     required this.suggestedSlope,
     required this.suggestedOffset,
     required this.comfortScore,
-    required this.energyScore,
     required this.smartTip,
     required this.isLearning,
     required this.learningProgress,
@@ -130,7 +128,6 @@ CurveSuggestion computeOptimalCurveSuggestion(
       suggestedSlope: currentSlope,
       suggestedOffset: currentOffset,
       comfortScore: 0.5,
-      energyScore: 1.0,
       smartTip: message,
       isLearning: true,
       learningProgress: filteredRecords.length,
@@ -160,18 +157,12 @@ CurveSuggestion computeOptimalCurveSuggestion(
   String tip;
 
   if (coldComplaints > hotComplaints) {
-    // In riscaldamento: troppo freddo → serve più calore → offset +
-    // In raffrescamento: troppo freddo → raffrescamento eccessivo → offset +
-    //   (offset + riduce la mandata fredda → meno raffreddamento)
     targetOffset += 1.0;
     if (coldComplaints > filteredRecords.length * 0.3) targetSlope += 0.1;
     tip = mode == SystemMode.heating
         ? 'Rilevati giorni freddi. Aumento la potenza di riscaldamento.'
         : 'Raffrescamento eccessivo. Riduco l\'intensità di raffreddamento.';
   } else if (hotComplaints > coldComplaints) {
-    // In riscaldamento: troppo caldo → serve meno calore → offset -
-    // In raffrescamento: troppo caldo → raffrescamento insufficiente → offset -
-    //   (offset - abbassa la mandata fredda → più raffreddamento)
     targetOffset -= 1.0;
     if (hotComplaints > filteredRecords.length * 0.3) targetSlope -= 0.1;
     tip = mode == SystemMode.heating
@@ -214,7 +205,6 @@ CurveSuggestion computeOptimalCurveSuggestion(
     suggestedSlope: targetSlope,
     suggestedOffset: targetOffset,
     comfortScore: comfortScore,
-    energyScore: 1.0,
     smartTip: tip,
     isLearning: false,
     learningProgress: filteredRecords.length,
@@ -237,13 +227,11 @@ List<FlSpot> buildCurveSpots({
   double effectiveMin = minExternalTemp;
   double effectiveMax = maxExternalTemp;
 
-  // Range degenere: usa fallback per modalità
   if (effectiveMin >= effectiveMax) {
     effectiveMin = mode == SystemMode.heating ? -10.0 : 20.0;
     effectiveMax = mode == SystemMode.heating ? 20.0 : 40.0;
   }
 
-  // Un solo punto: allarga di ±5 per avere una curva visibile
   if ((effectiveMax - effectiveMin) < step) {
     effectiveMin -= 5.0;
     effectiveMax += 5.0;
