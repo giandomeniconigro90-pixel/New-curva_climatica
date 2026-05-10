@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -8,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:csv/csv.dart';
 
 import '../../../models/daily_record_dto.dart';
@@ -107,7 +107,7 @@ class ExportUtils {
     required double offset,
     required CurveSuggestion suggestion,
     required CurveStats stats,
-    required Uint8List? chartImage,
+    required List<int>? chartImage,
     required SystemMode currentMode,
   }) async {
     await _createPdf(
@@ -127,7 +127,7 @@ class ExportUtils {
         double? offset,
         CurveSuggestion? suggestion,
         CurveStats? stats,
-        Uint8List? chartImage,
+        List<int>? chartImage,
         SystemMode? currentMode,
       }) async {
     final pdf = pw.Document();
@@ -156,7 +156,6 @@ class ExportUtils {
         margin: const pw.EdgeInsets.all(24),
         build: (pw.Context context) {
           return [
-            // ── Intestazione ──
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
@@ -173,11 +172,10 @@ class ExportUtils {
             pw.Divider(thickness: 1.5),
             pw.SizedBox(height: 8),
 
-            // ── Parametri curva ──
             pw.Text('Parametri Curva', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
-            pw.Table.fromTextArray(
-              headers: ['Modalità', 'Pendenza (Slope)', 'Parallela (Offset)', 'Suggerimento AI'],
+            pw.TableHelper.fromTextArray(
+              headers: ['Modalit\u00e0', 'Pendenza (Slope)', 'Parallela (Offset)', 'Suggerimento AI'],
               data: [
                 [
                   modeLabel,
@@ -201,10 +199,9 @@ class ExportUtils {
             ),
             pw.SizedBox(height: 12),
 
-            // ── Statistiche aggregate ──
             pw.Text('Riepilogo Energetico (${sortedRecords.length} giorni)', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
-            pw.Table.fromTextArray(
+            pw.TableHelper.fromTextArray(
               headers: ['Voce', 'Totale', 'Media/giorno', 'Giorni rilevati'],
               data: [
                 [
@@ -242,26 +239,24 @@ class ExportUtils {
             ),
             pw.SizedBox(height: 12),
 
-            // ── Grafico curva (se disponibile) ──
             if (chartImage != null) ...[
               pw.Text('Grafico Curva Climatica', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 6),
               pw.Container(
                 height: 200,
                 width: double.infinity,
-                child: pw.Image(pw.MemoryImage(chartImage)),
+                child: pw.Image(pw.MemoryImage(chartImage as List<int>)),
               ),
               pw.SizedBox(height: 12),
             ],
 
-            // ── Tabella giornaliera ──
             pw.Text('Registrazioni Giornaliere', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
             pw.SizedBox(height: 4),
-            pw.Table.fromTextArray(
+            pw.TableHelper.fromTextArray(
               context: context,
               headers: <String>[
                 'Data',
-                'Ext\n°C',
+                'Ext\n\u00b0C',
                 'HP\nkWh',
                 'ACS\nkWh',
                 'Rete\nkWh',
@@ -281,7 +276,7 @@ class ExportUtils {
                   r.pvProduction != null ? '${r.pvProduction}' : '-',
                   r.heatpumpMode ?? '-',
                   r.boilerMode ?? '-',
-                  r.note.length > 40 ? '${r.note.substring(0, 40)}…' : r.note,
+                  r.note.length > 40 ? '${r.note.substring(0, 40)}\u2026' : r.note,
                 ];
               }).toList(),
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8),
@@ -305,7 +300,7 @@ class ExportUtils {
         footer: (pw.Context context) => pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('ClimaSense — Export automatico', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+            pw.Text('ClimaSense \u2014 Export automatico', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
             pw.Text('Pag. ${context.pageNumber} / ${context.pagesCount}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
           ],
         ),
