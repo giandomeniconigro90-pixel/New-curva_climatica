@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../services/hive_storage.dart';
+import '../utils/date_utils.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -71,14 +72,47 @@ class NotificationService {
     return (hh, mm);
   }
 
+  /// Verifica se l'utente ha già registrato un record oggi
+  /// (per qualsiasi modalità).
+  static bool _hasRecordToday() {
+    final today = formatItalianDate(DateTime.now());
+    final records = AppStorage.getRecords();
+    return records.any((r) => r.dateIso == today);
+  }
+
+  /// Schedula il promemoria giornaliero.
+  ///
+  /// Comportamento smart:
+  /// - Se l'utente ha già registrato i dati oggi → cancella la notifica
+  ///   (non serve ricordarglielo, l'ha già fatto).
+  /// - Se non ha ancora registrato → schedula normalmente.
+  ///
+  /// Questo metodo va chiamato:
+  /// 1. All'avvio dell'app (già fatto in main.dart)
+  /// 2. Dopo ogni salvataggio record (per cancellare la notifica di oggi)
+  /// 3. Quando l'utente cambia l'orario nelle impostazioni
   static Future scheduleDailyReminder() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) return;
 
     await init();
 
     try {
+      // Se oggi è già stato registrato, cancella la notifica pendente.
+      // Il giorno dopo Android la ri-schedula automaticamente perché
+      // matchDateTimeComponents: DateTimeComponents.time la ripete ogni giorno.
+      if (_hasRecordToday()) {
+        await _notifications.cancel(0);
+        return;
+      }
+
       final String? timeStr = AppStorage.getNotificationTime();
       final (int hh, int mm) = _parseTimeStr(timeStr ?? _fallbackTime);
+
+      // Corpo dinamico basato sulla modalità corrente
+      final modeStr = AppStorage.getSystemMode();
+      final modeLabel = modeStr == 'cooling' ? 'raffrescamento' : 'riscaldamento';
+      final notificationBody =
+          'Non hai ancora inserito i dati di $modeLabel di oggi. Ci vorranno solo 30 secondi!';
 
       const AndroidNotificationDetails androidDetails =
           AndroidNotificationDetails(
@@ -94,7 +128,7 @@ class NotificationService {
       const NotificationDetails details =
           NotificationDetails(android: androidDetails);
 
-      await _notifications.cancelAll();
+      await _notifications.cancel(0);
 
       final now = tz.TZDateTime.now(tz.local);
       var scheduledDate =
@@ -106,7 +140,7 @@ class NotificationService {
       await _notifications.zonedSchedule(
         0,
         'ClimaSense 🌡️',
-        'Ricordati di inserire i dati di oggi!',
+        notificationBody,
         scheduledDate,
         details,
         androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
