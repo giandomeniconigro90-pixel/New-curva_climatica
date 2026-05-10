@@ -46,6 +46,92 @@ class CurveSuggestion {
   });
 }
 
+// ---------------------------------------------------------------------------
+// F3 — Analisi comfort per stanza
+// ---------------------------------------------------------------------------
+
+enum RoomComfortIssue { tooCold, tooHot, ok }
+
+class RoomComfortStat {
+  final String room;
+  final int coldDays;
+  final int hotDays;
+  final int okDays;
+  final int totalDays;
+
+  RoomComfortStat({
+    required this.room,
+    required this.coldDays,
+    required this.hotDays,
+    required this.okDays,
+    required this.totalDays,
+  });
+
+  /// Percentuale di giorni con problemi (freddo o caldo)
+  double get issueRate => totalDays == 0 ? 0 : (coldDays + hotDays) / totalDays;
+
+  /// Issue dominante della stanza
+  RoomComfortIssue get dominantIssue {
+    if (coldDays == 0 && hotDays == 0) return RoomComfortIssue.ok;
+    return coldDays >= hotDays ? RoomComfortIssue.tooCold : RoomComfortIssue.tooHot;
+  }
+}
+
+/// Analizza il comfort di ogni stanza nei [records] forniti.
+///
+/// Restituisce solo le stanze che hanno almeno un segnalazione di
+/// disagio, ordinate per [issueRate] decrescente (peggiore prima).
+/// Le stanze sempre confortevoli vengono omesse per non affollare la UI.
+List<RoomComfortStat> analyzeRoomComfort(List<DailyRecordDTO> records) {
+  if (records.isEmpty) return [];
+
+  // Aggrega i conteggi per ogni stanza
+  final Map<String, _RoomCounter> counters = {};
+
+  for (final r in records) {
+    for (final entry in r.comfortRatings.entries) {
+      final room = entry.key;
+      final rating = entry.value.toLowerCase().trim();
+      counters.putIfAbsent(room, () => _RoomCounter(room));
+      switch (rating) {
+        case 'freddo':
+          counters[room]!.cold++;
+          break;
+        case 'caldo':
+          counters[room]!.hot++;
+          break;
+        default:
+          counters[room]!.ok++;
+      }
+    }
+  }
+
+  // Converti in RoomComfortStat e filtra solo le stanze con problemi
+  final result = counters.values
+      .map((c) => RoomComfortStat(
+            room: c.room,
+            coldDays: c.cold,
+            hotDays: c.hot,
+            okDays: c.ok,
+            totalDays: c.cold + c.hot + c.ok,
+          ))
+      .where((s) => s.coldDays > 0 || s.hotDays > 0)
+      .toList()
+    ..sort((a, b) => b.issueRate.compareTo(a.issueRate));
+
+  return result;
+}
+
+class _RoomCounter {
+  final String room;
+  int cold = 0;
+  int hot = 0;
+  int ok = 0;
+  _RoomCounter(this.room);
+}
+
+// ---------------------------------------------------------------------------
+
 /// Calcola la temperatura di mandata target basata sulla curva climatica.
 double computeMandata(double tExt, double slope, double offset, SystemMode mode) {
   if (mode == SystemMode.heating) {

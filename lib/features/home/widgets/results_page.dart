@@ -207,7 +207,7 @@ class _ResultsPageState extends State<ResultsPage> {
                           ),
                           const SizedBox(width: 16),
                           Expanded(
-                            child: Column(
+            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
@@ -357,19 +357,6 @@ class _ResultsPageState extends State<ResultsPage> {
   Widget _buildAiCard(BuildContext context, CurveSuggestion suggestion) {
     final cs = Theme.of(context).colorScheme;
 
-    // FIX #5 — Usare suggestion.learningProgress invece di widget.records.length.
-    //
-    // Problema precedente: recentRecordsCount = widget.records.length mostrava
-    // il TOTALE dei record per la modalità corrente (es. 30), non il numero di
-    // record nella finestra AI dopo l'ultimo apply (es. 3).
-    // Conseguenza visibile:
-    //   • Bottone "Applica" abilitato (hasEnoughData = true perché 30 >= 5)
-    //     anche quando l'AI stava ancora in fase di apprendimento.
-    //   • Badge "Rilevamenti: 30" fuorviante mentre il messaggio diceva
-    //     "ancora 2 giorni".
-    // suggestion.learningProgress è già il conteggio corretto: viene impostato
-    // da computeOptimalCurveSuggestion sul numero di record filtrati dalla
-    // finestra temporale.
     final int windowCount = suggestion.learningProgress;
     final bool hasEnoughData = windowCount >= 5;
 
@@ -377,6 +364,10 @@ class _ResultsPageState extends State<ResultsPage> {
         widget.offset != null &&
         (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
         (suggestion.suggestedOffset - widget.offset!).abs() < 0.05;
+
+    // F3 — Analisi per stanza (solo se ci sono dati sufficienti)
+    final List<RoomComfortStat> roomStats =
+        hasEnoughData ? analyzeRoomComfort(widget.records) : [];
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -461,6 +452,34 @@ class _ResultsPageState extends State<ResultsPage> {
             style: TextStyle(
                 fontSize: 14, color: cs.onSurfaceVariant, height: 1.5),
           ),
+
+          // ------------------------------------------------------------------
+          // F3 — Sezione stanze problematiche
+          // ------------------------------------------------------------------
+          if (roomStats.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Icon(Icons.meeting_room_outlined,
+                    size: 16, color: cs.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Text(
+                  'Stanze con disagio',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            ...roomStats.map((s) => _buildRoomStatRow(context, s)),
+          ],
+          // ------------------------------------------------------------------
+
           const SizedBox(height: 20),
           if (widget.onApplyAiCurve != null)
             SizedBox(
@@ -492,6 +511,60 @@ class _ResultsPageState extends State<ResultsPage> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// Riga singola stanza con barra di disagio colorata.
+  Widget _buildRoomStatRow(BuildContext context, RoomComfortStat s) {
+    final cs = Theme.of(context).colorScheme;
+    final bool isCold = s.dominantIssue == RoomComfortIssue.tooCold;
+    final Color issueColor = isCold ? Colors.blue.shade300 : Colors.orange.shade400;
+    final IconData issueIcon = isCold ? Icons.ac_unit : Icons.local_fire_department_outlined;
+    final String issueLabel = isCold
+        ? '${s.coldDays} g. freddo'
+        : '${s.hotDays} g. caldo';
+    final double barFill = s.issueRate.clamp(0.0, 1.0);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(issueIcon, size: 14, color: issueColor),
+          const SizedBox(width: 6),
+          SizedBox(
+            width: 90,
+            child: Text(
+              s.room,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: cs.onSurface,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: barFill,
+                backgroundColor: cs.surfaceContainerHighest,
+                color: issueColor,
+                minHeight: 6,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            issueLabel,
+            style: TextStyle(
+              fontSize: 11,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
         ],
       ),
     );
