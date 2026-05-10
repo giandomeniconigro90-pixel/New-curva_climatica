@@ -56,9 +56,14 @@ class InputPage extends StatefulWidget {
   State<InputPage> createState() => _InputPageState();
 }
 
-class _InputPageState extends State<InputPage> {
+class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
+
+  // Tiene traccia della città configurata al momento dell'ultimo fetch.
+  // Se l'utente la cambia in Guida e torna qui, il fetch viene rifatto.
+  String? _lastFetchedCityOverride = _sentinel;
+  static const String _sentinel = '__NOT_FETCHED__';
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
   static const Color _colorConsumo      = Color(0xFF66BB6A);
@@ -70,6 +75,50 @@ class _InputPageState extends State<InputPage> {
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.linux;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Fetch automatico al primo avvio della pagina
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoFetchIfNeeded());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Scatta ogni volta che l'app torna in foreground (es. dopo aver usato
+  /// un'altra app). Utile anche indirettamente quando si torna dalla tab Guida.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _autoFetchIfNeeded();
+    }
+  }
+
+  /// Scatta ogni volta che il widget viene ri-costruito (cambio tab → torna su
+  /// Registra). Controlla se la cityOverride è cambiata rispetto all'ultimo
+  /// fetch e, se sì, forza un nuovo download.
+  @override
+  void didUpdateWidget(covariant InputPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _autoFetchIfNeeded();
+  }
+
+  void _autoFetchIfNeeded() {
+    if (!mounted) return;
+    final currentCity = AppStorage.getCityOverride();
+    final cacheEmpty = WeatherService.getCacheAgeMinutes() == null;
+    final cityChanged = currentCity != _lastFetchedCityOverride;
+
+    // Fetch se: primo avvio (sentinel) OPPURE città cambiata OPPURE cache scaduta
+    if (_lastFetchedCityOverride == _sentinel || cityChanged || cacheEmpty) {
+      _fetchWeather(silent: _lastFetchedCityOverride != _sentinel && !cityChanged);
+    }
+  }
 
   Color _cardColor(BuildContext context, Color base) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -84,8 +133,13 @@ class _InputPageState extends State<InputPage> {
     return '$age min fa';
   }
 
-  Future<void> _fetchWeather() async {
+  /// [silent] = true → non mostra SnackBar di successo (solo aggiornamento
+  /// silenzioso in background quando la cache è scaduta).
+  Future<void> _fetchWeather({bool silent = false}) async {
+    if (_isLoadingWeather) return;
     setState(() => _isLoadingWeather = true);
+    // Registra la città corrente PRIMA del fetch
+    final cityAtFetch = AppStorage.getCityOverride();
     try {
       final result = await WeatherService.getDailyAvgTemp();
       if (!mounted) return;
@@ -93,27 +147,37 @@ class _InputPageState extends State<InputPage> {
         setState(() {
           widget.externalTempController.text = result.temp.toStringAsFixed(1);
           _weatherLocation = result.locationName;
+          _lastFetchedCityOverride = cityAtFetch;
         });
-        AppToast.show(
-          'Meteo aggiornato da $_weatherLocation',
-          context: context,
-          level: ToastLevel.success,
-        );
+        if (!silent) {
+          AppToast.show(
+            'Meteo aggiornato da $_weatherLocation',
+            context: context,
+            level: ToastLevel.success,
+          );
+        }
       } else {
-        AppToast.show(
-          'Meteo non disponibile. Controlla GPS e connessione.',
-          context: context,
-          level: ToastLevel.warning,
-          duration: const Duration(seconds: 5),
-        );
+        // Segna comunque la città come "tentata" per evitare loop
+        setState(() => _lastFetchedCityOverride = cityAtFetch);
+        if (!silent) {
+          AppToast.show(
+            'Meteo non disponibile. Controlla GPS e connessione.',
+            context: context,
+            level: ToastLevel.warning,
+            duration: const Duration(seconds: 5),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        AppToast.show(
-          'Errore recupero meteo',
-          context: context,
-          level: ToastLevel.error,
-        );
+        setState(() => _lastFetchedCityOverride = cityAtFetch);
+        if (!silent) {
+          AppToast.show(
+            'Errore recupero meteo',
+            context: context,
+            level: ToastLevel.error,
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isLoadingWeather = false);
@@ -338,7 +402,7 @@ class _InputPageState extends State<InputPage> {
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: _isLoadingWeather ? null : _fetchWeather,
+                          onTap: _isLoadingWeather ? null : () => _fetchWeather(silent: false),
                           borderRadius: BorderRadius.circular(20),
                           child: Padding(
                             padding: const EdgeInsets.all(4.0),
