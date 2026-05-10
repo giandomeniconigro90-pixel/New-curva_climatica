@@ -60,9 +60,14 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  // Tiene traccia della città configurata al momento dell'ultimo fetch.
-  // Se l'utente la cambia in Guida e torna qui, il fetch viene rifatto.
-  String? _lastFetchedCityOverride = _sentinel;
+  // true dopo il primo fetch riuscito (o tentato) nella sessione corrente.
+  // Blocca qualsiasi re-fetch automatico finché l'app non viene riavviata.
+  // Viene resettato solo se l'utente cambia la città manualmente.
+  bool _alreadyFetchedOnce = false;
+
+  // Tiene traccia della città al momento dell'ultimo fetch per rilevare
+  // se l'utente la cambia in Guida.
+  String? _lastFetchedCity = _sentinel;
   static const String _sentinel = '__NOT_FETCHED__';
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
@@ -80,7 +85,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Fetch automatico al primo avvio della pagina
+    // Fetch automatico solo al primo avvio dell'app
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoFetchIfNeeded());
   }
 
@@ -90,32 +95,33 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Scatta ogni volta che l'app torna in foreground (es. dopo aver usato
-  /// un'altra app). Utile anche indirettamente quando si torna dalla tab Guida.
+  /// Scatta quando l'app torna in foreground dopo essere stata in background.
+  /// NON scatta al semplice cambio di tab.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      // Al resume forziamo un nuovo fetch (l'app era in background)
+      _alreadyFetchedOnce = false;
       _autoFetchIfNeeded();
     }
   }
 
-  /// Non eseguiamo più il fetch al cambio tab (didUpdateWidget).
-  /// Il meteo si aggiorna solo: all'avvio (initState) e quando
-  /// l'app torna in foreground (didChangeAppLifecycleState).
   @override
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Nessun fetch al cambio tab: gestito solo da initState e resume.
   }
 
+  /// Esegue il fetch solo se:
+  /// 1. Non è ancora stato fatto nella sessione corrente (_alreadyFetchedOnce == false)
+  /// 2. Oppure la città è cambiata rispetto all'ultimo fetch
   void _autoFetchIfNeeded() {
     if (!mounted) return;
     final currentCity = AppStorage.getCityOverride();
-    final cacheEmpty = WeatherService.getCacheAgeMinutes() == null;
-    final cityChanged = currentCity != _lastFetchedCityOverride;
+    final cityChanged = currentCity != _lastFetchedCity && _lastFetchedCity != _sentinel;
 
-    // Fetch se: primo avvio (sentinel) OPPURE città cambiata OPPURE cache scaduta
-    if (_lastFetchedCityOverride == _sentinel || cityChanged || cacheEmpty) {
-      _fetchWeather(silent: _lastFetchedCityOverride != _sentinel && !cityChanged);
+    if (!_alreadyFetchedOnce || cityChanged) {
+      _fetchWeather(silent: cityChanged ? false : _lastFetchedCity != _sentinel);
     }
   }
 
@@ -132,12 +138,9 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     return '$age min fa';
   }
 
-  /// [silent] = true → non mostra SnackBar di successo (solo aggiornamento
-  /// silenzioso in background quando la cache è scaduta).
   Future<void> _fetchWeather({bool silent = false}) async {
     if (_isLoadingWeather) return;
     setState(() => _isLoadingWeather = true);
-    // Registra la città corrente PRIMA del fetch
     final cityAtFetch = AppStorage.getCityOverride();
     try {
       final result = await WeatherService.getDailyAvgTemp();
@@ -146,7 +149,8 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         setState(() {
           widget.externalTempController.text = result.temp.toStringAsFixed(1);
           _weatherLocation = result.locationName;
-          _lastFetchedCityOverride = cityAtFetch;
+          _lastFetchedCity = cityAtFetch;
+          _alreadyFetchedOnce = true;
         });
         if (!silent) {
           AppToast.show(
@@ -156,8 +160,10 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
           );
         }
       } else {
-        // Segna comunque la città come "tentata" per evitare loop
-        setState(() => _lastFetchedCityOverride = cityAtFetch);
+        setState(() {
+          _lastFetchedCity = cityAtFetch;
+          _alreadyFetchedOnce = true; // segna come tentato anche in caso di errore
+        });
         if (!silent) {
           AppToast.show(
             'Meteo non disponibile. Controlla GPS e connessione.',
@@ -169,7 +175,10 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _lastFetchedCityOverride = cityAtFetch);
+        setState(() {
+          _lastFetchedCity = cityAtFetch;
+          _alreadyFetchedOnce = true;
+        });
         if (!silent) {
           AppToast.show(
             'Errore recupero meteo',
