@@ -170,189 +170,199 @@ class _ResultsPageState extends State<ResultsPage> {
                   final showGrid = hasGridMeter && r.energyFromGrid != null;
                   final showPv = hasPv && r.pvProduction != null;
 
-                  return InkWell(
-                    onTap: widget.onEditRecordByDateIso != null
-                        ? () => widget.onEditRecordByDateIso!(r.dateIso)
-                        : null,
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
+                  // FIX alone nero: Material con clip + InkWell borderRadius
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Material(
+                      color: cs.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(20),
+                      clipBehavior: Clip.antiAlias,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      child: InkWell(
                         borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
+                        onTap: widget.onEditRecordByDateIso != null
+                            ? () => widget.onEditRecordByDateIso!(r.dateIso)
+                            : null,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: cs.primaryContainer,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: Column(
-                              children: [
-                                Text(
-                                  '${date.day}',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: cs.onPrimaryContainer,
-                                  ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer,
+                                  borderRadius: BorderRadius.circular(15),
                                 ),
-                                Text(
-                                  '${date.month}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: cs.onPrimaryContainer,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                                child: Column(
                                   children: [
-                                    const Icon(Icons.thermostat,
-                                        size: 14, color: Colors.orange),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      'Esterna: ${r.externalTemp}\u00b0C',
+                                      '${date.day}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
-                                        color: cs.onSurface,
+                                        fontSize: 16,
+                                        color: cs.onPrimaryContainer,
                                       ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.flash_on,
-                                        size: 14, color: Colors.amber),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      'Consumo: ${r.consumption} kWh',
+                                      '${date.month}',
                                       style: TextStyle(
-                                        color: cs.onSurfaceVariant,
-                                        fontSize: 12,
+                                        fontSize: 10,
+                                        color: cs.onPrimaryContainer,
                                       ),
                                     ),
                                   ],
                                 ),
-                                if (hasAcs) ...[
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.water_drop,
-                                          size: 14, color: Colors.blueAccent),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'ACS: ${r.consumptionACS} kWh',
-                                        style: TextStyle(
-                                          color: cs.onSurfaceVariant,
-                                          fontSize: 12,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.thermostat,
+                                            size: 14, color: Colors.orange),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Esterna: ${r.externalTemp}\u00b0C',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: cs.onSurface,
+                                          ),
                                         ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.flash_on,
+                                            size: 14, color: Colors.amber),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Consumo: ${r.consumption} kWh',
+                                          style: TextStyle(
+                                            color: cs.onSurfaceVariant,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (hasAcs) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.water_drop,
+                                              size: 14, color: Colors.blueAccent),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'ACS: ${r.consumptionACS} kWh',
+                                            style: TextStyle(
+                                              color: cs.onSurfaceVariant,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
-                                  ),
-                                ],
-                                if (showGrid) ...[
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.electrical_services_outlined,
-                                          size: 14, color: Color(0xFFFFB74D)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Rete: ${r.energyFromGrid!.toStringAsFixed(1)} kWh',
-                                        style: TextStyle(
-                                          color: cs.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
+                                    if (showGrid) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.electrical_services_outlined,
+                                              size: 14, color: Color(0xFFFFB74D)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'Rete: ${r.energyFromGrid!.toStringAsFixed(1)} kWh',
+                                            style: TextStyle(
+                                              color: cs.onSurfaceVariant,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
-                                  ),
-                                ],
-                                if (showPv) ...[
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.wb_sunny_outlined,
-                                          size: 14, color: Color(0xFF66BB6A)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'FV: ${r.pvProduction!.toStringAsFixed(1)} kWh',
-                                        style: TextStyle(
-                                          color: cs.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
+                                    if (showPv) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.wb_sunny_outlined,
+                                              size: 14, color: Color(0xFF66BB6A)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'FV: ${r.pvProduction!.toStringAsFixed(1)} kWh',
+                                            style: TextStyle(
+                                              color: cs.onSurfaceVariant,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
-                                  ),
-                                ],
-                                if (hasMode) ...[
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        _heatpumpIconAndColor(r.heatpumpMode!).$1,
-                                        size: 14,
-                                        color: _heatpumpIconAndColor(r.heatpumpMode!).$2,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'PDC: ${r.heatpumpMode}',
-                                        style: TextStyle(
-                                          color: cs.onSurfaceVariant,
-                                          fontSize: 12,
-                                        ),
+                                    if (hasMode) ...[
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            _heatpumpIconAndColor(r.heatpumpMode!).$1,
+                                            size: 14,
+                                            color: _heatpumpIconAndColor(r.heatpumpMode!).$2,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'PDC: ${r.heatpumpMode}',
+                                            style: TextStyle(
+                                              color: cs.onSurfaceVariant,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
-                                  ),
-                                ],
+                                  ],
+                                ),
+                              ),
+                              if (r.note.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Icon(Icons.sticky_note_2_outlined,
+                                      color: cs.onSurfaceVariant, size: 18),
+                                ),
+                              if (widget.onEditRecordByDateIso != null)
+                                IconButton(
+                                  onPressed: () =>
+                                      widget.onEditRecordByDateIso!(r.dateIso),
+                                  icon: Icon(Icons.edit,
+                                      size: 20, color: cs.primary),
+                                  tooltip: 'Modifica',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              if (widget.onDeleteRecordByDateIso != null) ...[
+                                const SizedBox(width: 12),
+                                IconButton(
+                                  onPressed: () =>
+                                      _handleDelete(context, r),
+                                  icon: Icon(Icons.delete_outline,
+                                      size: 20, color: cs.error),
+                                  tooltip: 'Elimina',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
                               ],
-                            ),
+                            ],
                           ),
-                          if (r.note.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: Icon(Icons.sticky_note_2_outlined,
-                                  color: cs.onSurfaceVariant, size: 18),
-                            ),
-                          if (widget.onEditRecordByDateIso != null)
-                            IconButton(
-                              onPressed: () =>
-                                  widget.onEditRecordByDateIso!(r.dateIso),
-                              icon: Icon(Icons.edit,
-                                  size: 20, color: cs.primary),
-                              tooltip: 'Modifica',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          if (widget.onDeleteRecordByDateIso != null) ...[
-                            const SizedBox(width: 12),
-                            IconButton(
-                              onPressed: () =>
-                                  _handleDelete(context, r),
-                              icon: Icon(Icons.delete_outline,
-                                  size: 20, color: cs.error),
-                              tooltip: 'Elimina',
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ],
+                        ),
                       ),
                     ),
                   );
