@@ -215,6 +215,27 @@ class AppStorage {
     return Hive.box(_boxName).get('notificationTimeStr', defaultValue: '20:00');
   }
 
+  // --- CITTÀ METEO (override manuale GPS) ---
+  /// Restituisce la città impostata manualmente, o null se non configurata
+  /// (in quel caso il WeatherService usa il GPS).
+  static String? getCityOverride() {
+    final v = Hive.box(_boxName).get('cityOverride') as String?;
+    return (v == null || v.trim().isEmpty) ? null : v.trim();
+  }
+
+  static Future<void> saveCityOverride(String? city) async {
+    final box = Hive.box(_boxName);
+    if (city == null || city.trim().isEmpty) {
+      await box.delete('cityOverride');
+    } else {
+      await box.put('cityOverride', city.trim());
+    }
+    // Invalida la cache meteo così al prossimo avvio ricarica con la nuova città
+    await box.delete('weatherCacheTemp');
+    await box.delete('weatherCacheCity');
+    await box.delete('weatherCacheTimestamp');
+  }
+
   // --- STANZE ---
   static Future<void> saveRooms(List<String> rooms) async {
     await Hive.box(_boxName).put('customRooms', rooms);
@@ -227,7 +248,6 @@ class AppStorage {
   }
 
   // --- WIZARD IMPIANTO ---
-  /// Tipo impianto: 'heatpump' | 'boiler' | 'hybrid'
   static String getPlantType() {
     return Hive.box(_boxName).get('plantType', defaultValue: 'heatpump') as String;
   }
@@ -236,7 +256,6 @@ class AppStorage {
     await Hive.box(_boxName).put('plantType', type);
   }
 
-  /// L'utente ha un impianto fotovoltaico?
   static bool getHasPv() {
     return Hive.box(_boxName).get('hasPv', defaultValue: false) as bool;
   }
@@ -245,7 +264,6 @@ class AppStorage {
     await Hive.box(_boxName).put('hasPv', value);
   }
 
-  /// L'utente ha un contatore smart/rete con app ShinePhone?
   static bool getHasGridMeter() {
     return Hive.box(_boxName).get('hasGridMeter', defaultValue: false) as bool;
   }

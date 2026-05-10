@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'hive_storage.dart';
 import 'weather_service_geocoding.dart';
 
 class WeatherData {
@@ -69,10 +70,72 @@ class WeatherService {
       defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.linux;
 
+  // ---------------------------------------------------------------------------
+  // Fetch per nome città (override manuale)
+  // ---------------------------------------------------------------------------
+  static Future<WeatherData?> _fetchByCityName(String cityName) async {
+    try {
+      if (kDebugMode) debugPrint('\ud83c\udf0d Override città: $cityName');
+      // Geocoding: nome → lat/lon
+      final geoUrl = Uri.parse(
+        'https://geocoding-api.open-meteo.com/v1/search'
+        '?name=${Uri.encodeComponent(cityName)}&count=1&language=it&format=json',
+      );
+      final geoResp = await http.get(geoUrl).timeout(_timeout);
+      if (geoResp.statusCode != 200) return null;
+      final geoData = json.decode(geoResp.body);
+      final results = geoData['results'] as List?;
+      if (results == null || results.isEmpty) {
+        if (kDebugMode) debugPrint('\ud83c\udf0d Città non trovata: $cityName');
+        return null;
+      }
+      final double lat = (results[0]['latitude'] as num).toDouble();
+      final double lon = (results[0]['longitude'] as num).toDouble();
+      final String resolvedName = results[0]['name'] as String? ?? cityName;
+
+      // Meteo via lat/lon
+      final url = Uri.parse(
+        'https://api.open-meteo.com/v1/forecast'
+        '?latitude=$lat&longitude=$lon'
+        '&daily=temperature_2m_mean&timezone=auto&forecast_days=1',
+      );
+      final response = await http.get(url).timeout(_timeout);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List temps = data['daily']['temperature_2m_mean'];
+        if (temps.isNotEmpty) {
+          final double avgTemp = (temps[0] as num).toDouble();
+          if (kDebugMode) debugPrint('\ud83c\udf0d Temp ($resolvedName): $avgTemp\u00b0C');
+          final result = WeatherData(temp: avgTemp, locationName: resolvedName);
+          await _writeCache(result);
+          return result;
+        }
+      }
+      return null;
+    } on TimeoutException catch (e) {
+      if (kDebugMode) debugPrint('\ud83c\udf0d TIMEOUT fetchByCityName: $e');
+      return null;
+    } catch (e) {
+      if (kDebugMode) debugPrint('\ud83c\udf0d ERRORE fetchByCityName: $e');
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Entry point principale
+  // ---------------------------------------------------------------------------
   static Future<WeatherData?> getDailyAvgTemp() async {
+    // 1. Cache ancora valida?
     final cached = _readCache();
     if (cached != null) return cached;
 
+    // 2. Override città manuale?
+    final cityOverride = AppStorage.getCityOverride();
+    if (cityOverride != null) {
+      return _fetchByCityName(cityOverride);
+    }
+
+    // 3. GPS (comportamento originale)
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (kDebugMode) debugPrint('\ud83c\udf0d GPS abilitato: $serviceEnabled');

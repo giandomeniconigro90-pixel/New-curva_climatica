@@ -2,9 +2,10 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../services/hive_storage.dart';
 import '../../../services/theme_notifier.dart';
 
-class HelpPage extends StatelessWidget {
+class HelpPage extends StatefulWidget {
   final VoidCallback? onResetCalibration;
   final VoidCallback? onBackup;
   final VoidCallback? onRestore;
@@ -21,6 +22,46 @@ class HelpPage extends StatelessWidget {
     this.onExportPdf,
     this.onManageRooms,
   });
+
+  @override
+  State<HelpPage> createState() => _HelpPageState();
+}
+
+class _HelpPageState extends State<HelpPage> {
+  late TextEditingController _cityController;
+  String? _savedCity;
+
+  @override
+  void initState() {
+    super.initState();
+    _savedCity = AppStorage.getCityOverride();
+    _cityController = TextEditingController(text: _savedCity ?? '');
+  }
+
+  @override
+  void dispose() {
+    _cityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveCity() async {
+    final city = _cityController.text.trim();
+    await AppStorage.saveCityOverride(city.isEmpty ? null : city);
+    setState(() => _savedCity = city.isEmpty ? null : city);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            city.isEmpty
+                ? 'Città rimossa: verrà usato il GPS'
+                : 'Città impostata: $city',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +317,10 @@ class HelpPage extends StatelessWidget {
           // ── SEZIONE 8: STRUMENTI AVANZATI ──────────────────────────────
           _buildSectionTitle(context, 'Strumenti Avanzati'),
 
+          // ── CARD CITTÀ METEO ──────────────────────────────────────────
+          _buildCityCard(context),
+          const SizedBox(height: 12),
+
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -284,7 +329,7 @@ class HelpPage extends StatelessWidget {
               title: const Text('Gestisci Stanze'),
               subtitle: const Text('Aggiungi, rimuovi o riordina le stanze dell\u2019impianto'),
               trailing: const Icon(Icons.chevron_right),
-              onTap: onManageRooms,
+              onTap: widget.onManageRooms,
             ),
           ),
           const SizedBox(height: 12),
@@ -301,14 +346,14 @@ class HelpPage extends StatelessWidget {
                   leading: const Icon(Icons.table_chart_outlined, color: Colors.green),
                   title: const Text('Esporta CSV'),
                   subtitle: const Text('Storico completo in formato foglio di calcolo'),
-                  onTap: onExportCsv,
+                  onTap: widget.onExportCsv,
                 ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.picture_as_pdf_outlined, color: Colors.red),
                   title: const Text('Esporta PDF'),
                   subtitle: const Text('Report completo con grafico, statistiche e suggerimento AI'),
-                  onTap: onExportPdf,
+                  onTap: widget.onExportPdf,
                 ),
               ],
             ),
@@ -324,14 +369,14 @@ class HelpPage extends StatelessWidget {
                   leading: const Icon(Icons.cloud_upload_outlined, color: Colors.blue),
                   title: const Text('Backup Dati'),
                   subtitle: const Text('Salva storico e impostazioni in un file JSON'),
-                  onTap: onBackup,
+                  onTap: widget.onBackup,
                 ),
                 const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.cloud_download_outlined, color: Colors.orange),
                   title: const Text('Ripristina Backup'),
                   subtitle: const Text('Carica un file .json salvato in precedenza'),
-                  onTap: onRestore,
+                  onTap: widget.onRestore,
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -339,7 +384,7 @@ class HelpPage extends StatelessWidget {
                   title: const Text('Reset Calibrazione'),
                   subtitle: const Text(
                       'Riporta pendenza e offset ai valori di fabbrica. Non cancella lo storico.'),
-                  onTap: onResetCalibration,
+                  onTap: widget.onResetCalibration,
                 ),
               ],
             ),
@@ -408,6 +453,117 @@ class HelpPage extends StatelessWidget {
           ),
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  // ── CARD CITTÀ METEO ─────────────────────────────────────────────────────
+  Widget _buildCityCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.location_city_outlined, color: cs.primary, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Citt\u00e0 Meteo',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                if (_savedCity != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      _savedCity!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: cs.primary,
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'GPS auto',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Se il GPS non funziona o usi desktop, inserisci il nome della citt\u00e0 per ottenere il meteo. Lascia vuoto per usare il GPS automatico.',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _cityController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: InputDecoration(
+                      hintText: 'es. Bologna, Milano, Roma\u2026',
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      suffixIcon: _cityController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _cityController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                    onSubmitted: (_) => _saveCity(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _saveCity,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Salva'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -495,7 +651,6 @@ class HelpPage extends StatelessWidget {
     );
   }
 
-  /// Card espandibile con ExpansionTile per non appesantire lo scroll
   Widget _buildExpandableCard({
     required BuildContext context,
     required IconData icon,
