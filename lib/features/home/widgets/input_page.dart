@@ -328,10 +328,22 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
 
   void _openNotaSheet() {
     final tempController = TextEditingController(text: widget.noteController.text);
+
+    // _commitNote sincronizza sempre tempController → noteController.
+    // Viene chiamato dal bottone ✓ E da onClosing (swipe dismiss incluso).
+    void commitNote() {
+      widget.noteController.text = tempController.text;
+      if (mounted) setState(() {});
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // FIX #1: onClosing garantisce il salvataggio anche su swipe-dismiss.
+      // Viene invocato PRIMA che il bottom sheet venga rimosso dall'albero,
+      // quindi noteController è ancora accessibile.
+      onClosing: commitNote,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
@@ -353,11 +365,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                   ),
                   IconButton(
                     icon: const Icon(Icons.check),
-                    onPressed: () {
-                      widget.noteController.text = tempController.text;
-                      setState(() {});
-                      Navigator.of(ctx).pop();
-                    },
+                    onPressed: () => Navigator.of(ctx).pop(),
                   ),
                 ],
               ),
@@ -384,8 +392,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                   label: const Text('Cancella nota'),
                   onPressed: () {
                     tempController.clear();
-                    widget.noteController.clear();
-                    setState(() {});
                     Navigator.of(ctx).pop();
                   },
                 ),
