@@ -99,13 +99,12 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     }
   }
 
-  /// Scatta ogni volta che il widget viene ri-costruito (cambio tab → torna su
-  /// Registra). Controlla se la cityOverride è cambiata rispetto all'ultimo
-  /// fetch e, se sì, forza un nuovo download.
+  /// Non eseguiamo più il fetch al cambio tab (didUpdateWidget).
+  /// Il meteo si aggiorna solo: all'avvio (initState) e quando
+  /// l'app torna in foreground (didChangeAppLifecycleState).
   @override
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _autoFetchIfNeeded();
   }
 
   void _autoFetchIfNeeded() {
