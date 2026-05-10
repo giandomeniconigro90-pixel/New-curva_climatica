@@ -66,7 +66,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
         final bool isCooling = notifier.currentMode == SystemMode.cooling;
 
         final List<Widget> pages = [
-          // 0 — Registra
           InputPage(
             externalTempController: notifier.externalTempController,
             consumptionController: notifier.consumptionController,
@@ -89,7 +88,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onExportPdf: () => notifier.exportPdf(context),
             onDeleteToday: () => notifier.deleteToday(context),
           ),
-          // 1 — AI Storico
           ResultsPage(
             records: notifier.records,
             slope: notifier.slope,
@@ -100,7 +98,6 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onEditRecordByDateIso: notifier.startEditRecordByDateIso,
             onDeleteRecordByDateIso: notifier.deleteRecordByDateIso,
           ),
-          // 2 — Grafico
           CurveChartPage(
             slope: notifier.slope,
             offset: notifier.offset,
@@ -108,9 +105,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             windowRecords: windowRecords,
             chartKey: notifier.chartKey,
           ),
-          // 3 — Energia & Costi
           EnergyPage(records: notifier.records),
-          // 4 — Guida
           HelpPage(
             onManageRooms: () => notifier.manageRooms(context),
             onResetCalibration: () async {
@@ -119,7 +114,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                 builder: (ctx) => AlertDialog(
                   title: const Text('Reset Calibrazione?'),
                   content: const Text(
-                    'Questo cancellerà le preferenze di pendenza/offset. I dati storici rimarranno.',
+                    'Questo canceller\u00e0 le preferenze di pendenza/offset. I dati storici rimarranno.',
                   ),
                   actions: [
                     TextButton(
@@ -159,41 +154,11 @@ class _ClimateCurveHomeView extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _TabItem(
-                  index: 0,
-                  icon: Icons.edit_calendar_outlined,
-                  label: 'Registra',
-                  currentPage: notifier.currentPage,
-                  onTap: notifier.onNavDestinationSelected,
-                ),
-                _TabItem(
-                  index: 1,
-                  icon: Icons.auto_awesome_outlined,
-                  label: 'AI Storico',
-                  currentPage: notifier.currentPage,
-                  onTap: notifier.onNavDestinationSelected,
-                ),
-                _TabItem(
-                  index: 2,
-                  icon: Icons.show_chart_rounded,
-                  label: 'Grafico',
-                  currentPage: notifier.currentPage,
-                  onTap: notifier.onNavDestinationSelected,
-                ),
-                _TabItem(
-                  index: 3,
-                  icon: Icons.bolt_outlined,
-                  label: 'Energia',
-                  currentPage: notifier.currentPage,
-                  onTap: notifier.onNavDestinationSelected,
-                ),
-                _TabItem(
-                  index: 4,
-                  icon: Icons.help_outline_rounded,
-                  label: 'Guida',
-                  currentPage: notifier.currentPage,
-                  onTap: notifier.onNavDestinationSelected,
-                ),
+                _TabItem(index: 0, icon: Icons.edit_calendar_outlined, label: 'Registra', currentPage: notifier.currentPage, onTap: notifier.onNavDestinationSelected),
+                _TabItem(index: 1, icon: Icons.auto_awesome_outlined, label: 'AI Storico', currentPage: notifier.currentPage, onTap: notifier.onNavDestinationSelected),
+                _TabItem(index: 2, icon: Icons.show_chart_rounded, label: 'Grafico', currentPage: notifier.currentPage, onTap: notifier.onNavDestinationSelected),
+                _TabItem(index: 3, icon: Icons.bolt_outlined, label: 'Energia', currentPage: notifier.currentPage, onTap: notifier.onNavDestinationSelected),
+                _TabItem(index: 4, icon: Icons.help_outline_rounded, label: 'Guida', currentPage: notifier.currentPage, onTap: notifier.onNavDestinationSelected),
               ],
             ),
           ),
@@ -220,7 +185,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Cambia modalità',
+                            'Cambia modalit\u00e0',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,
@@ -232,20 +197,17 @@ class _ClimateCurveHomeView extends StatelessWidget {
                       Switch(
                         value: notifier.currentMode == SystemMode.cooling,
                         onChanged: notifier.toggleMode,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         splashRadius: 18,
                         activeColor: const Color(0xFF4DB6AC),
                         activeTrackColor: const Color(0xFF4DB6AC),
                         inactiveThumbColor: const Color(0xFFFFB74D),
                         inactiveTrackColor: const Color(0xFFFFB74D),
-                        trackOutlineColor:
-                            WidgetStateProperty.all(Colors.transparent),
+                        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
                       ),
                       IconButton(
                         icon: const Icon(Icons.notifications_outlined),
-                        onPressed: () =>
-                            notifier.setNotificationTime(context),
+                        onPressed: () => notifier.setNotificationTime(context),
                       ),
                     ],
                   ),
@@ -296,7 +258,7 @@ class _TabItem extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          color: isSelected ? active.withOpacity(0.08) : Colors.transparent,
+          color: isSelected ? active.withValues(alpha: 0.08) : Colors.transparent,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

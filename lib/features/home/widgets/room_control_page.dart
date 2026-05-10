@@ -104,14 +104,12 @@ class _RoomControlPageState extends State<RoomControlPage> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Blur layer
           BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
             child: Container(
-              color: _mainColor.withOpacity(0.75),
+              color: _mainColor.withValues(alpha: 0.75),
             ),
           ),
-          // Contenuto
           SafeArea(
             child: Column(
               children: [
@@ -132,12 +130,10 @@ class _RoomControlPageState extends State<RoomControlPage> {
                     ],
                   ),
                 ),
-
                 const Spacer(flex: 1),
-
                 Column(
                   children: [
-                    Text(_headerText, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
+                    Text(_headerText, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 2),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -167,7 +163,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                                 const SizedBox(width: 4),
                                 Text(
                                   "kWh",
-                                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 18, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 18, fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -192,15 +188,13 @@ class _RoomControlPageState extends State<RoomControlPage> {
                     ),
                   ],
                 ),
-
                 const Spacer(flex: 1),
-
                 Center(
                   child: Container(
                     width: 220,
                     height: sliderHeight,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(40),
                     ),
                     child: ClipRRect(
@@ -239,7 +233,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                               width: 40,
                               height: 5,
                               decoration: BoxDecoration(
-                                color: _mainColor.withOpacity(0.8),
+                                color: _mainColor.withValues(alpha: 0.8),
                                 borderRadius: BorderRadius.circular(5),
                               ),
                             ),
@@ -249,9 +243,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                     ),
                   ),
                 ),
-
                 const Spacer(flex: 5),
-
                 if (widget.isRoom)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 24),
@@ -285,7 +277,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isSelected ? Colors.white : Colors.white.withOpacity(0.2),
+              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: isSelected ? _mainColor : Colors.white, size: 24),
@@ -294,7 +286,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
           Text(
             value.toUpperCase(),
             style: TextStyle(
-              color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),

@@ -56,7 +56,7 @@ class CurveChartPage extends StatelessWidget {
       );
     }
 
-    final gridColor = cs.outlineVariant.withOpacity(0.4);
+    final gridColor = cs.outlineVariant.withValues(alpha: 0.4);
     final labelColor = cs.onSurfaceVariant;
 
     return SingleChildScrollView(
@@ -76,7 +76,7 @@ class CurveChartPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 15,
                         offset: const Offset(0, 5),
                       ),
@@ -136,7 +136,7 @@ class CurveChartPage extends StatelessWidget {
                                 getTooltipColor: (_) => cs.inverseSurface,
                                 getTooltipItems: (spots) => spots
                                     .map((s) => LineTooltipItem(
-                                          'Est ${s.x.toInt()}°C: ${s.y.toStringAsFixed(1)}°C',
+                                          'Est ${s.x.toInt()}\u00b0C: ${s.y.toStringAsFixed(1)}\u00b0C',
                                           TextStyle(
                                             color: cs.onInverseSurface,
                                             fontWeight: FontWeight.bold,
@@ -151,7 +151,7 @@ class CurveChartPage extends StatelessWidget {
                                 HorizontalRangeAnnotation(
                                   y1: minY,
                                   y2: unsafeZoneLimit,
-                                  color: Colors.red.withOpacity(0.10),
+                                  color: Colors.red.withValues(alpha: 0.10),
                                 ),
                               ],
                             ),
@@ -168,7 +168,7 @@ class CurveChartPage extends StatelessWidget {
                             titlesData: FlTitlesData(
                               leftTitles: AxisTitles(
                                 axisNameWidget: Text(
-                                  'Temp. Mandata Acqua °C',
+                                  'Temp. Mandata Acqua \u00b0C',
                                   style: TextStyle(
                                       fontSize: 10, color: labelColor),
                                 ),
@@ -189,7 +189,7 @@ class CurveChartPage extends StatelessWidget {
                               ),
                               bottomTitles: AxisTitles(
                                 axisNameWidget: Text(
-                                  'Temp. Esterna °C',
+                                  'Temp. Esterna \u00b0C',
                                   style: TextStyle(
                                       fontSize: 10, color: labelColor),
                                 ),
@@ -229,7 +229,7 @@ class CurveChartPage extends StatelessWidget {
                                 dotData: const FlDotData(show: false),
                                 belowBarData: BarAreaData(
                                   show: true,
-                                  color: cs.primary.withOpacity(0.05),
+                                  color: cs.primary.withValues(alpha: 0.05),
                                 ),
                               ),
                               if (suggestedSpots != null)
@@ -251,13 +251,13 @@ class CurveChartPage extends StatelessWidget {
                           Container(
                               width: 12,
                               height: 12,
-                              color: Colors.red.withOpacity(0.1)),
+                              color: Colors.red.withValues(alpha: 0.1)),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               isHeating
-                                  ? 'Zona Rossa (>35°C): Efficienza ridotta per Ventilconvettori.'
-                                  : 'Zona Rossa (<15°C): Alto rischio condensa.',
+                                  ? 'Zona Rossa (>35\u00b0C): Efficienza ridotta per Ventilconvettori.'
+                                  : 'Zona Rossa (<15\u00b0C): Alto rischio condensa.',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: cs.onSurfaceVariant,

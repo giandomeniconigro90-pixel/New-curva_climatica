@@ -73,18 +73,15 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // --- Handle ---
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 4),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: cs.onSurfaceVariant.withOpacity(0.4),
+              color: cs.onSurfaceVariant.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-
-          // --- Header ---
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 16, 8),
             child: Row(
@@ -113,8 +110,6 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
             ),
           ),
           Divider(height: 1, color: cs.outlineVariant),
-
-          // --- Lista riordinabile ---
           Flexible(
             child: _rooms.isEmpty
                 ? Padding(
@@ -142,19 +137,10 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                       final room = _rooms[index];
                       return ListTile(
                         key: ValueKey(room),
-                        leading: Icon(
-                          Icons.drag_handle,
-                          color: cs.onSurfaceVariant,
-                        ),
-                        title: Text(
-                          room,
-                          style: TextStyle(color: cs.onSurface),
-                        ),
+                        leading: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
+                        title: Text(room, style: TextStyle(color: cs.onSurface)),
                         trailing: IconButton(
-                          icon: Icon(
-                            Icons.delete_outline,
-                            color: cs.error,
-                          ),
+                          icon: Icon(Icons.delete_outline, color: cs.error),
                           onPressed: () => _deleteRoom(index),
                           tooltip: 'Elimina stanza',
                         ),
@@ -162,13 +148,9 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                     },
                   ),
           ),
-
           Divider(height: 1, color: cs.outlineVariant),
-
-          // --- Campo aggiunta stanza ---
           Padding(
-            padding: EdgeInsets.fromLTRB(
-                16, 12, 16, 12 + mq.viewInsets.bottom),
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + mq.viewInsets.bottom),
             child: Row(
               children: [
                 Expanded(
@@ -178,11 +160,8 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                     textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
                       hintText: 'Nome nuova stanza...',
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                     onSubmitted: (_) => _addRoom(),
                   ),
@@ -195,8 +174,7 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                   style: FilledButton.styleFrom(
                     backgroundColor: cs.primary,
                     foregroundColor: cs.onPrimary,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   ),
                 ),
               ],
