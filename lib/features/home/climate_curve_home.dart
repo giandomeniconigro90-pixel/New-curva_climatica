@@ -103,6 +103,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
             offset: notifier.offset,
             mode: notifier.currentMode,
             windowRecords: windowRecords,
+            allRecords: notifier.allRecords,
             chartKey: notifier.chartKey,
           ),
           EnergyPage(records: notifier.records),
