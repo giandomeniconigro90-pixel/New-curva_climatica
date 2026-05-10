@@ -13,6 +13,7 @@ import 'package:csv/csv.dart';
 import '../../../models/daily_record_dto.dart';
 import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart';
+import 'backup_version.dart';
 
 class ExportUtils {
 
@@ -326,6 +327,10 @@ class ExportUtils {
     }
   }
 
+  /// Genera il JSON di backup con versioning completo.
+  ///
+  /// Il campo [metadata.backupVersion] permette al restore di verificare
+  /// la compatibilità prima di applicare i dati.
   static Future<String> generateBackupJson({
     required List<DailyRecordDTO> records,
     required SystemMode mode,
@@ -339,16 +344,29 @@ class ExportUtils {
       'metadata': {
         'exportDate': DateTime.now().toIso8601String(),
         'appVersion': appVersion,
+        // ── versioning (#3) ──
+        'backupVersion': BackupVersion.current,
+        'modelVersion': BackupVersion.modelVersion,
       },
       'settings': {
         'heatingSlope': heatingSlope,
         'heatingOffset': heatingOffset,
         'coolingSlope': coolingSlope,
         'coolingOffset': coolingOffset,
+        'mode': mode.toModeString(),
       },
       'records': records.map((e) => e.toJson()).toList(),
     };
     return jsonEncode(backupMap);
+  }
+
+  /// Valida i metadati del backup e lancia [BackupVersionException]
+  /// se la versione non è compatibile con questa build.
+  static void validateBackupMetadata(Map<String, dynamic> metadata) {
+    final version = metadata['backupVersion'] as int?;
+    if (!BackupVersion.isCompatible(version)) {
+      throw BackupVersionException(BackupVersion.incompatibleMessage(version));
+    }
   }
 
   static Future<void> shareBackupJsonString(String jsonString, [String? fileName]) async {
@@ -367,4 +385,13 @@ class ExportUtils {
       return file;
     });
   }
+}
+
+/// Eccezione lanciata quando la versione del backup non è compatibile.
+class BackupVersionException implements Exception {
+  final String message;
+  const BackupVersionException(this.message);
+
+  @override
+  String toString() => message;
 }

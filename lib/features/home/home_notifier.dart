@@ -19,6 +19,7 @@ import '../../utils/date_utils.dart';
 
 import 'logic/curve_logic.dart';
 import 'logic/record_form_validator.dart';
+import 'utils/backup_version.dart';
 import 'utils/export_utils.dart';
 import 'widgets/export_range_sheet.dart';
 import 'widgets/rooms_manager_sheet.dart';
@@ -474,7 +475,7 @@ class HomeNotifier extends ChangeNotifier {
     );
   }
 
-  /// F4 — Applica la curva AI salvando uno snapshot PRIMA di modificare.
+  /// F4 — Applica la curva AI.
   void onApplyAiCurve(BuildContext context) {
     final windowRecords = recordsSinceLastApply(currentMode);
 
@@ -533,7 +534,7 @@ class HomeNotifier extends ChangeNotifier {
     );
   }
 
-  /// F4 — Ripristina i parametri dell'ultimo snapshot AI (undo).
+  /// F4 — Undo ultimo apply AI.
   Future<void> undoLastAiApply(BuildContext context) async {
     final snapshot = await AppStorage.popLastAiSnapshot();
     if (snapshot == null) {
@@ -570,9 +571,7 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // F6 — Dialogo selezione range date prima dell'export
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── F6 — range sheet ────────────────────────────────────────────────────────
 
   Future<List<DailyRecordDTO>?> _showExportRangeSheet(
       BuildContext context) async {
@@ -604,47 +603,25 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<void> exportCsv(BuildContext context) async {
     if (records.isEmpty) {
-      AppToast.show(
-        'Nessun dato da esportare!',
-        context: context,
-        level: ToastLevel.warning,
-      );
+      AppToast.show('Nessun dato da esportare!', context: context, level: ToastLevel.warning);
       return;
     }
-
     final filtered = await _showExportRangeSheet(context);
     if (filtered == null || !context.mounted) return;
-
     try {
-      final csv = ExportUtils.generateCsv(
-        filtered,
-        slope: slope,
-        offset: offset,
-        mode: currentMode,
-      );
+      final csv = ExportUtils.generateCsv(filtered, slope: slope, offset: offset, mode: currentMode);
       final dateStr = DateTime.now().toIso8601String().split('T').first;
       await ExportUtils.shareCsv(csv, 'ClimaSense_$dateStr.csv');
     } catch (e) {
-      if (context.mounted) {
-        AppToast.show(
-          'Errore export CSV: $e',
-          context: context,
-          level: ToastLevel.error,
-        );
-      }
+      if (context.mounted) AppToast.show('Errore export CSV: $e', context: context, level: ToastLevel.error);
     }
   }
 
   Future<void> exportPdf(BuildContext context) async {
     if (records.isEmpty) {
-      AppToast.show(
-        'Nessun dato da esportare!',
-        context: context,
-        level: ToastLevel.warning,
-      );
+      AppToast.show('Nessun dato da esportare!', context: context, level: ToastLevel.warning);
       return;
     }
-
     final filtered = await _showExportRangeSheet(context);
     if (filtered == null || !context.mounted) return;
 
@@ -655,31 +632,18 @@ class HomeNotifier extends ChangeNotifier {
       pageController.jumpToPage(2);
       await Future.delayed(const Duration(milliseconds: 800));
     }
-
     try {
       final chartImage = await captureChart();
       final windowRecords = recordsSinceLastApply(currentMode);
-      final suggestion =
-          computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
+      final suggestion = computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
       final stats = computeCurveStats(windowRecords);
-
       await ExportUtils.generateAndSavePdf(
-        records: filtered,
-        slope: slope,
-        offset: offset,
-        suggestion: suggestion,
-        stats: stats,
-        chartImage: chartImage,
-        currentMode: currentMode,
+        records: filtered, slope: slope, offset: offset,
+        suggestion: suggestion, stats: stats,
+        chartImage: chartImage, currentMode: currentMode,
       );
     } catch (e) {
-      if (context.mounted) {
-        AppToast.show(
-          'Errore export PDF: $e',
-          context: context,
-          level: ToastLevel.error,
-        );
-      }
+      if (context.mounted) AppToast.show('Errore export PDF: $e', context: context, level: ToastLevel.error);
     } finally {
       if (originalPage != 2) {
         currentPage = originalPage;
@@ -691,8 +655,7 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<Uint8List?> captureChart() async {
     try {
-      final boundary = chartKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
+      final boundary = chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -713,16 +676,9 @@ class HomeNotifier extends ChangeNotifier {
         coolingOffset: _settings.coolingOffset,
       );
       final date = DateTime.now().toIso8601String().split('T').first;
-      await ExportUtils.shareBackupJsonString(
-          backupJson, 'ClimaSenseBackup_$date.json');
+      await ExportUtils.shareBackupJsonString(backupJson, 'ClimaSenseBackup_$date.json');
     } catch (e) {
-      if (context.mounted) {
-        AppToast.show(
-          'Errore backup: $e',
-          context: context,
-          level: ToastLevel.error,
-        );
-      }
+      if (context.mounted) AppToast.show('Errore backup: $e', context: context, level: ToastLevel.error);
     }
   }
 
@@ -742,8 +698,9 @@ class HomeNotifier extends ChangeNotifier {
       }
       final backupData = decoded;
 
-      if (backupData['metadata'] == null) {
-        throw const FormatException('Campo "metadata" mancante nel backup.');
+      // ── Validazioni struttura ──
+      if (backupData['metadata'] is! Map) {
+        throw const FormatException('Campo "metadata" mancante o non valido nel backup.');
       }
       if (backupData['settings'] is! Map) {
         throw const FormatException('Campo "settings" mancante o non valido nel backup.');
@@ -752,13 +709,46 @@ class HomeNotifier extends ChangeNotifier {
         throw const FormatException('Campo "records" mancante o non è una lista nel backup.');
       }
 
+      // ── Validazione versione (#3) ──
+      final metadata = backupData['metadata'] as Map<String, dynamic>;
+      ExportUtils.validateBackupMetadata(metadata);
+
       if (!context.mounted) return;
+
+      // Mostra info versione nel dialogo di conferma
+      final backupVersion = metadata['backupVersion'] as int? ?? 1;
+      final backupDate = metadata['exportDate'] as String? ?? 'data sconosciuta';
+      final appVersion = metadata['appVersion'] as String? ?? '?';
+      final recordCount = (backupData['records'] as List).length;
 
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Conferma Ripristino'),
-          content: const Text('Sovrascriverà tutti i dati attuali. Continuare?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Sovrascriverà tutti i dati attuali. Continuare?'),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Versione backup: v$backupVersion', style: const TextStyle(fontSize: 12)),
+                    Text('App version: $appVersion',         style: const TextStyle(fontSize: 12)),
+                    Text('Registrazioni: $recordCount',      style: const TextStyle(fontSize: 12)),
+                    Text('Data export: ${backupDate.split('T').first}', style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -780,15 +770,13 @@ class HomeNotifier extends ChangeNotifier {
           .toList();
 
       final modeStr = settings['mode'] as String? ?? 'heating';
-      final restoredMode = modeStr == 'cooling'
-          ? SystemMode.cooling
-          : SystemMode.heating;
+      final restoredMode = modeStr == 'cooling' ? SystemMode.cooling : SystemMode.heating;
 
       await AppStorage.saveRecords(newRecords);
       await _settingsRepo.save(CurveSettings(
         heatingSlope: (settings['heatingSlope'] as num?)?.toDouble() ?? 1.0,
         heatingOffset: (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
-        coolingSlope: (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
+        coolingSlope:  (settings['coolingSlope']  as num?)?.toDouble() ?? 0.5,
         coolingOffset: (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
         mode: restoredMode,
       ));
@@ -796,19 +784,16 @@ class HomeNotifier extends ChangeNotifier {
       await loadFromHive();
 
       if (context.mounted) {
-        AppToast.show(
-          'Ripristino completato!',
-          context: context,
-          level: ToastLevel.success,
-        );
+        AppToast.show('Ripristino completato!', context: context, level: ToastLevel.success);
+      }
+    } on BackupVersionException catch (e) {
+      // Versione non compatibile: messaggio specifico user-facing
+      if (context.mounted) {
+        AppToast.show(e.message, context: context, level: ToastLevel.error);
       }
     } catch (e) {
       if (context.mounted) {
-        AppToast.show(
-          'Errore ripristino: $e',
-          context: context,
-          level: ToastLevel.error,
-        );
+        AppToast.show('Errore ripristino: $e', context: context, level: ToastLevel.error);
       }
     }
   }
