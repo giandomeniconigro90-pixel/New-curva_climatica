@@ -8,6 +8,7 @@ import '../../../services/hive_storage.dart';
 import '../../../utils/app_toast.dart';
 import '../../../utils/date_utils.dart';
 import '../logic/curve_logic.dart';
+import 'record_card.dart';
 
 class ResultsPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
@@ -41,90 +42,55 @@ class ResultsPage extends StatefulWidget {
 }
 
 class _ResultsPageState extends State<ResultsPage> {
-  Future<void> _handleDelete(BuildContext context, DailyRecordDTO record) async {
-    final date = parseItalianDateSafe(record.dateIso) ?? DateTime.now();
-    final dateStr =
-        '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  // -------------------------------------------------------------------------
+  // AnimatedList key — ricreata quando la lista cambia lunghezza
+  // -------------------------------------------------------------------------
+  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
+  late List<DailyRecordDTO> _sortedRecords;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_outline, color: Colors.red),
-            SizedBox(width: 10),
-            Text('Elimina registrazione'),
-          ],
-        ),
-        content: Text(
-          'Vuoi eliminare la registrazione del $dateStr?',
-          style: const TextStyle(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Annulla'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('ELIMINA'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !context.mounted) return;
-
-    await widget.onDeleteRecordByDateIso?.call(record.dateIso);
-
-    if (context.mounted) {
-      AppToast.show(
-        'Registrazione del $dateStr eliminata',
-        context: context,
-        level: ToastLevel.error,
-      );
-    }
-  }
-
-  (IconData, Color) _heatpumpIconAndColor(String mode) {
-    switch (mode.toLowerCase()) {
-      case 'riscaldamento':
-        return (Icons.local_fire_department, Colors.deepOrange);
-      case 'raffrescamento':
-        return (Icons.ac_unit, Colors.lightBlue);
-      default:
-        return (Icons.power_off, Colors.grey);
-    }
+  @override
+  void initState() {
+    super.initState();
+    _sortedRecords = _sorted(widget.records);
   }
 
   @override
+  void didUpdateWidget(ResultsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.records != widget.records) {
+      final newSorted = _sorted(widget.records);
+      // Inserimento: nuovo record in testa
+      if (newSorted.length > _sortedRecords.length) {
+        _sortedRecords = newSorted;
+        _listKey.currentState?.insertItem(0,
+            duration: const Duration(milliseconds: 350));
+      } else {
+        // Aggiornamento generico (edit o delete): ricostruiamo la lista
+        _sortedRecords = newSorted;
+      }
+    }
+  }
+
+  static List<DailyRecordDTO> _sorted(List<DailyRecordDTO> src) =>
+      List<DailyRecordDTO>.from(src)
+        ..sort((a, b) {
+          final da = parseItalianDateSafe(a.dateIso) ?? DateTime.now();
+          final db = parseItalianDateSafe(b.dateIso) ?? DateTime.now();
+          return db.compareTo(da);
+        });
+
+  // -------------------------------------------------------------------------
+  // Build principale
+  // -------------------------------------------------------------------------
+
+  @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
-    final bool hasPv = AppStorage.getHasPv();
-    final bool hasGridMeter = AppStorage.getHasGridMeter();
-
     if (widget.records.isEmpty) {
       return const Center(
         child: Text('Nessun dato registrato',
             style: TextStyle(color: Colors.grey)),
       );
     }
-
-    final sortedRecords = List<DailyRecordDTO>.from(widget.records)
-      ..sort((a, b) {
-        final da = parseItalianDateSafe(a.dateIso) ?? DateTime.now();
-        final db = parseItalianDateSafe(b.dateIso) ?? DateTime.now();
-        return db.compareTo(da);
-      });
 
     return Scaffold(
       body: SafeArea(
@@ -157,215 +123,18 @@ class _ResultsPageState extends State<ResultsPage> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 10),
-              ListView.builder(
+              // AnimatedList per animazione inserimento
+              AnimatedList(
+                key: _listKey,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: sortedRecords.length,
-                itemBuilder: (context, index) {
-                  final r = sortedRecords[index];
-                  final date =
-                      parseItalianDateSafe(r.dateIso) ?? DateTime.now();
-                  final hasAcs = r.consumptionACS != null;
-                  final hasMode = r.heatpumpMode != null && r.heatpumpMode!.isNotEmpty;
-                  final showGrid = hasGridMeter && r.energyFromGrid != null;
-                  final showPv = hasPv && r.pvProduction != null;
-
-                  // FIX alone nero: Material con clip + InkWell borderRadius
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Material(
-                      color: cs.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(20),
-                      clipBehavior: Clip.antiAlias,
-                      elevation: 0,
-                      shadowColor: Colors.transparent,
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
-                        onTap: widget.onEditRecordByDateIso != null
-                            ? () => widget.onEditRecordByDateIso!(r.dateIso)
-                            : null,
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.06),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: cs.primaryContainer,
-                                  borderRadius: BorderRadius.circular(15),
-                                ),
-                                child: Column(
-                                  children: [
-                                    Text(
-                                      '${date.day}',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: cs.onPrimaryContainer,
-                                      ),
-                                    ),
-                                    Text(
-                                      '${date.month}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: cs.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.thermostat,
-                                            size: 14, color: Colors.orange),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Esterna: ${r.externalTemp}\u00b0C',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: cs.onSurface,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.flash_on,
-                                            size: 14, color: Colors.amber),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'Consumo: ${r.consumption} kWh',
-                                          style: TextStyle(
-                                            color: cs.onSurfaceVariant,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    if (hasAcs) ...[
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.water_drop,
-                                              size: 14, color: Colors.blueAccent),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'ACS: ${r.consumptionACS} kWh',
-                                            style: TextStyle(
-                                              color: cs.onSurfaceVariant,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                    if (showGrid) ...[
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.electrical_services_outlined,
-                                              size: 14, color: Color(0xFFFFB74D)),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'Rete: ${r.energyFromGrid!.toStringAsFixed(1)} kWh',
-                                            style: TextStyle(
-                                              color: cs.onSurfaceVariant,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                    if (showPv) ...[
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.wb_sunny_outlined,
-                                              size: 14, color: Color(0xFF66BB6A)),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'FV: ${r.pvProduction!.toStringAsFixed(1)} kWh',
-                                            style: TextStyle(
-                                              color: cs.onSurfaceVariant,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                    if (hasMode) ...[
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            _heatpumpIconAndColor(r.heatpumpMode!).$1,
-                                            size: 14,
-                                            color: _heatpumpIconAndColor(r.heatpumpMode!).$2,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'PDC: ${r.heatpumpMode}',
-                                            style: TextStyle(
-                                              color: cs.onSurfaceVariant,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              if (r.note.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: Icon(Icons.sticky_note_2_outlined,
-                                      color: cs.onSurfaceVariant, size: 18),
-                                ),
-                              if (widget.onEditRecordByDateIso != null)
-                                IconButton(
-                                  onPressed: () =>
-                                      widget.onEditRecordByDateIso!(r.dateIso),
-                                  icon: Icon(Icons.edit,
-                                      size: 20, color: cs.primary),
-                                  tooltip: 'Modifica',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              if (widget.onDeleteRecordByDateIso != null) ...[
-                                const SizedBox(width: 12),
-                                IconButton(
-                                  onPressed: () =>
-                                      _handleDelete(context, r),
-                                  icon: Icon(Icons.delete_outline,
-                                      size: 20, color: cs.error),
-                                  tooltip: 'Elimina',
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
+                initialItemCount: _sortedRecords.length,
+                itemBuilder: (context, index, animation) {
+                  if (index >= _sortedRecords.length) {
+                    return const SizedBox.shrink();
+                  }
+                  final r = _sortedRecords[index];
+                  return _buildAnimatedItem(context, r, animation);
                 },
               ),
             ],
@@ -374,6 +143,43 @@ class _ResultsPageState extends State<ResultsPage> {
       ),
     );
   }
+
+  Widget _buildAnimatedItem(
+    BuildContext context,
+    DailyRecordDTO r,
+    Animation<double> animation,
+  ) {
+    return SizeTransition(
+      sizeFactor: CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      ),
+      child: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0.3, 1.0),
+        ),
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, -0.15),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          )),
+          child: RecordCard(
+            record: r,
+            onEdit: widget.onEditRecordByDateIso,
+            onDelete: widget.onDeleteRecordByDateIso,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // AI Card
+  // -------------------------------------------------------------------------
 
   Widget _buildAiCard(BuildContext context, CurveSuggestion suggestion) {
     final cs = Theme.of(context).colorScheme;
@@ -386,7 +192,6 @@ class _ResultsPageState extends State<ResultsPage> {
         (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
         (suggestion.suggestedOffset - widget.offset!).abs() < 0.05;
 
-    // F3 — analisi per stanza
     final List<RoomComfortStat> roomStats =
         hasEnoughData ? analyzeRoomComfort(widget.records) : [];
 
@@ -431,8 +236,7 @@ class _ResultsPageState extends State<ResultsPage> {
           ),
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 8),
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: hasEnoughData
                   ? Colors.green.withValues(alpha: 0.1)
@@ -473,7 +277,6 @@ class _ResultsPageState extends State<ResultsPage> {
             style: TextStyle(
                 fontSize: 14, color: cs.onSurfaceVariant, height: 1.5),
           ),
-          // F3 — stanze con disagio
           if (roomStats.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Divider(height: 1),
@@ -532,7 +335,10 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  // F4 — Card storico apply AI con undo
+  // -------------------------------------------------------------------------
+  // AI History Card
+  // -------------------------------------------------------------------------
+
   Widget _buildAiHistoryCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final fmt = DateFormat('dd/MM/yyyy HH:mm');
@@ -562,7 +368,8 @@ class _ResultsPageState extends State<ResultsPage> {
                   color: cs.tertiaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.history, color: cs.onTertiaryContainer, size: 20),
+                child: Icon(Icons.history,
+                    color: cs.onTertiaryContainer, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -575,14 +382,15 @@ class _ResultsPageState extends State<ResultsPage> {
                   ),
                 ),
               ),
-              // Bottone undo ultimo apply
               if (widget.onUndoAiApply != null)
                 TextButton.icon(
                   onPressed: () => widget.onUndoAiApply!(context),
                   icon: const Icon(Icons.undo, size: 16),
-                  label: const Text('Annulla ultimo', style: TextStyle(fontSize: 12)),
+                  label: const Text('Annulla ultimo',
+                      style: TextStyle(fontSize: 12)),
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   ),
                 ),
             ],
@@ -591,11 +399,14 @@ class _ResultsPageState extends State<ResultsPage> {
           ...widget.aiHistory.take(5).toIndexedMap((i, s) {
             final isFirst = i == 0;
             final dt = DateTime.tryParse(s.appliedAt);
-            final dateLabel = dt != null ? fmt.format(dt.toLocal()) : s.appliedAt;
-            final modeLabel = s.mode == 'heating' ? '🔥 Risc.' : '❄️ Raff.';
+            final dateLabel =
+                dt != null ? fmt.format(dt.toLocal()) : s.appliedAt;
+            final modeLabel =
+                s.mode == 'heating' ? '\uD83D\uDD25 Risc.' : '\u2744\uFE0F Raff.';
             return Container(
               margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: isFirst
                     ? cs.primaryContainer.withValues(alpha: 0.5)
@@ -624,7 +435,8 @@ class _ResultsPageState extends State<ResultsPage> {
                             if (isFirst) ...[
                               const SizedBox(width: 6),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
                                 decoration: BoxDecoration(
                                   color: cs.primary,
                                   borderRadius: BorderRadius.circular(6),
@@ -674,7 +486,8 @@ class _ResultsPageState extends State<ResultsPage> {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 '+ altri ${widget.aiHistory.length - 5} apply precedenti',
-                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+                style:
+                    TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
               ),
             ),
         ],
@@ -682,14 +495,19 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Room stat row
+  // -------------------------------------------------------------------------
+
   Widget _buildRoomStatRow(BuildContext context, RoomComfortStat s) {
     final cs = Theme.of(context).colorScheme;
     final bool isCold = s.dominantIssue == RoomComfortIssue.tooCold;
-    final Color issueColor = isCold ? Colors.blue.shade300 : Colors.orange.shade400;
-    final IconData issueIcon = isCold ? Icons.ac_unit : Icons.local_fire_department_outlined;
-    final String issueLabel = isCold
-        ? '${s.coldDays} g. freddo'
-        : '${s.hotDays} g. caldo';
+    final Color issueColor =
+        isCold ? Colors.blue.shade300 : Colors.orange.shade400;
+    final IconData issueIcon =
+        isCold ? Icons.ac_unit : Icons.local_fire_department_outlined;
+    final String issueLabel =
+        isCold ? '${s.coldDays} g. freddo' : '${s.hotDays} g. caldo';
     final double barFill = s.issueRate.clamp(0.0, 1.0);
 
     return Padding(
@@ -736,7 +554,10 @@ class _ResultsPageState extends State<ResultsPage> {
   }
 }
 
-// Helper extension per toIndexedMap
+// ---------------------------------------------------------------------------
+// Helper extension
+// ---------------------------------------------------------------------------
+
 extension _IndexedMap<T> on Iterable<T> {
   Iterable<R> toIndexedMap<R>(R Function(int index, T item) f) sync* {
     int i = 0;
