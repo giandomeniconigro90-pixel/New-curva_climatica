@@ -43,6 +43,9 @@ class HomeNotifier extends ChangeNotifier {
   List<DailyRecordDTO> allRecords = [];
   CurveSettings _settings = CurveSettings.defaults();
 
+  // F4 — storico AI in memoria (ricaricato da Hive al load)
+  List<AiApplySnapshot> aiHistory = [];
+
   List<String> rooms = [];
 
   List<DailyRecordDTO> get records {
@@ -106,6 +109,7 @@ class HomeNotifier extends ChangeNotifier {
 
     allRecords = storedRecords;
     _settings = loadedSettings;
+    aiHistory = AppStorage.getAiHistory(); // F4
 
     _syncRoomControllers(loadedRooms);
 
@@ -274,8 +278,6 @@ class HomeNotifier extends ChangeNotifier {
 
     if (!hasChange) return null;
 
-    // FIX #4b: smartTip è String non-nullable, il null-check era ridondante
-    // e produceva un warning del linter. Rimossa la condizione != null.
     if (suggestion.smartTip.isNotEmpty &&
         !suggestion.smartTip.toLowerCase().contains('apprendimento')) {
       return suggestion.smartTip;
@@ -417,18 +419,6 @@ class HomeNotifier extends ChangeNotifier {
     await saveToHive();
   }
 
-  /// FIX #4 — deleteToday ora chiama sempre clearFields() prima di navigare.
-  ///
-  /// Problema precedente: se [editingIndex] puntava al record di oggi e
-  /// l'utente eliminava quel record, il codice azzerava solo [editingIndex]
-  /// ma lasciava tutti i controller (externalTemp, consumption, stanze, ecc.)
-  /// pre-compilati con i valori del record appena eliminato. La chiamata
-  /// successiva a [startEditRecordByAllIndex] con un indice non aggiornato
-  /// poteva poi caricare il record sbagliato nella form.
-  ///
-  /// La fix: clearFields() azzera editingIndex E tutti i controller in un
-  /// unico posto. Il comportamento visibile è che dopo la cancellazione
-  /// la form di inserimento risulta vuota, come ci si aspetta.
   Future<void> deleteToday(BuildContext context) async {
     final today = formatItalianDate(DateTime.now());
     final modeStr = currentMode.toModeString();
@@ -443,7 +433,6 @@ class HomeNotifier extends ChangeNotifier {
       return;
     }
     allRecords.removeAt(index);
-    // clearFields azzera editingIndex + tutti i controller in un colpo solo.
     clearFields();
     await saveToHive();
     currentPage = 0;
@@ -484,6 +473,7 @@ class HomeNotifier extends ChangeNotifier {
     );
   }
 
+  /// F4 — Applica la curva AI salvando uno snapshot PRIMA di modificare.
   void onApplyAiCurve(BuildContext context) {
     final windowRecords = recordsSinceLastApply(currentMode);
 
@@ -509,6 +499,17 @@ class HomeNotifier extends ChangeNotifier {
       return;
     }
 
+    // Salva snapshot dei valori ATTUALI (prima dell'apply) per poter fare undo
+    final snapshot = AiApplySnapshot(
+      slope: slope,
+      offset: offset,
+      mode: currentMode.toModeString(),
+      appliedAt: DateTime.now().toIso8601String(),
+      smartTip: suggestion.smartTip,
+    );
+    AppStorage.addAiSnapshot(snapshot);
+    aiHistory = AppStorage.getAiHistory();
+
     final nowApply = DateTime.now();
     _settings = currentMode == SystemMode.heating
         ? _settings.copyWith(
@@ -530,6 +531,43 @@ class HomeNotifier extends ChangeNotifier {
       context: context,
       level: ToastLevel.success,
     );
+  }
+
+  /// F4 — Ripristina i parametri dell'ultimo snapshot AI (undo).
+  Future<void> undoLastAiApply(BuildContext context) async {
+    final snapshot = await AppStorage.popLastAiSnapshot();
+    if (snapshot == null) {
+      AppToast.show(
+        'Nessun apply AI da annullare.',
+        context: context,
+        level: ToastLevel.warning,
+      );
+      return;
+    }
+
+    final isHeating = snapshot.mode == 'heating';
+    _settings = isHeating
+        ? _settings.copyWith(
+            heatingSlope: snapshot.slope,
+            heatingOffset: snapshot.offset,
+          )
+        : _settings.copyWith(
+            coolingSlope: snapshot.slope,
+            coolingOffset: snapshot.offset,
+          );
+
+    aiHistory = AppStorage.getAiHistory();
+    notifyListeners();
+    await _saveSettings();
+
+    final modeLabel = isHeating ? 'riscaldamento' : 'raffrescamento';
+    if (context.mounted) {
+      AppToast.show(
+        'Ripristinata curva $modeLabel: S ${snapshot.slope.toStringAsFixed(2)} / O ${snapshot.offset.toStringAsFixed(1)}',
+        context: context,
+        level: ToastLevel.info,
+      );
+    }
   }
 
   Future<void> exportCsv(BuildContext context) async {

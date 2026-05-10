@@ -46,21 +46,17 @@ class _ClimateCurveHomeView extends StatelessWidget {
 
     return Consumer<HomeNotifier>(
       builder: (context, notifier, _) {
-        final DateTime? lastAppliedDate =
-            notifier.currentMode == SystemMode.heating
-                ? notifier.lastAiApplyHeating
-                : notifier.lastAiApplyCooling;
+        final windowRecords =
+            notifier.recordsSinceLastApply(notifier.currentMode);
 
+        // FIX: computeOptimalCurveSuggestion accetta 4 argomenti (lista pre-filtrata)
         final suggestion = computeOptimalCurveSuggestion(
-          notifier.records,
+          windowRecords,
           notifier.slope,
           notifier.offset,
           notifier.currentMode,
-          lastAppliedDate,
         );
 
-        final windowRecords =
-            notifier.recordsSinceLastApply(notifier.currentMode);
         final stats = computeCurveStats(windowRecords);
 
         final bool isCooling = notifier.currentMode == SystemMode.cooling;
@@ -97,6 +93,9 @@ class _ClimateCurveHomeView extends StatelessWidget {
             onApplyAiCurve: () => notifier.onApplyAiCurve(context),
             onEditRecordByDateIso: notifier.startEditRecordByDateIso,
             onDeleteRecordByDateIso: notifier.deleteRecordByDateIso,
+            // F4
+            aiHistory: notifier.aiHistory,
+            onUndoAiApply: notifier.undoLastAiApply,
           ),
           CurveChartPage(
             slope: notifier.slope,
@@ -115,7 +114,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                 builder: (ctx) => AlertDialog(
                   title: const Text('Reset Calibrazione?'),
                   content: const Text(
-                    'Questo canceller\u00e0 le preferenze di pendenza/offset. I dati storici rimarranno.',
+                    'Questo cancellerà le preferenze di pendenza/offset. I dati storici rimarranno.',
                   ),
                   actions: [
                     TextButton(
@@ -186,7 +185,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Cambia modalit\u00e0',
+                            'Cambia modalità',
                             style: TextStyle(
                               fontSize: 10,
                               color: cs.onSurfaceVariant,

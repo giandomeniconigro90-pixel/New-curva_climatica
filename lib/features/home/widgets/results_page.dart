@@ -1,6 +1,7 @@
 // lib/features/home/widgets/results_page.dart
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
@@ -17,6 +18,9 @@ class ResultsPage extends StatefulWidget {
   final VoidCallback? onApplyAiCurve;
   final void Function(String dateIso)? onEditRecordByDateIso;
   final Future<void> Function(String dateIso)? onDeleteRecordByDateIso;
+  // F4
+  final List<AiApplySnapshot> aiHistory;
+  final Future<void> Function(BuildContext)? onUndoAiApply;
 
   const ResultsPage({
     super.key,
@@ -28,6 +32,8 @@ class ResultsPage extends StatefulWidget {
     this.onApplyAiCurve,
     this.onEditRecordByDateIso,
     this.onDeleteRecordByDateIso,
+    this.aiHistory = const [],
+    this.onUndoAiApply,
   });
 
   @override
@@ -138,6 +144,11 @@ class _ResultsPageState extends State<ResultsPage> {
                 _buildAiCard(context, widget.suggestion!),
                 const SizedBox(height: 24),
               ],
+              // F4 — Storico apply AI
+              if (widget.aiHistory.isNotEmpty) ...[
+                _buildAiHistoryCard(context),
+                const SizedBox(height: 24),
+              ],
               Text(
                 'Storico Recente',
                 style: Theme.of(context)
@@ -207,7 +218,7 @@ class _ResultsPageState extends State<ResultsPage> {
                           ),
                           const SizedBox(width: 16),
                           Expanded(
-            child: Column(
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
@@ -365,7 +376,7 @@ class _ResultsPageState extends State<ResultsPage> {
         (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
         (suggestion.suggestedOffset - widget.offset!).abs() < 0.05;
 
-    // F3 — Analisi per stanza (solo se ci sono dati sufficienti)
+    // F3 — analisi per stanza
     final List<RoomComfortStat> roomStats =
         hasEnoughData ? analyzeRoomComfort(widget.records) : [];
 
@@ -452,10 +463,7 @@ class _ResultsPageState extends State<ResultsPage> {
             style: TextStyle(
                 fontSize: 14, color: cs.onSurfaceVariant, height: 1.5),
           ),
-
-          // ------------------------------------------------------------------
-          // F3 — Sezione stanze problematiche
-          // ------------------------------------------------------------------
+          // F3 — stanze con disagio
           if (roomStats.isNotEmpty) ...[
             const SizedBox(height: 16),
             const Divider(height: 1),
@@ -478,8 +486,6 @@ class _ResultsPageState extends State<ResultsPage> {
             const SizedBox(height: 10),
             ...roomStats.map((s) => _buildRoomStatRow(context, s)),
           ],
-          // ------------------------------------------------------------------
-
           const SizedBox(height: 20),
           if (widget.onApplyAiCurve != null)
             SizedBox(
@@ -516,7 +522,156 @@ class _ResultsPageState extends State<ResultsPage> {
     );
   }
 
-  /// Riga singola stanza con barra di disagio colorata.
+  // F4 — Card storico apply AI con undo
+  Widget _buildAiHistoryCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final fmt = DateFormat('dd/MM/yyyy HH:mm');
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: cs.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cs.tertiaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.history, color: cs.onTertiaryContainer, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Storico Apply AI',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              // Bottone undo ultimo apply
+              if (widget.onUndoAiApply != null)
+                TextButton.icon(
+                  onPressed: () => widget.onUndoAiApply!(context),
+                  icon: const Icon(Icons.undo, size: 16),
+                  label: const Text('Annulla ultimo', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ...widget.aiHistory.take(5).toIndexedMap((i, s) {
+            final isFirst = i == 0;
+            final dt = DateTime.tryParse(s.appliedAt);
+            final dateLabel = dt != null ? fmt.format(dt.toLocal()) : s.appliedAt;
+            final modeLabel = s.mode == 'heating' ? '🔥 Risc.' : '❄️ Raff.';
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: isFirst
+                    ? cs.primaryContainer.withValues(alpha: 0.5)
+                    : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+                border: isFirst
+                    ? Border.all(color: cs.primary.withValues(alpha: 0.3))
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              '$modeLabel  S: ${s.slope.toStringAsFixed(2)}  O: ${s.offset.toStringAsFixed(1)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: cs.onSurface,
+                              ),
+                            ),
+                            if (isFirst) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: cs.primary,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'ULTIMO',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: cs.onPrimary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          dateLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                        if (s.smartTip.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            s.smartTip,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          if (widget.aiHistory.length > 5)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '+ altri ${widget.aiHistory.length - 5} apply precedenti',
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRoomStatRow(BuildContext context, RoomComfortStat s) {
     final cs = Theme.of(context).colorScheme;
     final bool isCold = s.dominantIssue == RoomComfortIssue.tooCold;
@@ -568,5 +723,15 @@ class _ResultsPageState extends State<ResultsPage> {
         ],
       ),
     );
+  }
+}
+
+// Helper extension per toIndexedMap
+extension _IndexedMap<T> on Iterable<T> {
+  Iterable<R> toIndexedMap<R>(R Function(int index, T item) f) sync* {
+    int i = 0;
+    for (final item in this) {
+      yield f(i++, item);
+    }
   }
 }

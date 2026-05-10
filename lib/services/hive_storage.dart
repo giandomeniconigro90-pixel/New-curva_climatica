@@ -2,14 +2,49 @@
 
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
 import '../core/constants/room_constants.dart';
 import '../models/daily_record_dto.dart';
+
+/// Snapshot di un singolo apply AI, usato per lo storico e l'undo.
+class AiApplySnapshot {
+  final double slope;
+  final double offset;
+  final String mode; // 'heating' | 'cooling'
+  final String appliedAt; // ISO-8601
+  final String smartTip;
+
+  const AiApplySnapshot({
+    required this.slope,
+    required this.offset,
+    required this.mode,
+    required this.appliedAt,
+    required this.smartTip,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'slope': slope,
+        'offset': offset,
+        'mode': mode,
+        'appliedAt': appliedAt,
+        'smartTip': smartTip,
+      };
+
+  factory AiApplySnapshot.fromJson(Map<String, dynamic> j) => AiApplySnapshot(
+        slope: (j['slope'] as num).toDouble(),
+        offset: (j['offset'] as num).toDouble(),
+        mode: j['mode'] as String,
+        appliedAt: j['appliedAt'] as String,
+        smartTip: j['smartTip'] as String? ?? '',
+      );
+}
 
 class AppStorage {
   static const String _boxName = 'clima_sense_box';
   static const String _recordsBoxName = 'daily_records_box';
 
   static const String _stagingPrefix = '__new__';
+  static const String _aiHistoryKey = 'aiApplyHistory';
 
   /// Prezzo reale A2A Click Luce Monoraria (IVA 10% inclusa).
   static const double _defaultCostPerKwh = 0.14891;
@@ -54,17 +89,14 @@ class AppStorage {
     }
   }
 
-  /// Migrazione stanze: garantisce che le zone fisiche obbligatorie
-  /// (Piano Terra, Primo Piano) siano sempre presenti in cima alla lista.
   static Future<void> _migrateRooms() async {
     final box = Hive.box(_boxName);
     final stored = box.get('customRooms');
-    if (stored == null) return; // nessuna lista salvata: usa i default
+    if (stored == null) return;
 
     final current = List<String>.from(stored as List);
     bool changed = false;
 
-    // Inserisce le zone fisse in cima se mancanti, nell'ordine corretto
     for (final zone in RoomConstants.defaultRooms.reversed) {
       if (!current.contains(zone)) {
         current.insert(0, zone);
@@ -77,19 +109,6 @@ class AppStorage {
     }
   }
 
-  /// FIX #2 — Crash-recovery chiave-per-chiave.
-  ///
-  /// Scenario di crash: l'app si interrompe durante [saveRecords] dopo che
-  /// alcune chiavi definitive sono già state scritte ma prima che tutte
-  /// vengano promosse dallo staging.
-  ///
-  /// Logica precedente: promuoveva lo staging SOLO se non esistevano chiavi
-  /// definitive → se almeno una definitiva era già presente, lo staging
-  /// veniva eliminato silenziosamente, perdendo i record non ancora promossi.
-  ///
-  /// Nuova logica: per ogni chiave staging, se la corrispondente chiave
-  /// definitiva è assente, la promuove. In questo modo il recovery è
-  /// granulare e non dipende dall'esistenza di ALTRE chiavi definitive.
   static Future<void> _recoverStagingIfNeeded() async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
 
@@ -107,7 +126,6 @@ class AppStorage {
 
     for (final sk in stagingKeys) {
       final definitiveKey = sk.substring(_stagingPrefix.length);
-      // Promuovi solo se la chiave definitiva non esiste ancora.
       if (!definitiveKeys.contains(definitiveKey)) {
         final record = box.get(sk);
         if (record != null) {
@@ -116,8 +134,6 @@ class AppStorage {
       }
     }
 
-    // Pulisce SEMPRE tutto lo staging, a prescindere da quante chiavi
-    // definitive esistessero prima del recovery.
     await box.deleteAll(stagingKeys);
   }
 
@@ -234,6 +250,51 @@ class AppStorage {
     await saveCoolingOffset(0.0);
     await saveLastAiApplyHeatingIso(null);
     await saveLastAiApplyCoolingIso(null);
+    await clearAiHistory();
+  }
+
+  // --- AI HISTORY (F4) ---
+
+  /// Restituisce la lista degli snapshot AI salvati (più recente in cima).
+  static List<AiApplySnapshot> getAiHistory() {
+    final box = Hive.box(_boxName);
+    final raw = box.get(_aiHistoryKey);
+    if (raw == null) return [];
+    try {
+      final list = raw is String
+          ? jsonDecode(raw) as List
+          : raw as List;
+      return list
+          .map((e) => AiApplySnapshot.fromJson(
+              Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Aggiunge uno snapshot in cima alla lista (max 20 voci).
+  static Future<void> addAiSnapshot(AiApplySnapshot snapshot) async {
+    final history = getAiHistory();
+    history.insert(0, snapshot);
+    if (history.length > 20) history.removeLast();
+    await Hive.box(_boxName)
+        .put(_aiHistoryKey, jsonEncode(history.map((s) => s.toJson()).toList()));
+  }
+
+  /// Rimuove il primo snapshot (l'ultimo apply) e lo restituisce.
+  /// Ritorna null se la lista è vuota.
+  static Future<AiApplySnapshot?> popLastAiSnapshot() async {
+    final history = getAiHistory();
+    if (history.isEmpty) return null;
+    final last = history.removeAt(0);
+    await Hive.box(_boxName)
+        .put(_aiHistoryKey, jsonEncode(history.map((s) => s.toJson()).toList()));
+    return last;
+  }
+
+  static Future<void> clearAiHistory() async {
+    await Hive.box(_boxName).delete(_aiHistoryKey);
   }
 
   // --- COSTI ---
@@ -256,7 +317,7 @@ class AppStorage {
     return Hive.box(_boxName).get('notificationTimeStr', defaultValue: '20:00');
   }
 
-  // --- CITTÀ METEO (override manuale GPS) ---
+  // --- CITTÀ METEO ---
   static String? getCityOverride() {
     final v = Hive.box(_boxName).get('cityOverride') as String?;
     return (v == null || v.trim().isEmpty) ? null : v.trim();
@@ -269,7 +330,6 @@ class AppStorage {
     } else {
       await box.put('cityOverride', city.trim());
     }
-    // Invalida cache meteo
     await box.delete('weatherCacheTemp');
     await box.delete('weatherCacheCity');
     await box.delete('weatherCacheTimestamp');
@@ -277,7 +337,6 @@ class AppStorage {
 
   // --- STANZE ---
   static Future<void> saveRooms(List<String> rooms) async {
-    // Garanzia: le zone fisse sono sempre presenti prima di salvare
     final toSave = List<String>.from(rooms);
     for (final zone in RoomConstants.defaultRooms.reversed) {
       if (!toSave.contains(zone)) toSave.insert(0, zone);
@@ -289,7 +348,6 @@ class AppStorage {
     final stored = Hive.box(_boxName).get('customRooms');
     if (stored == null) return List<String>.from(RoomConstants.defaultRooms);
     final rooms = List<String>.from(stored as List);
-    // Garanzia runtime: zone fisse sempre presenti
     for (final zone in RoomConstants.defaultRooms.reversed) {
       if (!rooms.contains(zone)) rooms.insert(0, zone);
     }
