@@ -5,12 +5,14 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../../../models/daily_record_dto.dart';
 import '../logic/curve_logic.dart';
+import 'slope_history_chart.dart';
 
 class CurveChartPage extends StatelessWidget {
   final double slope;
   final double offset;
   final SystemMode mode;
   final List<DailyRecordDTO> windowRecords;
+  final List<DailyRecordDTO> allRecords;
   final GlobalKey chartKey;
 
   const CurveChartPage({
@@ -19,6 +21,7 @@ class CurveChartPage extends StatelessWidget {
     required this.offset,
     required this.mode,
     required this.windowRecords,
+    required this.allRecords,
     required this.chartKey,
   });
 
@@ -67,6 +70,7 @@ class CurveChartPage extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 16),
+              // ── GRAFICO CURVA CLIMATICA ──────────────────────────────────
               RepaintBoundary(
                 key: chartKey,
                 child: Container(
@@ -267,11 +271,18 @@ class CurveChartPage extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 80),
                     ],
                   ),
                 ),
               ),
+              // ── GRAFICO STORICO SLOPE/OFFSET ─────────────────────────────
+              SlopeHistoryChart(
+                allRecords: allRecords,
+                currentSlope: slope,
+                currentOffset: offset,
+                mode: mode,
+              ),
+              const SizedBox(height: 80),
             ],
           ),
         ),
