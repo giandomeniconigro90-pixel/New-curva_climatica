@@ -60,11 +60,12 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  // Blocca SOLO i fetch automatici (cambio tab, rebuild, lifecycle).
-  // Il tap manuale sull'icona ☁️ NON è influenzato da questo flag.
+  // true dopo un auto-fetch RIUSCITO: blocca re-fetch automatici inutili.
+  // Si resetta se il fetch fallisce, se la città cambia o se l'app torna da background.
+  // Il tap manuale ☁️ NON è mai influenzato da questo flag.
   bool _autoFetchDone = false;
 
-  // Città al momento dell'ultimo fetch automatico completato.
+  // Città al momento dell'ultimo auto-fetch riuscito.
   String? _lastAutoFetchCity;
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
@@ -94,7 +95,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // App torna da background: resetta il flag per un nuovo fetch silenzioso.
       _autoFetchDone = false;
       _autoFetchIfNeeded();
     }
@@ -110,21 +110,19 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     if (!mounted) return;
     final currentCity = AppStorage.getCityOverride();
 
-    // Se la città è cambiata da quando è stato fatto l'ultimo auto-fetch,
-    // resetta il flag per ripetere il fetch con la nuova città.
+    // Resetta se la città è cambiata.
     if (_autoFetchDone && currentCity != _lastAutoFetchCity) {
       _autoFetchDone = false;
     }
 
-    // Esce subito: l'auto-fetch è già stato fatto in questa sessione.
+    // Auto-fetch già riuscito in questa sessione: niente da fare.
     if (_autoFetchDone) return;
 
-    // Marca come fatto PRIMA della chiamata asincrona.
-    _autoFetchDone = true;
+    // Marca la città corrente: se il fetch fallisce, _autoFetchDone resterà false
+    // e il prossimo trigger (cambio tab, resume) riproverà automaticamente.
     _lastAutoFetchCity = currentCity;
 
-    // Auto-fetch sempre silenzioso.
-    _fetchWeather(silent: true);
+    _fetchWeather(silent: true, isAutoFetch: true);
   }
 
   Color _cardColor(BuildContext context, Color base) {
@@ -140,16 +138,22 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     return '$age min fa';
   }
 
-  // _fetchWeather NON tocca _autoFetchDone: il tap manuale è sempre libero.
-  Future<void> _fetchWeather({bool silent = false}) async {
+  /// [isAutoFetch] = true: aggiorna _autoFetchDone solo in caso di successo.
+  /// Se fallisce, _autoFetchDone rimane false e il prossimo trigger riprova.
+  /// Il tap manuale usa isAutoFetch = false: non tocca mai _autoFetchDone.
+  Future<void> _fetchWeather({
+    bool silent = false,
+    bool isAutoFetch = false,
+  }) async {
     if (_isLoadingWeather) return;
 
     setState(() => _isLoadingWeather = true);
-    final cityAtFetch = AppStorage.getCityOverride();
     try {
       final result = await WeatherService.getDailyAvgTemp();
       if (!mounted) return;
       if (result != null) {
+        // Successo: marca l'auto-fetch come completato.
+        if (isAutoFetch) _autoFetchDone = true;
         setState(() {
           widget.externalTempController.text = result.temp.toStringAsFixed(1);
           _weatherLocation = result.locationName;
@@ -162,6 +166,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
           );
         }
       } else {
+        // Fallimento: se era auto-fetch, _autoFetchDone resta false → riproverà.
         if (!silent) {
           AppToast.show(
             'Meteo non disponibile. Controlla GPS e connessione.',
@@ -172,6 +177,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
+      // Errore: stesso comportamento del fallimento.
       if (mounted && !silent) {
         AppToast.show(
           'Errore recupero meteo',
