@@ -60,12 +60,12 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  // true non appena il fetch viene AVVIATO: blocca ogni ulteriore chiamata
-  // automatica durante la sessione.
-  bool _fetchStarted = false;
+  // Blocca SOLO i fetch automatici (cambio tab, rebuild, lifecycle).
+  // Il tap manuale sull'icona ☁️ NON è influenzato da questo flag.
+  bool _autoFetchDone = false;
 
-  // Città al momento dell'ultimo fetch completato.
-  String? _lastFetchedCity;
+  // Città al momento dell'ultimo fetch automatico completato.
+  String? _lastAutoFetchCity;
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
   static const Color _colorConsumo      = Color(0xFF66BB6A);
@@ -94,7 +94,8 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _fetchStarted = false;
+      // App torna da background: resetta il flag per un nuovo fetch silenzioso.
+      _autoFetchDone = false;
       _autoFetchIfNeeded();
     }
   }
@@ -109,15 +110,20 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     if (!mounted) return;
     final currentCity = AppStorage.getCityOverride();
 
-    // Resetta il flag solo se la città è cambiata dall'ultimo fetch.
-    if (_fetchStarted && currentCity != _lastFetchedCity) {
-      _fetchStarted = false;
+    // Se la città è cambiata da quando è stato fatto l'ultimo auto-fetch,
+    // resetta il flag per ripetere il fetch con la nuova città.
+    if (_autoFetchDone && currentCity != _lastAutoFetchCity) {
+      _autoFetchDone = false;
     }
 
-    // Guard principale: esce subito se il fetch è già stato avviato.
-    if (_fetchStarted) return;
+    // Esce subito: l'auto-fetch è già stato fatto in questa sessione.
+    if (_autoFetchDone) return;
 
-    // Auto-fetch sempre silenzioso: il toast appare solo su tap manuale ☁️.
+    // Marca come fatto PRIMA della chiamata asincrona.
+    _autoFetchDone = true;
+    _lastAutoFetchCity = currentCity;
+
+    // Auto-fetch sempre silenzioso.
     _fetchWeather(silent: true);
   }
 
@@ -134,15 +140,12 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     return '$age min fa';
   }
 
+  // _fetchWeather NON tocca _autoFetchDone: il tap manuale è sempre libero.
   Future<void> _fetchWeather({bool silent = false}) async {
-    // Guard doppio: blocca sia chiamate automatiche duplicate sia tap manuali
-    // sovrapposti mentre il fetch è già in corso.
     if (_isLoadingWeather) return;
 
-    _fetchStarted = true;
-    final cityAtFetch = AppStorage.getCityOverride();
-
     setState(() => _isLoadingWeather = true);
+    final cityAtFetch = AppStorage.getCityOverride();
     try {
       final result = await WeatherService.getDailyAvgTemp();
       if (!mounted) return;
@@ -150,7 +153,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         setState(() {
           widget.externalTempController.text = result.temp.toStringAsFixed(1);
           _weatherLocation = result.locationName;
-          _lastFetchedCity = cityAtFetch;
         });
         if (!silent) {
           AppToast.show(
@@ -160,7 +162,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
           );
         }
       } else {
-        setState(() => _lastFetchedCity = cityAtFetch);
         if (!silent) {
           AppToast.show(
             'Meteo non disponibile. Controlla GPS e connessione.',
@@ -171,15 +172,12 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _lastFetchedCity = cityAtFetch);
-        if (!silent) {
-          AppToast.show(
-            'Errore recupero meteo',
-            context: context,
-            level: ToastLevel.error,
-          );
-        }
+      if (mounted && !silent) {
+        AppToast.show(
+          'Errore recupero meteo',
+          context: context,
+          level: ToastLevel.error,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoadingWeather = false);
