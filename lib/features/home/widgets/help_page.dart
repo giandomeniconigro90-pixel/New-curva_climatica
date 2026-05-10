@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/hive_storage.dart';
 import '../../../services/theme_notifier.dart';
+import '../../../utils/app_toast.dart';
 
 class HelpPage extends StatefulWidget {
   final VoidCallback? onResetCalibration;
@@ -49,16 +50,12 @@ class _HelpPageState extends State<HelpPage> {
     await AppStorage.saveCityOverride(city.isEmpty ? null : city);
     setState(() => _savedCity = city.isEmpty ? null : city);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            city.isEmpty
-                ? 'Città rimossa: verrà usato il GPS'
-                : 'Città impostata: $city',
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 2),
-        ),
+      AppToast.show(
+        city.isEmpty
+            ? 'Citt\u00e0 rimossa: verr\u00e0 usato il GPS'
+            : 'Citt\u00e0 impostata: $city',
+        context: context,
+        level: ToastLevel.success,
       );
     }
   }
@@ -72,7 +69,7 @@ class _HelpPageState extends State<HelpPage> {
           _buildHeader(context),
           const SizedBox(height: 20),
 
-          // ── SEZIONE 1: CONCETTI BASE ─────────────────────────────────
+          // ── SEZIONE 1: CONCETTI BASE ───────────────────────────────────────
           _buildSectionTitle(context, 'Concetti Base'),
           _buildExpandableCard(
             context: context,
@@ -126,7 +123,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 2: FLUSSO QUOTIDIANO ───────────────────────────────
+          // ── SEZIONE 2: FLUSSO QUOTIDIANO ──────────────────────────────────────
           _buildSectionTitle(context, 'Utilizzo Quotidiano'),
           _buildExpandableCard(
             context: context,
@@ -157,7 +154,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 3: AI E ANALISI ──────────────────────────────────────
+          // ── SEZIONE 3: AI E ANALISI ──────────────────────────────────────────
           _buildSectionTitle(context, 'Intelligenza Artificiale'),
           _buildExpandableCard(
             context: context,
@@ -202,7 +199,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 4: COMFORT E STANZE ────────────────────────────────
+          // ── SEZIONE 4: COMFORT E STANZE ──────────────────────────────────
           _buildSectionTitle(context, 'Comfort e Stanze'),
           _buildExpandableCard(
             context: context,
@@ -232,7 +229,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 5: TILE ESTERNA ──────────────────────────────────────
+          // ── SEZIONE 5: TILE ESTERNA ───────────────────────────────────────
           _buildSectionTitle(context, 'Tile Temperatura Esterna'),
           _buildExpandableCard(
             context: context,
@@ -250,7 +247,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 6: NOTIFICHE ────────────────────────────────────────
+          // ── SEZIONE 6: NOTIFICHE ───────────────────────────────────────
           _buildSectionTitle(context, 'Notifiche'),
           _buildExpandableCard(
             context: context,
@@ -264,7 +261,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 7: CASA X-LAM E VMC ────────────────────────────────
+          // ── SEZIONE 7: CASA X-LAM E VMC ──────────────────────────────────
           _buildSectionTitle(context, 'Casa X-LAM + VMC con Recuperatore'),
           _buildExpandableCard(
             context: context,
@@ -317,7 +314,7 @@ class _HelpPageState extends State<HelpPage> {
           // ── SEZIONE 8: STRUMENTI AVANZATI ──────────────────────────────
           _buildSectionTitle(context, 'Strumenti Avanzati'),
 
-          // ── CARD CITTÀ METEO ──────────────────────────────────────────
+          // ── CARD CITT\u00c0 METEO ─────────────────────────────────────────────
           _buildCityCard(context),
           const SizedBox(height: 12),
 
@@ -391,7 +388,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 9: FAQ ────────────────────────────────────────────────
+          // ── SEZIONE 9: FAQ ──────────────────────────────────────────────
           _buildSectionTitle(context, 'Domande Frequenti'),
           _buildExpandableCard(
             context: context,
@@ -457,7 +454,7 @@ class _HelpPageState extends State<HelpPage> {
     );
   }
 
-  // ── CARD CITTÀ METEO ─────────────────────────────────────────────────────
+  // ── CARD CITT\u00c0 METEO ───────────────────────────────────────────────────
   Widget _buildCityCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
@@ -568,7 +565,7 @@ class _HelpPageState extends State<HelpPage> {
     );
   }
 
-  // ── WIDGETS ───────────────────────────────────────────────────────────────
+  // ── WIDGETS ───────────────────────────────────────────────────────────
 
   Widget _buildThemeCard(BuildContext context) {
     final themeNotifier = context.watch<ThemeNotifier>();
