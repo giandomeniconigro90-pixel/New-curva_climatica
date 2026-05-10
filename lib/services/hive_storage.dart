@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import '../core/constants/room_constants.dart';
 import '../models/daily_record_dto.dart';
+import 'hive_migration_runner.dart';
 
 /// Snapshot di un singolo apply AI, usato per lo storico e l'undo.
 class AiApplySnapshot {
@@ -46,11 +47,11 @@ class AppStorage {
   static const String _stagingPrefix = '__new__';
   static const String _aiHistoryKey = 'aiApplyHistory';
 
-  /// Prezzo reale A2A Click Luce Monoraria (IVA 10% inclusa).
   static const double _defaultCostPerKwh = 0.14891;
 
   static String _recordKey(DailyRecordDTO r) => '${r.dateIso}_${r.mode}';
-  static String _stagingKey(DailyRecordDTO r) => '$_stagingPrefix${_recordKey(r)}';
+  static String _stagingKey(DailyRecordDTO r) =>
+      '$_stagingPrefix${_recordKey(r)}';
 
   static DailyRecordDTO _cloneRecord(DailyRecordDTO r) => DailyRecordDTO(
         dateIso: r.dateIso,
@@ -67,9 +68,9 @@ class AppStorage {
         pvProduction: r.pvProduction,
       );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // INIT — con gestione errori robusta (#2)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
+  // INIT
+  // ─────────────────────────────────────────────────────────────────────────────
 
   static Future<void> init() async {
     try {
@@ -79,78 +80,40 @@ class AppStorage {
       }
       await Hive.openBox(_boxName);
       await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
+      // Recupero staging da crash precedenti
       await _recoverStagingIfNeeded();
-      await _migrateCostPerKwh();
-      await _migrateRooms();
+      // Esegue le migrazioni mancanti in modo versionato
+      await HiveMigrationRunner.run();
     } on HiveError catch (e) {
-      // Box corrotto: tentiamo una reinizializzazione pulita.
-      // I dati vengono persi ma l'app non crasha.
       debugPrint('[AppStorage] HiveError durante init: $e — tento recupero.');
       await _tryRecoverCorruptedBoxes();
     } catch (e) {
       debugPrint('[AppStorage] Errore imprevisto durante init: $e');
-      // Proseguiamo comunque: l'app parte con dati vuoti.
     }
   }
 
-  /// Tenta di eliminare e riaprire i box corrotti.
   static Future<void> _tryRecoverCorruptedBoxes() async {
     try {
-      // Chiudi tutto ciò che è aperto
       await Hive.close();
-      // Reinizializza da zero (i file vengono sovrascritti al prossimo put)
       await Hive.initFlutter();
       if (!Hive.isAdapterRegistered(0)) {
         Hive.registerAdapter(DailyRecordDTOAdapter());
       }
-      // Elimina i box corrotti e riaprili vuoti
       await Hive.deleteBoxFromDisk(_boxName);
       await Hive.deleteBoxFromDisk(_recordsBoxName);
       await Hive.openBox(_boxName);
       await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
-      debugPrint('[AppStorage] Recupero completato: box reinizializzati vuoti.');
+      // Dopo recovery il box è vuoto: le migrazioni non trovano
+      // dati legacy, ma registrano comunque la versione corrente.
+      await HiveMigrationRunner.run();
+      debugPrint('[AppStorage] Recupero completato: box reinizializzati.');
     } catch (e) {
       debugPrint('[AppStorage] Recupero fallito: $e');
     }
   }
 
-  static Future<void> _migrateCostPerKwh() async {
-    try {
-      final box = Hive.box(_boxName);
-      final stored = box.get('costPerKwh');
-      final isLegacy = stored == null ||
-          (stored is double && (stored == 0.25 || stored == 0.28));
-      if (isLegacy) {
-        await box.put('costPerKwh', _defaultCostPerKwh);
-      }
-    } catch (e) {
-      debugPrint('[AppStorage] _migrateCostPerKwh error: $e');
-    }
-  }
-
-  static Future<void> _migrateRooms() async {
-    try {
-      final box = Hive.box(_boxName);
-      final stored = box.get('customRooms');
-      if (stored == null) return;
-
-      final current = List<String>.from(stored as List);
-      bool changed = false;
-
-      for (final zone in RoomConstants.defaultRooms.reversed) {
-        if (!current.contains(zone)) {
-          current.insert(0, zone);
-          changed = true;
-        }
-      }
-
-      if (changed) {
-        await box.put('customRooms', current);
-      }
-    } catch (e) {
-      debugPrint('[AppStorage] _migrateRooms error: $e');
-    }
-  }
+  // _migrateCostPerKwh e _migrateRooms rimossi:
+  // la loro logica vive ora in HiveMigrationRunner v1 e v2.
 
   static Future<void> _recoverStagingIfNeeded() async {
     try {
@@ -184,7 +147,10 @@ class AppStorage {
     }
   }
 
-  // --- APP STATE ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // APP STATE
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static bool isAppInitialized() {
     try {
       return Hive.box(_boxName).get('isInitialized', defaultValue: false);
@@ -201,7 +167,10 @@ class AppStorage {
     }
   }
 
-  // --- CONFIGURAZIONE CURVE ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CONFIGURAZIONE CURVE
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static Future<void> saveSlope(double value) async {
     try { await Hive.box(_boxName).put('heatingSlope', value); }
     catch (e) { debugPrint('[AppStorage] saveSlope error: $e'); }
@@ -252,7 +221,10 @@ class AppStorage {
     catch (_) { return 'heating'; }
   }
 
-  // --- TEMA ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TEMA
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static ThemeMode getThemeMode() {
     try {
       final stored =
@@ -281,7 +253,10 @@ class AppStorage {
     }
   }
 
-  // --- AI FLAGS ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // AI FLAGS
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static Future<void> saveLastAiApplyHeatingIso(String? iso) async {
     try {
       final box = Hive.box(_boxName);
@@ -328,7 +303,10 @@ class AppStorage {
     await clearAiHistory();
   }
 
-  // --- AI HISTORY (F4) ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // AI HISTORY (F4)
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static List<AiApplySnapshot> getAiHistory() {
     try {
       final box = Hive.box(_boxName);
@@ -352,8 +330,9 @@ class AppStorage {
       final history = getAiHistory();
       history.insert(0, snapshot);
       if (history.length > 20) history.removeLast();
-      await Hive.box(_boxName)
-          .put(_aiHistoryKey, jsonEncode(history.map((s) => s.toJson()).toList()));
+      await Hive.box(_boxName).put(
+          _aiHistoryKey,
+          jsonEncode(history.map((s) => s.toJson()).toList()));
     } catch (e) {
       debugPrint('[AppStorage] addAiSnapshot error: $e');
     }
@@ -364,8 +343,9 @@ class AppStorage {
       final history = getAiHistory();
       if (history.isEmpty) return null;
       final last = history.removeAt(0);
-      await Hive.box(_boxName)
-          .put(_aiHistoryKey, jsonEncode(history.map((s) => s.toJson()).toList()));
+      await Hive.box(_boxName).put(
+          _aiHistoryKey,
+          jsonEncode(history.map((s) => s.toJson()).toList()));
       return last;
     } catch (e) {
       debugPrint('[AppStorage] popLastAiSnapshot error: $e');
@@ -378,10 +358,17 @@ class AppStorage {
     catch (e) { debugPrint('[AppStorage] clearAiHistory error: $e'); }
   }
 
-  // --- COSTI ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // COSTI
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static double getCostPerKwh() {
-    try { return Hive.box(_boxName).get('costPerKwh', defaultValue: _defaultCostPerKwh); }
-    catch (_) { return _defaultCostPerKwh; }
+    try {
+      return Hive.box(_boxName)
+          .get('costPerKwh', defaultValue: _defaultCostPerKwh);
+    } catch (_) {
+      return _defaultCostPerKwh;
+    }
   }
 
   static Future<void> saveCostPerKwh(double value) async {
@@ -389,7 +376,10 @@ class AppStorage {
     catch (e) { debugPrint('[AppStorage] saveCostPerKwh error: $e'); }
   }
 
-  // --- NOTIFICHE ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // NOTIFICHE
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static Future<void> saveNotificationTime(TimeOfDay time) async {
     try {
       final h = time.hour.toString().padLeft(2, '0');
@@ -401,11 +391,18 @@ class AppStorage {
   }
 
   static String? getNotificationTime() {
-    try { return Hive.box(_boxName).get('notificationTimeStr', defaultValue: '20:00'); }
-    catch (_) { return '20:00'; }
+    try {
+      return Hive.box(_boxName)
+          .get('notificationTimeStr', defaultValue: '20:00');
+    } catch (_) {
+      return '20:00';
+    }
   }
 
-  // --- CITTÀ METEO ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CITTÀ METEO
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static String? getCityOverride() {
     try {
       final v = Hive.box(_boxName).get('cityOverride') as String?;
@@ -431,7 +428,10 @@ class AppStorage {
     }
   }
 
-  // --- STANZE ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // STANZE
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static Future<void> saveRooms(List<String> rooms) async {
     try {
       final toSave = List<String>.from(rooms);
@@ -458,10 +458,17 @@ class AppStorage {
     }
   }
 
-  // --- WIZARD IMPIANTO ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // WIZARD IMPIANTO
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static String getPlantType() {
-    try { return Hive.box(_boxName).get('plantType', defaultValue: 'heatpump') as String; }
-    catch (_) { return 'heatpump'; }
+    try {
+      return Hive.box(_boxName).get('plantType', defaultValue: 'heatpump')
+          as String;
+    } catch (_) {
+      return 'heatpump';
+    }
   }
 
   static Future<void> savePlantType(String type) async {
@@ -470,8 +477,11 @@ class AppStorage {
   }
 
   static bool getHasPv() {
-    try { return Hive.box(_boxName).get('hasPv', defaultValue: false) as bool; }
-    catch (_) { return false; }
+    try {
+      return Hive.box(_boxName).get('hasPv', defaultValue: false) as bool;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<void> saveHasPv(bool value) async {
@@ -480,8 +490,11 @@ class AppStorage {
   }
 
   static bool getHasGridMeter() {
-    try { return Hive.box(_boxName).get('hasGridMeter', defaultValue: false) as bool; }
-    catch (_) { return false; }
+    try {
+      return Hive.box(_boxName).get('hasGridMeter', defaultValue: false) as bool;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<void> saveHasGridMeter(bool value) async {
@@ -489,7 +502,10 @@ class AppStorage {
     catch (e) { debugPrint('[AppStorage] saveHasGridMeter error: $e'); }
   }
 
-  // --- RECORDS ---
+  // ─────────────────────────────────────────────────────────────────────────────
+  // RECORDS
+  // ─────────────────────────────────────────────────────────────────────────────
+
   static Future<void> saveRecord(DailyRecordDTO record) async {
     try {
       final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
@@ -499,9 +515,6 @@ class AppStorage {
     }
   }
 
-  /// Salva tutti i record con pattern staging → promote → cleanup.
-  /// In caso di errore logga e rilancia per permettere al notifier
-  /// di mostrare un toast all'utente.
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     try {
       final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
@@ -525,7 +538,7 @@ class AppStorage {
       await box.deleteAll(staging.keys.toList());
     } on HiveError catch (e) {
       debugPrint('[AppStorage] saveRecords HiveError: $e');
-      rethrow; // Il chiamante (HomeNotifier) mostrerà un toast
+      rethrow;
     } catch (e) {
       debugPrint('[AppStorage] saveRecords error: $e');
       rethrow;
@@ -551,13 +564,14 @@ class AppStorage {
       return getRecords();
     } catch (e) {
       debugPrint('[AppStorage] loadRecords error: $e');
-      return []; // Fallback sicuro: lista vuota invece di crash
+      return [];
     }
   }
 
   static Future<void> deleteRecord(String dateIso, String mode) async {
     try {
-      await Hive.box<DailyRecordDTO>(_recordsBoxName).delete('${dateIso}_$mode');
+      await Hive.box<DailyRecordDTO>(_recordsBoxName)
+          .delete('${dateIso}_$mode');
     } catch (e) {
       debugPrint('[AppStorage] deleteRecord error: $e');
     }
