@@ -356,8 +356,23 @@ class _ResultsPageState extends State<ResultsPage> {
 
   Widget _buildAiCard(BuildContext context, CurveSuggestion suggestion) {
     final cs = Theme.of(context).colorScheme;
-    final int recentRecordsCount = widget.records.length;
-    final bool hasEnoughData = recentRecordsCount >= 5;
+
+    // FIX #5 — Usare suggestion.learningProgress invece di widget.records.length.
+    //
+    // Problema precedente: recentRecordsCount = widget.records.length mostrava
+    // il TOTALE dei record per la modalità corrente (es. 30), non il numero di
+    // record nella finestra AI dopo l'ultimo apply (es. 3).
+    // Conseguenza visibile:
+    //   • Bottone "Applica" abilitato (hasEnoughData = true perché 30 >= 5)
+    //     anche quando l'AI stava ancora in fase di apprendimento.
+    //   • Badge "Rilevamenti: 30" fuorviante mentre il messaggio diceva
+    //     "ancora 2 giorni".
+    // suggestion.learningProgress è già il conteggio corretto: viene impostato
+    // da computeOptimalCurveSuggestion sul numero di record filtrati dalla
+    // finestra temporale.
+    final int windowCount = suggestion.learningProgress;
+    final bool hasEnoughData = windowCount >= 5;
+
     final bool valuesAreEqual = widget.slope != null &&
         widget.offset != null &&
         (suggestion.suggestedSlope - widget.slope!).abs() < 0.05 &&
@@ -428,7 +443,7 @@ class _ResultsPageState extends State<ResultsPage> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'Rilevamenti: $recentRecordsCount',
+                  'Rilevamenti: $windowCount / 5',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -460,7 +475,7 @@ class _ResultsPageState extends State<ResultsPage> {
                       ? 'Valori identici (nessuna modifica)'
                       : hasEnoughData
                           ? 'Applica Curva (S:${suggestion.suggestedSlope.toStringAsFixed(1)} O:${suggestion.suggestedOffset.toStringAsFixed(1)})'
-                          : 'Serve 5+ rilevamenti ($recentRecordsCount)',
+                          : 'Serve 5+ rilevamenti ($windowCount/5)',
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: hasEnoughData && !valuesAreEqual
