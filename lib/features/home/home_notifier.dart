@@ -274,9 +274,10 @@ class HomeNotifier extends ChangeNotifier {
 
     if (!hasChange) return null;
 
-    if (suggestion.smartTip != null &&
-        suggestion.smartTip!.isNotEmpty &&
-        !suggestion.smartTip!.toLowerCase().contains('apprendimento')) {
+    // FIX #4b: smartTip è String non-nullable, il null-check era ridondante
+    // e produceva un warning del linter. Rimossa la condizione != null.
+    if (suggestion.smartTip.isNotEmpty &&
+        !suggestion.smartTip.toLowerCase().contains('apprendimento')) {
       return suggestion.smartTip;
     }
 
@@ -416,6 +417,18 @@ class HomeNotifier extends ChangeNotifier {
     await saveToHive();
   }
 
+  /// FIX #4 — deleteToday ora chiama sempre clearFields() prima di navigare.
+  ///
+  /// Problema precedente: se [editingIndex] puntava al record di oggi e
+  /// l'utente eliminava quel record, il codice azzerava solo [editingIndex]
+  /// ma lasciava tutti i controller (externalTemp, consumption, stanze, ecc.)
+  /// pre-compilati con i valori del record appena eliminato. La chiamata
+  /// successiva a [startEditRecordByAllIndex] con un indice non aggiornato
+  /// poteva poi caricare il record sbagliato nella form.
+  ///
+  /// La fix: clearFields() azzera editingIndex E tutti i controller in un
+  /// unico posto. Il comportamento visibile è che dopo la cancellazione
+  /// la form di inserimento risulta vuota, come ci si aspetta.
   Future<void> deleteToday(BuildContext context) async {
     final today = formatItalianDate(DateTime.now());
     final modeStr = currentMode.toModeString();
@@ -429,9 +442,9 @@ class HomeNotifier extends ChangeNotifier {
       );
       return;
     }
-    if (editingIndex == index) editingIndex = null;
     allRecords.removeAt(index);
-    notifyListeners();
+    // clearFields azzera editingIndex + tutti i controller in un colpo solo.
+    clearFields();
     await saveToHive();
     currentPage = 0;
     pageController.jumpToPage(0);
@@ -567,8 +580,6 @@ class HomeNotifier extends ChangeNotifier {
     }
 
     try {
-      // Singola chiamata: il grafico è già visibile dopo il delay di 800ms.
-      // Un secondo tentativo immediato non aggiunge robustezza.
       final chartImage = await captureChart();
       final windowRecords = recordsSinceLastApply(currentMode);
       final suggestion =
@@ -691,7 +702,6 @@ class HomeNotifier extends ChangeNotifier {
           .map((j) => DailyRecordDTO.fromJson(j as Map<String, dynamic>))
           .toList();
 
-      // Legge la modalità dal backup; se assente o non riconosciuta usa heating.
       final modeStr = settings['mode'] as String? ?? 'heating';
       final restoredMode = modeStr == 'cooling'
           ? SystemMode.cooling
