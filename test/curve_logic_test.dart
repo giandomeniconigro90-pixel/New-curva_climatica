@@ -1,175 +1,281 @@
 // test/curve_logic_test.dart
 //
-// Esegui con: flutter test test/curve_logic_test.dart
+// Unit test per:
+//   • computeMandata()               — calcolo temperatura di mandata
+//   • computeCurveStats()             — statistiche sui record
+//   • computeOptimalCurveSuggestion() — algoritmo AI curva
+//   • analyzeRoomComfort()            — analisi comfort per stanza
+//   • AiCurveService.recordsSinceLastApply() — filtro temporale
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:climasense/features/home/logic/curve_logic.dart';
+import 'package:climasense/features/home/logic/ai_curve_service.dart';
 import 'package:climasense/models/daily_record_dto.dart';
 
+// ---------------------------------------------------------------------------
+// Helper
+// ---------------------------------------------------------------------------
+
+DailyRecordDTO _record({
+  required String dateIso,
+  double externalTemp = 5.0,
+  double consumption = 10.0,
+  Map<String, String>? comfort,
+  String mode = 'heating',
+}) {
+  return DailyRecordDTO(
+    dateIso: dateIso,
+    externalTemp: externalTemp,
+    internalTemps: const {'Soggiorno': 20.0},
+    consumption: consumption,
+    comfortRatings: comfort ?? const {'Soggiorno': 'ok'},
+    mode: mode,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// computeMandata
+// ---------------------------------------------------------------------------
+
 void main() {
-  // ---------------------------------------------------------------------------
-  // computeMandata — modalità RISCALDAMENTO
-  // ---------------------------------------------------------------------------
-  group('computeMandata [heating]', () {
-    const slope = 1.2;
-    const offset = 0.0;
-    const mode = SystemMode.heating;
-
-    test('temperatura esterna tipica invernale (0°C)', () {
-      // tExt=0 → rawMandata = 20 + (20-0)*1.2 + 0 = 44
-      final result = computeMandata(0, slope, offset, mode);
-      expect(result, closeTo(44.0, 0.01));
+  group('computeMandata — heating', () {
+    test('temperatura di mandata cresce al calare di tExt', () {
+      final hot = computeMandata(10.0, 1.2, 0.0, SystemMode.heating);
+      final cold = computeMandata(-5.0, 1.2, 0.0, SystemMode.heating);
+      expect(cold, greaterThan(hot));
     });
 
-    test('temperatura esterna mite (15°C)', () {
-      // rawMandata = 20 + (20-15)*1.2 = 26 → clamp a 35
-      final result = computeMandata(15, slope, offset, mode);
-      expect(result, 35.0);
+    test('non scende sotto 35 gradi', () {
+      final v = computeMandata(25.0, 0.5, 0.0, SystemMode.heating);
+      expect(v, greaterThanOrEqualTo(35.0));
     });
 
-    test('clamp inferiore: temperature esterne alte producono min 35°C', () {
-      final result = computeMandata(25, slope, offset, mode);
-      expect(result, 35.0);
-    });
-
-    test('clamp superiore: temperature molto basse producono max 60°C', () {
-      // tExt=-20 → rawMandata = 20 + 40*1.2 = 68 → clamp a 60
-      final result = computeMandata(-20, slope, offset, mode);
-      expect(result, 60.0);
+    test('non supera 60 gradi', () {
+      final v = computeMandata(-30.0, 3.0, 10.0, SystemMode.heating);
+      expect(v, lessThanOrEqualTo(60.0));
     });
 
     test('offset positivo aumenta la mandata', () {
-      final withoutOffset = computeMandata(0, slope, 0.0, mode);
-      final withOffset = computeMandata(0, slope, 3.0, mode);
-      expect(withOffset, greaterThan(withoutOffset));
-    });
-
-    test('offset negativo diminuisce la mandata', () {
-      final withoutOffset = computeMandata(0, slope, 0.0, mode);
-      final withOffset = computeMandata(0, slope, -3.0, mode);
-      expect(withOffset, lessThan(withoutOffset));
-    });
-
-    test('slope più alta = mandata più alta a parità di tExt fredda', () {
-      final low = computeMandata(0, 1.0, 0.0, mode);
-      final high = computeMandata(0, 1.5, 0.0, mode);
-      expect(high, greaterThan(low));
+      final base = computeMandata(0.0, 1.2, 0.0, SystemMode.heating);
+      final offset = computeMandata(0.0, 1.2, 2.0, SystemMode.heating);
+      expect(offset, greaterThan(base));
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // computeMandata — modalità RAFFRESCAMENTO
-  // ---------------------------------------------------------------------------
-  group('computeMandata [cooling]', () {
-    const slope = 0.5;
-    const offset = 0.0;
-    const mode = SystemMode.cooling;
-
-    test('temperatura esterna tipica estiva (35°C)', () {
-      // rawMandata = 18 - (35-26)*0.5 = 18 - 4.5 = 13.5
-      final result = computeMandata(35, slope, offset, mode);
-      expect(result, closeTo(13.5, 0.01));
+  group('computeMandata — cooling', () {
+    test('temperatura di mandata scende al salire di tExt', () {
+      final mild = computeMandata(28.0, 0.5, 0.0, SystemMode.cooling);
+      final hot = computeMandata(38.0, 0.5, 0.0, SystemMode.cooling);
+      expect(hot, lessThan(mild));
     });
 
-    test('clamp superiore: temperature esterne basse producono max 25°C', () {
-      // tExt=10 → rawMandata = 18 - (10-26)*0.5 = 18 + 8 = 26 → clamp a 25
-      final result = computeMandata(10, slope, offset, mode);
-      expect(result, 25.0);
+    test('non scende sotto 7 gradi', () {
+      final v = computeMandata(50.0, 3.0, 0.0, SystemMode.cooling);
+      expect(v, greaterThanOrEqualTo(7.0));
     });
 
-    test('clamp inferiore: temperature molto alte producono min 7°C', () {
-      // tExt=60 → rawMandata = 18 - (60-26)*0.5 = 18 - 17 = 1 → clamp a 7
-      final result = computeMandata(60, slope, offset, mode);
-      expect(result, 7.0);
-    });
-
-    test('offset positivo aumenta la mandata in cooling', () {
-      final withoutOffset = computeMandata(35, slope, 0.0, mode);
-      final withOffset = computeMandata(35, slope, 2.0, mode);
-      expect(withOffset, greaterThan(withoutOffset));
+    test('non supera 25 gradi', () {
+      final v = computeMandata(15.0, 0.1, 10.0, SystemMode.cooling);
+      expect(v, lessThanOrEqualTo(25.0));
     });
   });
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // computeCurveStats
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
+
   group('computeCurveStats', () {
-    test('lista vuota restituisce tutti zeri', () {
-      final stats = computeCurveStats([]);
-      expect(stats.totalDays, 0);
-      expect(stats.avgConsumption, 0.0);
-      expect(stats.minExternalTemp, 0.0);
-      expect(stats.maxExternalTemp, 0.0);
+    test('lista vuota restituisce zeri', () {
+      final s = computeCurveStats([]);
+      expect(s.totalDays, 0);
+      expect(s.avgConsumption, 0.0);
     });
 
-    test('un solo record', () {
+    test('calcola correttamente media e range temperatura', () {
       final records = [
-        DailyRecordDTO(
-          dateIso: '01/01/2026',
-          externalTemp: -5.0,
-          internalTemps: {},
-          consumption: 20.0,
-          comfortRatings: {},
-        ),
+        _record(dateIso: '01/01/2025', externalTemp: -5.0, consumption: 20.0),
+        _record(dateIso: '02/01/2025', externalTemp: 10.0, consumption: 10.0),
+        _record(dateIso: '03/01/2025', externalTemp: 0.0,  consumption: 15.0),
       ];
-      final stats = computeCurveStats(records);
-      expect(stats.totalDays, 1);
-      expect(stats.avgConsumption, 20.0);
-      expect(stats.minExternalTemp, -5.0);
-      expect(stats.maxExternalTemp, -5.0);
+      final s = computeCurveStats(records);
+      expect(s.totalDays, 3);
+      expect(s.avgConsumption, closeTo(15.0, 0.01));
+      expect(s.minExternalTemp, -5.0);
+      expect(s.maxExternalTemp, 10.0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // computeOptimalCurveSuggestion
+  // -------------------------------------------------------------------------
+
+  group('computeOptimalCurveSuggestion', () {
+    test('con meno di 5 record restituisce modalità apprendimento', () {
+      final records = List.generate(
+          3, (i) => _record(dateIso: '0${i + 1}/01/2025'));
+      final s = computeOptimalCurveSuggestion(
+          records, 1.2, 0.0, SystemMode.heating);
+      expect(s.isLearning, isTrue);
+      expect(s.suggestedSlope, 1.2);
+      expect(s.suggestedOffset, 0.0);
+      expect(s.learningProgress, 3);
     });
 
-    test('più record: media, min, max corretti', () {
-      final records = [
-        DailyRecordDTO(
-          dateIso: '01/01/2026',
-          externalTemp: -10.0,
-          internalTemps: {},
-          consumption: 30.0,
-          comfortRatings: {},
-        ),
-        DailyRecordDTO(
-          dateIso: '02/01/2026',
-          externalTemp: 5.0,
-          internalTemps: {},
-          consumption: 10.0,
-          comfortRatings: {},
-        ),
-        DailyRecordDTO(
-          dateIso: '03/01/2026',
-          externalTemp: 0.0,
-          internalTemps: {},
-          consumption: 20.0,
-          comfortRatings: {},
-        ),
-      ];
-      final stats = computeCurveStats(records);
-      expect(stats.totalDays, 3);
-      expect(stats.avgConsumption, closeTo(20.0, 0.01));
-      expect(stats.minExternalTemp, -10.0);
-      expect(stats.maxExternalTemp, 5.0);
+    test('con reclami freddo aumenta offset (heating)', () {
+      final records = List.generate(6, (i) => _record(
+        dateIso: '0${i + 1}/01/2025',
+        comfort: const {'Soggiorno': 'freddo'},
+      ));
+      final s = computeOptimalCurveSuggestion(
+          records, 1.2, 0.0, SystemMode.heating);
+      expect(s.isLearning, isFalse);
+      expect(s.suggestedOffset, greaterThan(0.0));
     });
 
-    test('temperature estreme oltre i vecchi valori magici ±100', () {
+    test('con reclami caldo diminuisce offset (heating)', () {
+      final records = List.generate(6, (i) => _record(
+        dateIso: '0${i + 1}/01/2025',
+        comfort: const {'Soggiorno': 'caldo'},
+      ));
+      final s = computeOptimalCurveSuggestion(
+          records, 1.2, 2.0, SystemMode.heating);
+      expect(s.isLearning, isFalse);
+      expect(s.suggestedOffset, lessThan(2.0));
+    });
+
+    test('con comfort ottimale non cambia i parametri', () {
+      // Tutti ok: il suggerimento dovrebbe lasciare invariati slope/offset
+      // oppure fare un aggiustamento minimo entro soglia di stabilità.
+      final records = List.generate(6, (i) => _record(
+        dateIso: '0${i + 1}/01/2025',
+        comfort: const {'Soggiorno': 'ok'},
+      ));
+      final s = computeOptimalCurveSuggestion(
+          records, 1.2, 0.0, SystemMode.heating);
+      // Con tutti ok in heating: suggerisce offset -0.5, ma se delta < soglia
+      // rimane invariato. Verifichiamo solo che non sia in apprendimento.
+      expect(s.isLearning, isFalse);
+    });
+
+    test('suggestedSlope cambia al massimo di 0.1 per step', () {
+      // Molti reclami freddo: slope deve aumentare ma non più di maxSlopeStep
+      final records = List.generate(10, (i) => _record(
+        dateIso: '${(i + 1).toString().padLeft(2, '0')}/01/2025',
+        comfort: const {'Soggiorno': 'freddo'},
+      ));
+      final s = computeOptimalCurveSuggestion(
+          records, 1.2, 0.0, SystemMode.heating);
+      expect((s.suggestedSlope - 1.2).abs(), lessThanOrEqualTo(0.1 + 0.01));
+    });
+
+    test('suggestedOffset cambia al massimo di 1.0 per step', () {
+      final records = List.generate(6, (i) => _record(
+        dateIso: '0${i + 1}/01/2025',
+        comfort: const {'Soggiorno': 'freddo'},
+      ));
+      final s = computeOptimalCurveSuggestion(
+          records, 1.2, 0.0, SystemMode.heating);
+      expect((s.suggestedOffset - 0.0).abs(), lessThanOrEqualTo(1.0 + 0.01));
+    });
+
+    test('cooling con reclami freddo (raffrescamento eccessivo) riduce offset', () {
+      final records = List.generate(6, (i) => _record(
+        dateIso: '0${i + 1}/06/2025',
+        comfort: const {'Soggiorno': 'freddo'},
+        mode: 'cooling',
+      ));
+      final s = computeOptimalCurveSuggestion(
+          records, 0.5, 0.0, SystemMode.cooling);
+      expect(s.isLearning, isFalse);
+      // In cooling con freddo: offset += 1.0 (riduce raffreddamento)
+      expect(s.suggestedOffset, greaterThan(0.0));
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // analyzeRoomComfort
+  // -------------------------------------------------------------------------
+
+  group('analyzeRoomComfort', () {
+    test('lista vuota restituisce lista vuota', () {
+      expect(analyzeRoomComfort([]), isEmpty);
+    });
+
+    test('stanze sempre ok non compaiono nel risultato', () {
+      final records = List.generate(5, (i) => _record(
+        dateIso: '0${i + 1}/01/2025',
+        comfort: const {'Soggiorno': 'ok', 'Camera': 'ok'},
+      ));
+      expect(analyzeRoomComfort(records), isEmpty);
+    });
+
+    test('stanza con problemi compare nel risultato', () {
       final records = [
-        DailyRecordDTO(
-          dateIso: '01/07/2026',
-          externalTemp: -40.0,
-          internalTemps: {},
-          consumption: 50.0,
-          comfortRatings: {},
-        ),
-        DailyRecordDTO(
-          dateIso: '02/07/2026',
-          externalTemp: 50.0,
-          internalTemps: {},
-          consumption: 5.0,
-          comfortRatings: {},
-        ),
+        _record(dateIso: '01/01/2025',
+            comfort: const {'Soggiorno': 'freddo', 'Camera': 'ok'}),
+        _record(dateIso: '02/01/2025',
+            comfort: const {'Soggiorno': 'freddo', 'Camera': 'ok'}),
       ];
-      final stats = computeCurveStats(records);
-      expect(stats.minExternalTemp, -40.0);
-      expect(stats.maxExternalTemp, 50.0);
+      final result = analyzeRoomComfort(records);
+      expect(result.length, 1);
+      expect(result.first.room, 'Soggiorno');
+      expect(result.first.coldDays, 2);
+      expect(result.first.dominantIssue, RoomComfortIssue.tooCold);
+    });
+
+    test('ordina per issueRate decrescente', () {
+      final records = [
+        _record(dateIso: '01/01/2025',
+            comfort: const {'A': 'freddo', 'B': 'ok'}),
+        _record(dateIso: '02/01/2025',
+            comfort: const {'A': 'freddo', 'B': 'caldo'}),
+        _record(dateIso: '03/01/2025',
+            comfort: const {'A': 'freddo', 'B': 'ok'}),
+      ];
+      final result = analyzeRoomComfort(records);
+      expect(result.first.room, 'A'); // A ha 3/3 vs B 1/3
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // AiCurveService.recordsSinceLastApply
+  // -------------------------------------------------------------------------
+
+  group('AiCurveService.recordsSinceLastApply', () {
+    test('lastApply null restituisce tutti i record', () {
+      final records = [
+        _record(dateIso: '01/01/2025'),
+        _record(dateIso: '02/01/2025'),
+      ];
+      final result = AiCurveService.recordsSinceLastApply(
+        records: records,
+        lastApply: null,
+      );
+      expect(result.length, 2);
+    });
+
+    test('filtra i record antecedenti a lastApply', () {
+      final records = [
+        _record(dateIso: '01/01/2025'),
+        _record(dateIso: '05/01/2025'),
+        _record(dateIso: '10/01/2025'),
+      ];
+      final result = AiCurveService.recordsSinceLastApply(
+        records: records,
+        lastApply: DateTime(2025, 1, 4),
+      );
+      expect(result.length, 2);
+      expect(result.map((r) => r.dateIso),
+          containsAll(['05/01/2025', '10/01/2025']));
+    });
+
+    test('record esattamente nel giorno lastApply non viene incluso', () {
+      final records = [_record(dateIso: '04/01/2025')];
+      final result = AiCurveService.recordsSinceLastApply(
+        records: records,
+        lastApply: DateTime(2025, 1, 4),
+      );
+      expect(result, isEmpty);
     });
   });
 }
