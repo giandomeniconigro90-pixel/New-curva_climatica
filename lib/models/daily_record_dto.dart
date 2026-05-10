@@ -23,51 +23,31 @@ class DailyRecordDTO extends HiveObject {
   final String note;
 
   @HiveField(6)
-  final String mode; // 'heating' o 'cooling'
+  final String mode;
 
-  /// Modalità operativa della pompa di calore (Sherpa Monobloc S2 E6).
-  /// Valori ammessi: 'riscaldamento', 'raffrescamento', 'spenta'.
-  /// Leggibile dall'app Comfort Home (Olimpia Splendid).
-  /// Null per i record creati prima di questo campo.
   @HiveField(7)
   final String? heatpumpMode;
 
-  /// Consumo giornaliero acqua calda sanitaria in kWh (Atlantic Calypso VM 150).
-  /// Leggibile dall'app Cozytouch (Atlantic).
-  /// Null se non inserito dall'utente.
   @HiveField(8)
   final double? consumptionACS;
 
-  /// Modalità operativa della caldaia.
-  /// Valori ammessi: 'accesa', 'standby', 'spenta'.
-  /// Leggibile dall'app Cozytouch (Atlantic).
-  /// Null per i record creati prima di questo campo.
   @HiveField(9)
   final String? boilerMode;
 
-  /// Energia prelevata dalla rete elettrica in kWh.
-  /// Leggibile dall'app ShinePhone (Growatt).
-  /// Null se non inserito dall'utente.
   @HiveField(10)
   final double? energyFromGrid;
 
-  /// Produzione fotovoltaica giornaliera in kWh.
-  /// Leggibile dall'app ShinePhone (Growatt).
-  /// Null se non inserito dall'utente.
   @HiveField(11)
   final double? pvProduction;
 
-  /// Valori ammessi per il campo [mode].
   static const Set<String> validModes = {'heating', 'cooling'};
 
-  /// Valori ammessi per il campo [heatpumpMode].
   static const Set<String> validHeatpumpModes = {
     'riscaldamento',
     'raffrescamento',
     'spenta',
   };
 
-  /// Valori ammessi per il campo [boilerMode].
   static const Set<String> validBoilerModes = {
     'accesa',
     'standby',
@@ -90,7 +70,6 @@ class DailyRecordDTO extends HiveObject {
   })  : note = note ?? '',
         mode = (mode != null && validModes.contains(mode)) ? mode : 'heating';
 
-  /// Crea una copia del record sovrascrivendo solo i campi forniti.
   DailyRecordDTO copyWith({
     String? dateIso,
     double? externalTemp,
@@ -140,11 +119,10 @@ class DailyRecordDTO extends HiveObject {
     );
   }
 
-  /// Costruisce un [DailyRecordDTO] da una mappa JSON.
   factory DailyRecordDTO.fromJson(Map<String, dynamic> json) {
     final rawDate = json['dateIso'];
     if (rawDate == null || rawDate is! String || rawDate.trim().isEmpty) {
-      throw FormatException(
+      throw const FormatException(
         'DailyRecordDTO.fromJson: campo "dateIso" mancante o non valido.',
       );
     }
@@ -197,10 +175,6 @@ class DailyRecordDTO extends HiveObject {
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // Helper privati di parsing
-  // ---------------------------------------------------------------------------
-
   static double _parseDouble(dynamic value) {
     if (value == null) return 0.0;
     if (value is num) return value.toDouble();
@@ -233,7 +207,6 @@ class DailyRecordDTO extends HiveObject {
   }
 }
 
-// --- ADAPTER MANUALE ---
 class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
   @override
   final int typeId = 0;

@@ -24,7 +24,6 @@ class _EnergyPageState extends State<EnergyPage> {
   static const Color _colPv   = Color(0xFF66BB6A);
   static const Color _colPdc  = Color(0xFF4DB6AC);
 
-  // Letti direttamente da Hive ad ogni build — nessuno stato locale
   bool get _hasGridMeter => AppStorage.getHasGridMeter();
   bool get _hasPv        => AppStorage.getHasPv();
 
@@ -46,7 +45,7 @@ class _EnergyPageState extends State<EnergyPage> {
         .where((r) =>
             r.energyFromGrid != null ||
             r.pvProduction != null ||
-            r.consumption != null)
+            r.consumption > 0)
         .toList()
       ..sort((a, b) {
         final da = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
@@ -86,7 +85,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
-                'A2A Click Luce \u2013 Monoraria\nTutte le componenti variabili + IVA 10%',
+                'A2A Click Luce – Monoraria\nTutte le componenti variabili + IVA 10%',
                 style: TextStyle(fontSize: 12),
               ),
             ),
@@ -98,9 +97,9 @@ class _EnergyPageState extends State<EnergyPage> {
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
               ],
               decoration: InputDecoration(
-                labelText: 'Prezzo (\u20ac/kWh)',
+                labelText: 'Prezzo (€/kWh)',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                suffixText: '\u20ac/kWh',
+                suffixText: '€/kWh',
                 prefixIcon: const Icon(Icons.euro_outlined, size: 18),
               ),
             ),
@@ -133,20 +132,18 @@ class _EnergyPageState extends State<EnergyPage> {
     final cs      = Theme.of(context).colorScheme;
     final records = _energyRecords;
 
-    // Leggi i flag qui — ogni rebuild riflette il valore Hive corrente
     final hasGrid = _hasGridMeter;
     final hasPv   = _hasPv;
 
     if (records.isEmpty) return _buildEmpty(cs);
 
-    // ── KPI cards ──
     final List<_KpiCard> activeCards = [
       if (hasGrid)
         _KpiCard(
           label: 'Rete',
           value: _totalGrid.toStringAsFixed(1),
           unit: 'kWh',
-          sub: '${_totalCost.toStringAsFixed(2)} \u20ac',
+          sub: '${_totalCost.toStringAsFixed(2)} €',
           icon: Icons.electrical_services_outlined,
           accentColor: _colGrid,
         ),
@@ -155,7 +152,7 @@ class _EnergyPageState extends State<EnergyPage> {
           label: 'Fotovoltaico',
           value: _totalPv.toStringAsFixed(1),
           unit: 'kWh',
-          sub: '\u2193 ${_savedCost.toStringAsFixed(2)} \u20ac',
+          sub: '↓ ${_savedCost.toStringAsFixed(2)} €',
           icon: Icons.wb_sunny_outlined,
           accentColor: _colPv,
         ),
@@ -163,13 +160,12 @@ class _EnergyPageState extends State<EnergyPage> {
         label: 'PDC',
         value: _totalPdc.toStringAsFixed(1),
         unit: 'kWh',
-        sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} \u20ac',
+        sub: '${(_totalPdc * _costPerKwh).toStringAsFixed(2)} €',
         icon: Icons.heat_pump_outlined,
         accentColor: _colPdc,
       ),
     ];
 
-    // Intercala SizedBox(width:8) tra le card
     final List<Widget> kpiRow = [];
     for (int i = 0; i < activeCards.length; i++) {
       if (i > 0) kpiRow.add(const SizedBox(width: 8));
@@ -217,7 +213,7 @@ class _EnergyPageState extends State<EnergyPage> {
                         Icon(Icons.edit_outlined, size: 12, color: cs.primary),
                         const SizedBox(width: 5),
                         Text(
-                          '${_costPerKwh.toStringAsFixed(4)} \u20ac/kWh',
+                          '${_costPerKwh.toStringAsFixed(4)} €/kWh',
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: cs.primary),
                         ),
                       ],
@@ -259,7 +255,7 @@ class _EnergyPageState extends State<EnergyPage> {
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
               child: _ChartCard(
                 title: 'Costi giornalieri',
-                unit: '\u20ac',
+                unit: '€',
                 icon: Icons.show_chart_rounded,
                 legend: [
                   if (hasGrid) const _LegendDot(color: _colGrid, label: 'Costo rete'),
@@ -425,7 +421,7 @@ class _EnergyPageState extends State<EnergyPage> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 42,
-              getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(2)}\u20ac',
+              getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(2)}€',
                   style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
             ),
           ),
@@ -490,7 +486,7 @@ class _EnergyPageState extends State<EnergyPage> {
             getTooltipColor: (_) => _tooltipBg(cs),
             getTooltipItems: (spots) => spots
                 .map((s) => LineTooltipItem(
-                      '${s.y.toStringAsFixed(3)} \u20ac',
+                      '${s.y.toStringAsFixed(3)} €',
                       TextStyle(color: _tooltipText(cs), fontSize: 11, fontWeight: FontWeight.w600),
                     ))
                 .toList(),
@@ -537,7 +533,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 if (hasGrid) _TH('Rete', color: _colGrid),
                 if (hasPv)   _TH('FV',   color: _colPv),
                              _TH('PDC',  color: _colPdc),
-                             _TH('\u20ac Costo'),
+                             _TH('€ Costo'),
               ],
             ),
           ),
@@ -560,8 +556,8 @@ class _EnergyPageState extends State<EnergyPage> {
                   Expanded(flex: 2,
                     child: Text(r.dateIso,
                         style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500))),
-                  if (hasGrid) _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '\u2013', color: _colGrid),
-                  if (hasPv)   _TD(r.pvProduction?.toStringAsFixed(1)   ?? '\u2013', color: _colPv),
+                  if (hasGrid) _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '–', color: _colGrid),
+                  if (hasPv)   _TD(r.pvProduction?.toStringAsFixed(1)   ?? '–', color: _colPv),
                                _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
                                _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
                 ],

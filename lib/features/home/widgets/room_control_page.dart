@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 class DegreePainter extends CustomPainter {
   final Color color;
 
-  DegreePainter({required this.color});
+  const DegreePainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -58,7 +58,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
   late Color _mainColor;
   late String _headerText;
 
-  // Passo fisso 0.5 — dati puliti per l'algoritmo AI
   static const double _step = 0.5;
 
   int get _divisions => ((_max - _min) / _step).round();
@@ -85,7 +84,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
     final raw = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
         (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
 
-    // Snap al multiplo di _step più vicino, clampato nel range
     _currentValue = ((raw / _step).round() * _step).clamp(_min, _max);
 
     if (widget.isRoom && widget.comfortRatings != null) {
