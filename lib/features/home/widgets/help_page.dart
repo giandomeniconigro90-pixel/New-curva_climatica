@@ -32,6 +32,12 @@ class _HelpPageState extends State<HelpPage> {
   late TextEditingController _cityController;
   String? _savedCity;
 
+  // ── Sezione Dev ────────────────────────────────────────────────────────
+  static const String _devPassword = 'climasense2025';
+  bool _devUnlocked = false;
+  final TextEditingController _pwdController = TextEditingController();
+  String? _pwdError;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +48,7 @@ class _HelpPageState extends State<HelpPage> {
   @override
   void dispose() {
     _cityController.dispose();
+    _pwdController.dispose();
     super.dispose();
   }
 
@@ -60,6 +67,26 @@ class _HelpPageState extends State<HelpPage> {
     }
   }
 
+  void _tryUnlock() {
+    if (_pwdController.text.trim() == _devPassword) {
+      setState(() {
+        _devUnlocked = true;
+        _pwdError = null;
+        _pwdController.clear();
+      });
+    } else {
+      setState(() => _pwdError = 'Password errata');
+    }
+  }
+
+  void _lock() {
+    setState(() {
+      _devUnlocked = false;
+      _pwdController.clear();
+      _pwdError = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,8 +103,6 @@ class _HelpPageState extends State<HelpPage> {
             icon: Icons.checklist_rtl,
             iconColor: Colors.teal,
             title: '\ud83d\ude80 Checklist per il Nuovo Utente',
-            // FIX #2: passo 7 corretto — la notifica si imposta dall'icona
-            // campanella 🔔 in alto a destra nella barra Home, non da un menu ⋮.
             content:
                 'Segui questi passi per impostare correttamente l\u2019app dal primo giorno:\n\n'
                 '1\ufe0f\u20e3  Configura le stanze: vai in Guida \u2192 Gestisci Stanze e aggiungi i locali della tua casa.\n\n'
@@ -302,8 +327,6 @@ class _HelpPageState extends State<HelpPage> {
             icon: Icons.notifications_outlined,
             iconColor: Colors.blue,
             title: 'Promemoria Giornaliero',
-            // FIX #2: accesso notifiche tramite icona campanella in barra Home,
-            // non tramite menu ⋮ che non esiste nell'UI attuale.
             content:
                 'Puoi impostare un promemoria giornaliero che ti ricorda di inserire i dati.\n\n'
                 'Come impostarlo: tocca l\u2019icona \ud83d\udd14 in alto a destra nella barra Home \u2192 scegli l\u2019ora.\n\n'
@@ -325,10 +348,8 @@ class _HelpPageState extends State<HelpPage> {
 
           // ── SEZIONE 8: STRUMENTI AVANZATI ────────────────────────────────
           _buildSectionTitle(context, 'Strumenti Avanzati'),
-
           _buildCityCard(context),
           const SizedBox(height: 12),
-
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -341,10 +362,8 @@ class _HelpPageState extends State<HelpPage> {
             ),
           ),
           const SizedBox(height: 12),
-
           _buildThemeCard(context),
           const SizedBox(height: 12),
-
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -367,7 +386,6 @@ class _HelpPageState extends State<HelpPage> {
             ),
           ),
           const SizedBox(height: 12),
-
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -485,10 +503,14 @@ class _HelpPageState extends State<HelpPage> {
                 '\u2022 L\u2019offset pu\u00f2 restare vicino allo zero.\n\n'
                 'Con VMC + recuperatore l\u2019AI converger\u00e0 pi\u00f9 rapidamente perch\u00e9 il sistema \u00e8 intrinsecamente pi\u00f9 stabile.',
           ),
+          const SizedBox(height: 24),
+
+          // ── SEZIONE 11: AREA DEV (protetta da password) ────────────────────
+          _buildSectionTitle(context, 'Area Sviluppatore'),
+          _devUnlocked ? _buildDevSection(context) : _buildDevLock(context),
           const SizedBox(height: 40),
 
           // ── FOOTER ────────────────────────────────────────────────────────
-          // FIX #1: versione allineata a pubspec.yaml (1.0.0+1)
           Center(
             child: Column(
               children: [
@@ -514,6 +536,240 @@ class _HelpPageState extends State<HelpPage> {
           const SizedBox(height: 20),
         ],
       ),
+    );
+  }
+
+  // ============================================================
+  // AREA DEV — form di sblocco
+  // ============================================================
+
+  Widget _buildDevLock(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lock_outline, color: cs.primary, size: 20),
+                const SizedBox(width: 10),
+                Text(
+                  'Accesso riservato',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Inserisci la password per accedere alla sezione sviluppatore.',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _pwdController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      hintText: 'Password',
+                      prefixIcon: const Icon(Icons.vpn_key_outlined, size: 18),
+                      errorText: _pwdError,
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                    ),
+                    onSubmitted: (_) => _tryUnlock(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: _tryUnlock,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Sblocca'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // AREA DEV — contenuto sbloccato
+  // ============================================================
+
+  Widget _buildDevSection(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header area con pulsante blocca
+        Card(
+          elevation: 0,
+          color: cs.primaryContainer,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.terminal, color: cs.onPrimaryContainer, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Modalit\u00e0 Sviluppatore attiva',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _lock,
+                  icon: Icon(Icons.lock, size: 16, color: cs.onPrimaryContainer),
+                  label: Text(
+                    'Blocca',
+                    style: TextStyle(
+                        fontSize: 12, color: cs.onPrimaryContainer),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // ── CARD 1: Eseguire i test ────────────────────────────────────
+        _buildExpandableCard(
+          context: context,
+          icon: Icons.science_outlined,
+          iconColor: Colors.deepPurple,
+          title: '\ud83e\uddea Eseguire i Test Automatici',
+          content:
+              'Il progetto include 55 unit test suddivisi in 3 file nella cartella test/.\n\n'
+              'PREREQUISITI\n'
+              '\u2022 Flutter SDK installato e nel PATH\n'
+              '\u2022 Dipendenze aggiornate: flutter pub get\n\n'
+              'COMANDI\n\n'
+              '1\ufe0f\u20e3  Tutti i test:\n'
+              '   flutter test\n\n'
+              '2\ufe0f\u20e3  Singolo file:\n'
+              '   flutter test test/curve_logic_test.dart\n'
+              '   flutter test test/record_form_validator_test.dart\n'
+              '   flutter test test/date_utils_test.dart\n\n'
+              '3\ufe0f\u20e3  Con output verboso (vedi ogni test):\n'
+              '   flutter test --reporter expanded\n\n'
+              '4\ufe0f\u20e3  Solo i test falliti:\n'
+              '   flutter test --reporter expanded | grep FAIL\n\n'
+              'OUTPUT ATTESO\n'
+              'Tutti i test devono terminare con:\n'
+              '   All tests passed!\n\n'
+              'Se un test fallisce, il report indica il file, il gruppo e la riga esatta del mismatch.',
+        ),
+        const SizedBox(height: 12),
+
+        // ── CARD 2: Copertura test ──────────────────────────────────────
+        _buildExpandableCard(
+          context: context,
+          icon: Icons.checklist,
+          iconColor: Colors.green,
+          title: '\ud83d\udcca Copertura dei Test',
+          content:
+              'curve_logic_test.dart (28 test)\n'
+              '\u2022 computeMandata heating: clamp min 35\u00b0, clamp max 60\u00b0, crescita al freddo, effetto offset\n'
+              '\u2022 computeMandata cooling: clamp min 7\u00b0, clamp max 25\u00b0, decrescita al caldo\n'
+              '\u2022 computeCurveStats: lista vuota, media consumo, range temperatura\n'
+              '\u2022 computeOptimalCurveSuggestion: modalit\u00e0 apprendimento (<5 record), freddo/caldo/ok, max step slope/offset, cooling\n'
+              '\u2022 analyzeRoomComfort: lista vuota, stanze ok escluse, ordinamento issueRate\n'
+              '\u2022 AiCurveService.recordsSinceLastApply: filtro null, filtro temporale, boundary giorno\n\n'
+              'record_form_validator_test.dart (22 test)\n'
+              '\u2022 validateField per tutti i FieldKind: vuoto, non numerico, fuori range min/max, boundary, virgola decimale\n'
+              '\u2022 Campi opzionali: vuoto = ok, valore valido = ok, fuori range = errore\n'
+              '\u2022 validate() form completo: ogni campo mancante/sbagliato, multi-stanza, virgola decimale\n\n'
+              'date_utils_test.dart (11 test)\n'
+              '\u2022 parseItalianDateSafe: formato italiano e ISO, stringa vuota, mese/giorno fuori range\n'
+              '\u2022 Casi limite: 29 feb bisestile vs non bisestile, anno fuori range, caratteri non numerici\n'
+              '\u2022 formatItalianDate: padding zero, round-trip format\u2192parse',
+        ),
+        const SizedBox(height: 12),
+
+        // ── CARD 3: Aggiungere nuovi test ─────────────────────────────────
+        _buildExpandableCard(
+          context: context,
+          icon: Icons.add_circle_outline,
+          iconColor: Colors.teal,
+          title: '\u2795 Aggiungere Nuovi Test',
+          content:
+              'Crea un file in test/ con suffisso _test.dart.\n\n'
+              'STRUTTURA BASE\n'
+              'import \'package:flutter_test/flutter_test.dart\'\n'
+              'import \'package:climasense/<path>\';\n\n'
+              'void main() {\n'
+              '  group(\'NomeClasse\', () {\n'
+              '    test(\'descrizione caso\', () {\n'
+              '      final result = funzione(input);\n'
+              '      expect(result, valore_atteso);\n'
+              '    });\n'
+              '  });\n'
+              '}\n\n'
+              'MATCHER UTILI\n'
+              '\u2022 expect(x, isNull) / isNotNull\n'
+              '\u2022 expect(x, isA<RecordValidationOk>())\n'
+              '\u2022 expect(x, closeTo(15.0, 0.01))\n'
+              '\u2022 expect(x, greaterThan(y)) / lessThan(y)\n'
+              '\u2022 expect(list, isEmpty) / isNotEmpty\n'
+              '\u2022 expect(list, contains(\'valore\'))\n\n'
+              'REGOLA: testa solo funzioni pure (no Hive, no context, no Navigator).',
+        ),
+        const SizedBox(height: 12),
+
+        // ── CARD 4: Note di sviluppo ───────────────────────────────────
+        _buildExpandableCard(
+          context: context,
+          icon: Icons.build_circle_outlined,
+          iconColor: Colors.orange,
+          title: '\ud83d\udee0 Note di Sviluppo',
+          content:
+              'ARCHITETTURA\n'
+              '\u2022 State management: Provider + ChangeNotifier (HomeNotifier)\n'
+              '\u2022 Persistenza: Hive (AppStorage) + CurveSettingsRepository\n'
+              '\u2022 Logica AI: lib/features/home/logic/curve_logic.dart\n'
+              '\u2022 Validazione: lib/features/home/logic/record_form_validator.dart\n'
+              '\u2022 Export: lib/features/home/logic/export_service.dart\n\n'
+              'REFACTORING COMPLETATI\n'
+              '\u2022 #8 — HomeNotifier split: ExportService + AiCurveService\n'
+              '\u2022 #9 — climate_curve_home: 4 widget privati (_HomeAppBar, _HomePageView, _HomeNavBar, _TabItem)\n'
+              '\u2022 #11 — new_thermostat_home.dart eliminato (dead code)\n'
+              '\u2022 #12 — utils/ struttura verificata e confermata\n'
+              '\u2022 #13 — 55 unit test aggiunti\n'
+              '\u2022 #15 — main.dart verificato, nessuna modifica necessaria\n\n'
+              'IN SOSPESO\n'
+              '\u2022 #10 — Repository pattern: RecordRepository da implementare\n'
+              '         (consigliato in parallelo con nuovi test)\n\n'
+              'COMANDO BUILD RELEASE\n'
+              '   flutter build apk --release\n'
+              '   flutter build appbundle --release',
+        ),
+      ],
     );
   }
 
