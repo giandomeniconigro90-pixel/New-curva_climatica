@@ -73,6 +73,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   static const Color _colorAcs          = Color(0xFF26A69A);
   static const Color _colorRete         = Color(0xFFF57C00);
   static const Color _colorFotovoltaico = Color(0xFFFDD835);
+  static const Color _colorNota         = Color(0xFF7E57C2);
 
   bool get _isDesktop =>
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -204,6 +205,8 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     if (hasPv) gridItems.add(_buildTadoTile(title: 'Fotovoltaico', subtitle: 'ShinePhone', controller: widget.pvProductionController, icon: Icons.wb_sunny_outlined, color: _colorFotovoltaico, isRoom: false, suffix: 'kWh'));
     gridItems.add(_buildHeatpumpModeTile());
     gridItems.add(_buildBoilerModeTile());
+    // Tile Nota: sempre visibile, si apre in una bottom sheet.
+    gridItems.add(_buildNotaTile());
     for (final room in widget.rooms) {
       final ctrl = widget.internalTempControllers[room] ?? (widget.internalTempControllers[room] = TextEditingController());
       gridItems.add(_buildTadoTile(title: room, subtitle: widget.isCooling ? 'Raffrescamento' : 'Riscaldamento', controller: ctrl, icon: null, color: widget.isCooling ? const Color(0xFF4DB6AC) : const Color(0xFFFFB74D), isRoom: true, suffix: '\u00b0'));
@@ -248,6 +251,148 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 100)),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNotaTile() {
+    return ListenableBuilder(
+      listenable: widget.noteController,
+      builder: (context, _) {
+        final hasNote = widget.noteController.text.trim().isNotEmpty;
+        final effectiveColor = _cardColor(context, _colorNota);
+        return GestureDetector(
+          onTap: _openNotaSheet,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: effectiveColor,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: effectiveColor.withValues(alpha: 0.25), blurRadius: 4, offset: const Offset(0, 2))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      hasNote ? Icons.sticky_note_2 : Icons.sticky_note_2_outlined,
+                      size: 30,
+                      color: Colors.white,
+                    ),
+                    if (hasNote)
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Annotazione',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      hasNote ? widget.noteController.text.trim() : 'Nota',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _openNotaSheet() {
+    final tempController = TextEditingController(text: widget.noteController.text);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(ctx).colorScheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Nota del giorno',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.check),
+                    onPressed: () {
+                      widget.noteController.text = tempController.text;
+                      setState(() {});
+                      Navigator.of(ctx).pop();
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: tempController,
+                maxLines: 4,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Es: finestra aperta, ospiti, anomalia caldaia…',
+                  filled: true,
+                  fillColor: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Cancella nota'),
+                  onPressed: () {
+                    tempController.clear();
+                    widget.noteController.clear();
+                    setState(() {});
+                    Navigator.of(ctx).pop();
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
