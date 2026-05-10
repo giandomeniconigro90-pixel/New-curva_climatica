@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../models/daily_record_dto.dart';
 import '../../services/hive_storage.dart';
 import '../home/climate_curve_home.dart';
 
@@ -48,19 +47,15 @@ class InitialSettingsHome extends StatefulWidget {
 class _InitialSettingsHomeState extends State<InitialSettingsHome> {
   final _formKey = GlobalKey<FormState>();
 
-  // Step 2 — Riscaldamento
-  final _slopeController   = TextEditingController();
-  final _offsetController  = TextEditingController();
-  // Step 3 — Raffrescamento
+  final _slopeController         = TextEditingController();
+  final _offsetController        = TextEditingController();
   final _coolingSlopeController  = TextEditingController();
   final _coolingOffsetController = TextEditingController();
-  // Step 4 — Energia
-  final _costController = TextEditingController();
+  final _costController          = TextEditingController();
 
-  int _currentStep = 0;
-  bool _isLoading  = false;
+  int  _currentStep = 0;
+  bool _isLoading   = false;
 
-  // Step 1 — Impianto
   _PlantType _plantType    = _PlantType.heatpump;
   bool       _hasPv        = false;
   bool       _hasGridMeter = false;
@@ -76,16 +71,12 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     _loadExisting();
   }
 
-  Future<void> _loadExisting() async {
-    final slope  = AppStorage.getSlope();
-    final offset = AppStorage.getOffset();
-    _slopeController.text  = slope.toString();
-    _offsetController.text = offset.toString();
-
-    _coolingSlopeController.text  = AppStorage.getCoolingSlope().toString();
-    _coolingOffsetController.text = AppStorage.getCoolingOffset().toString();
-
-    _costController.text = AppStorage.getCostPerKwh().toString();
+  void _loadExisting() {
+    _slopeController.text          = AppStorage.getSlope().toString();
+    _offsetController.text         = AppStorage.getOffset().toString();
+    _coolingSlopeController.text   = AppStorage.getCoolingSlope().toString();
+    _coolingOffsetController.text  = AppStorage.getCoolingOffset().toString();
+    _costController.text           = AppStorage.getCostPerKwh().toString();
 
     final plantKey = AppStorage.getPlantType();
     setState(() {
@@ -105,7 +96,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     super.dispose();
   }
 
-  // --- Toggle handlers: salvano subito su Hive ---
   Future<void> _onHasPvChanged(bool v) async {
     await AppStorage.saveHasPv(v);
     if (mounted) setState(() => _hasPv = v);
@@ -116,7 +106,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     if (mounted) setState(() => _hasGridMeter = v);
   }
 
-  // --- Validatori ---
   String? _validateSlope(String? val) {
     if (val == null || val.isEmpty) return 'Campo obbligatorio';
     final v = double.tryParse(val.replaceAll(',', '.'));
@@ -140,7 +129,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     return null;
   }
 
-  // --- Step continua / indietro ---
   void _onStepContinue() {
     if (_currentStep == 0) {
       setState(() => _currentStep = 1);
@@ -174,11 +162,8 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
       await AppStorage.saveSystemMode('heating');
       await AppStorage.saveCostPerKwh(cost);
       await AppStorage.savePlantType(_plantType.key);
-      // hasPv e hasGridMeter sono già salvati in tempo reale dai toggle handler,
-      // ma li riscriviamo comunque per coerenza con lo stato corrente del form.
       await AppStorage.saveHasPv(_hasPv);
       await AppStorage.saveHasGridMeter(_hasGridMeter);
-
       await AppStorage.setAppInitialized();
 
       if (mounted) {
@@ -202,9 +187,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // BUILD
-  // ---------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final cs     = Theme.of(context).colorScheme;
@@ -213,9 +195,9 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: Scaffold(
-        backgroundColor: cs.background,
+        backgroundColor: cs.surface,
         appBar: AppBar(
-          backgroundColor: cs.background,
+          backgroundColor: cs.surface,
           elevation: 0,
           title: const Text('Configurazione Iniziale'),
         ),
@@ -243,7 +225,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // --- Controls ---
   Widget _buildControls(BuildContext context, ControlsDetails details) {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
@@ -267,9 +248,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // STEP 1 — Impianto
-  // ---------------------------------------------------------------------------
   Step _buildStepImpianto(ColorScheme cs) {
     return Step(
       title: const Text('Tipo di Impianto'),
@@ -329,9 +307,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // STEP 2 — Riscaldamento
-  // ---------------------------------------------------------------------------
   Step _buildStepRiscaldamento(ColorScheme cs) {
     return Step(
       title: const Text('Riscaldamento (Inverno)'),
@@ -372,9 +347,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // STEP 3 — Raffrescamento
-  // ---------------------------------------------------------------------------
   Step _buildStepRaffrescamento(ColorScheme cs) {
     return Step(
       title: const Text('Raffrescamento (Estate)'),
@@ -415,9 +387,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // STEP 4 — Energia & Costi
-  // ---------------------------------------------------------------------------
   Step _buildStepEnergia(ColorScheme cs) {
     return Step(
       title: const Text('Energia & Costi'),
@@ -445,9 +414,9 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: cs.primaryContainer.withOpacity(0.35),
+              color: cs.primaryContainer.withValues(alpha: 0.35),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cs.primary.withOpacity(0.25)),
+              border: Border.all(color: cs.primary.withValues(alpha: 0.25)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,9 +447,6 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Helper widget
-  // ---------------------------------------------------------------------------
   Widget _buildToggleTile({
     required ColorScheme cs,
     required IconData icon,
@@ -491,9 +457,9 @@ class _InitialSettingsHomeState extends State<InitialSettingsHome> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: cs.surfaceVariant.withOpacity(0.4),
+        color: cs.surfaceContainerHighest.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: SwitchListTile(
         secondary: Icon(icon, color: value ? cs.primary : cs.onSurfaceVariant),

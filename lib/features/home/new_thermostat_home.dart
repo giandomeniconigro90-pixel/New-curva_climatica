@@ -15,7 +15,6 @@ class _NewThermostatHomeState extends State<NewThermostatHome> {
   bool _isLoading = true;
   String _systemMode = 'heating';
   double _currentInternalTemp = 20.0;
-  // Rimosso _targetTemp che non era usato
 
   @override
   void initState() {
@@ -24,15 +23,17 @@ class _NewThermostatHomeState extends State<NewThermostatHome> {
   }
 
   Future<void> _loadSystemData() async {
-    final mode = await AppStorage.getSystemMode();
-    final records = await AppStorage.loadRecords();
+    final mode = AppStorage.getSystemMode();
+    final records = AppStorage.getRecords();
 
     double lastTemp = 20.0;
     if (records.isNotEmpty) {
       final last = records.last;
       if (last.internalTemps.isNotEmpty) {
         double sum = 0;
-        last.internalTemps.values.forEach((v) => sum += v);
+        for (final v in last.internalTemps.values) {
+          sum += v;
+        }
         lastTemp = sum / last.internalTemps.length;
       }
     }
@@ -64,7 +65,7 @@ class _NewThermostatHomeState extends State<NewThermostatHome> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context), // Torna alla Dashboard
+          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           _systemMode == 'heating' ? 'Riscaldamento' : 'Raffrescamento',
@@ -78,17 +79,15 @@ class _NewThermostatHomeState extends State<NewThermostatHome> {
             const Spacer(),
             Text(
               "ALL'INTERNO ORA ${_currentInternalTemp.toStringAsFixed(1)}°",
-              style: TextStyle(color: Colors.white.withOpacity(0.9), fontWeight: FontWeight.bold),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 20),
-
-            // Pillola centrale
             Center(
               child: Container(
                 width: 240,
                 height: 400,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(45),
                 ),
                 child: Column(

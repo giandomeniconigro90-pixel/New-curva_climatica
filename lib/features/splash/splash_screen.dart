@@ -15,7 +15,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
-  // Controller per le animazioni
   late AnimationController _bgController;
   late AnimationController _logoController;
   late Animation<Color?> _colorAnimation;
@@ -25,18 +24,16 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   void initState() {
     super.initState();
 
-    // 1. Animazione Sfondo (Ciclo Freddo -> Caldo)
     _bgController = AnimationController(
       duration: const Duration(seconds: 4),
       vsync: this,
     )..repeat(reverse: true);
 
     _colorAnimation = ColorTween(
-      begin: Colors.lightBlue.shade800, // Freddo
-      end: Colors.orange.shade900,      // Caldo
+      begin: Colors.lightBlue.shade800,
+      end: Colors.orange.shade900,
     ).animate(CurvedAnimation(parent: _bgController, curve: Curves.easeInOut));
 
-    // 2. Animazione Logo (Respiro)
     _logoController = AnimationController(
       duration: const Duration(seconds: 1, milliseconds: 500),
       vsync: this,
@@ -46,25 +43,20 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       CurvedAnimation(parent: _logoController, curve: Curves.easeInOut),
     );
 
-    // 3. Avvia la sequenza di controllo logico
     _startSplashSequence();
   }
 
   Future<void> _startSplashSequence() async {
-    // Attendi che l'animazione faccia scena per almeno 3.5 secondi
     await Future.delayed(const Duration(milliseconds: 3500));
 
-    // CONTROLLO INTELLIGENTE
-    final bool isInitialized = await AppStorage.isAppInitialized();
-
-    // Carica i parametri salvati (o default)
-    final double slope = await AppStorage.getSlope();
-    final double offset = await AppStorage.getOffset();
+    // Leggi valori sync — nessun await su non-Future
+    final bool isInitialized = AppStorage.isAppInitialized();
+    final double slope  = AppStorage.getSlope();
+    final double offset = AppStorage.getOffset();
 
     if (!mounted) return;
 
     if (isInitialized) {
-      // CASO A: Utente già registrato -> VAI ALLA HOME
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
           builder: (_) => ClimateCurveOfflineHome(
@@ -74,7 +66,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         ),
       );
     } else {
-      // CASO B: Primo avvio -> VAI ALLA CALIBRAZIONE (Manopole)
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const InitialSettingsHome()),
       );
@@ -90,7 +81,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    // Status bar trasparente
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -113,13 +103,12 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   _colorAnimation.value ?? Colors.blue,
                   Colors.white,
                 ],
-                stops: const [0.0, 1.5], // Effetto luce diffusa
+                stops: const [0.0, 1.5],
               ),
             ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // LOGO ANIMATO (Respiro)
                 ScaleTransition(
                   scale: _scaleAnimation,
                   child: Container(
@@ -127,16 +116,16 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                     height: 140,
                     padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.25), // Effetto vetro
+                      color: Colors.white.withValues(alpha: 0.25),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: (_colorAnimation.value ?? Colors.blue).withOpacity(0.4),
+                          color: (_colorAnimation.value ?? Colors.blue).withValues(alpha: 0.4),
                           blurRadius: 30,
                           spreadRadius: 5,
                         ),
                       ],
-                      border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.5),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
                     ),
                     child: ClipOval(
                       child: Image.asset(
@@ -150,8 +139,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // NOME APP
                 const Text(
                   'ClimaSense',
                   style: TextStyle(
@@ -165,20 +152,16 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // SOTTOTITOLO
                 Text(
                   'Ottimizzazione Climatica',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: Colors.white.withOpacity(0.95),
+                    color: Colors.white.withValues(alpha: 0.95),
                     letterSpacing: 0.8,
                   ),
                 ),
                 const SizedBox(height: 80),
-
-                // LOADING
                 const SizedBox(
                   width: 26,
                   height: 26,

@@ -199,7 +199,7 @@ class _ClimateCurveHomeView extends StatelessWidget {
                         onChanged: notifier.toggleMode,
                         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         splashRadius: 18,
-                        activeColor: const Color(0xFF4DB6AC),
+                        activeThumbColor: const Color(0xFF4DB6AC),
                         activeTrackColor: const Color(0xFF4DB6AC),
                         inactiveThumbColor: const Color(0xFFFFB74D),
                         inactiveTrackColor: const Color(0xFFFFB74D),
