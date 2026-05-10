@@ -8,6 +8,29 @@ import '../../../models/daily_record_dto.dart';
 import '../../../services/hive_storage.dart';
 import '../../../utils/date_utils.dart';
 
+// ── Periodi selezionabili ─────────────────────────────────────────────────────
+enum _Period { d14, d30, d90, all }
+
+extension _PeriodLabel on _Period {
+  String get label {
+    switch (this) {
+      case _Period.d14: return '14g';
+      case _Period.d30: return '30g';
+      case _Period.d90: return '90g';
+      case _Period.all: return 'Tutto';
+    }
+  }
+
+  int? get days {
+    switch (this) {
+      case _Period.d14: return 14;
+      case _Period.d30: return 30;
+      case _Period.d90: return 90;
+      case _Period.all: return null;
+    }
+  }
+}
+
 class EnergyPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
   const EnergyPage({super.key, required this.records});
@@ -19,10 +42,13 @@ class EnergyPage extends StatefulWidget {
 class _EnergyPageState extends State<EnergyPage> {
   late double _costPerKwh;
   final TextEditingController _priceController = TextEditingController();
+  _Period _period = _Period.d14;
 
   static const Color _colGrid = Color(0xFFFFB74D);
   static const Color _colPv   = Color(0xFF66BB6A);
   static const Color _colPdc  = Color(0xFF4DB6AC);
+  static const Color _colNet  = Color(0xFFAB47BC);
+  static const Color _colCop  = Color(0xFF5C6BC0);
 
   bool get _hasGridMeter => AppStorage.getHasGridMeter();
   bool get _hasPv        => AppStorage.getHasPv();
@@ -40,6 +66,7 @@ class _EnergyPageState extends State<EnergyPage> {
     super.dispose();
   }
 
+  // ── dataset filtrato per periodo ──────────────────────────────────────────
   List<DailyRecordDTO> get _energyRecords {
     final sorted = widget.records
         .where((r) =>
@@ -52,15 +79,40 @@ class _EnergyPageState extends State<EnergyPage> {
         final db = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
         return da.compareTo(db);
       });
-    return sorted.length > 14 ? sorted.sublist(sorted.length - 14) : sorted;
+
+    final days = _period.days;
+    if (days == null || sorted.length <= days) return sorted;
+    return sorted.sublist(sorted.length - days);
   }
 
+  // ── totali su finestra corrente ───────────────────────────────────────────
   double get _totalGrid => _energyRecords.fold(0.0, (s, r) => s + (r.energyFromGrid ?? 0.0));
   double get _totalPv   => _energyRecords.fold(0.0, (s, r) => s + (r.pvProduction ?? 0.0));
   double get _totalPdc  => _energyRecords.fold(0.0, (s, r) => s + r.consumption);
+  double get _totalNet  => (_totalPdc - _totalPv).clamp(0.0, double.infinity);
   double get _totalCost => _totalGrid * _costPerKwh;
   double get _savedCost => _totalPv * _costPerKwh;
+  double get _netCost   => _totalNet * _costPerKwh;
 
+  // ── risparmio cumulativo su TUTTO lo storico ──────────────────────────────
+  double get _cumulativeSaving =>
+      widget.records.fold(0.0, (s, r) => s + (r.pvProduction ?? 0.0) * _costPerKwh);
+
+  // ── COP stimato giorno per giorno ─────────────────────────────────────────
+  // COP = PDC / rete_netta  (solo quando rete_netta > 0.1 e PDC > 0.1)
+  List<({int index, double cop})> _copPoints(List<DailyRecordDTO> records) {
+    final result = <({int index, double cop})>[];
+    for (int i = 0; i < records.length; i++) {
+      final r = records[i];
+      final net = (r.energyFromGrid ?? 0.0) - (r.pvProduction ?? 0.0);
+      if (net > 0.1 && r.consumption > 0.1) {
+        result.add((index: i, cop: r.consumption / net));
+      }
+    }
+    return result;
+  }
+
+  // ── edit prezzo ───────────────────────────────────────────────────────────
   Future<void> _editPrice() async {
     _priceController.text = _costPerKwh.toStringAsFixed(4);
     await showDialog<void>(
@@ -135,8 +187,11 @@ class _EnergyPageState extends State<EnergyPage> {
     final hasGrid = _hasGridMeter;
     final hasPv   = _hasPv;
 
-    if (records.isEmpty) return _buildEmpty(cs);
+    if (records.isEmpty && widget.records.isEmpty) return _buildEmpty(cs);
 
+    final copPoints = (hasGrid && hasPv) ? _copPoints(records) : <({int index, double cop})>[];
+
+    // ── KPI cards ──
     final List<_KpiCard> activeCards = [
       if (hasGrid)
         _KpiCard(
@@ -164,6 +219,16 @@ class _EnergyPageState extends State<EnergyPage> {
         icon: Icons.heat_pump_outlined,
         accentColor: _colPdc,
       ),
+      // F5 — card Netto (solo se hasPv)
+      if (hasPv)
+        _KpiCard(
+          label: 'Netto',
+          value: _totalNet.toStringAsFixed(1),
+          unit: 'kWh',
+          sub: '${_netCost.toStringAsFixed(2)} € netto',
+          icon: Icons.balance_outlined,
+          accentColor: _colNet,
+        ),
     ];
 
     final List<Widget> kpiRow = [];
@@ -174,6 +239,7 @@ class _EnergyPageState extends State<EnergyPage> {
 
     return CustomScrollView(
       slivers: [
+        // ── Header + prezzo ──
         SliverToBoxAdapter(
           child: Container(
             margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -225,6 +291,43 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
+        // ── F5: Selettore periodo ──
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: _Period.values.map((p) {
+                  final selected = p == _period;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(p.label),
+                      selected: selected,
+                      onSelected: (_) => setState(() => _period = p),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: selected ? cs.onPrimary : cs.onSurfaceVariant,
+                      ),
+                      selectedColor: cs.primary,
+                      backgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                      side: BorderSide(
+                        color: selected
+                            ? cs.primary
+                            : cs.outlineVariant.withValues(alpha: 0.5),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+
+        // ── KPI row ──
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -232,6 +335,16 @@ class _EnergyPageState extends State<EnergyPage> {
           ),
         ),
 
+        // ── F5: Banner risparmio cumulativo FV ──
+        if (hasPv)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _buildCumulativeSavingBanner(cs),
+            ),
+          ),
+
+        // ── Grafico barre energia ──
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
@@ -239,16 +352,17 @@ class _EnergyPageState extends State<EnergyPage> {
               title: 'Energia giornaliera',
               unit: 'kWh',
               icon: Icons.bar_chart_rounded,
-              legend: const [
-                _LegendDot(color: _colGrid, label: 'Rete'),
-                _LegendDot(color: _colPv,   label: 'FV'),
-                _LegendDot(color: _colPdc,  label: 'PDC'),
+              legend: [
+                if (hasGrid) const _LegendDot(color: _colGrid, label: 'Rete'),
+                if (hasPv)   const _LegendDot(color: _colPv,   label: 'FV'),
+                             const _LegendDot(color: _colPdc,  label: 'PDC'),
               ],
               child: _buildBarChart(records, cs, hasGrid: hasGrid, hasPv: hasPv),
             ),
           ),
         ),
 
+        // ── Grafico costi ──
         if (hasGrid || hasPv)
           SliverToBoxAdapter(
             child: Padding(
@@ -257,15 +371,33 @@ class _EnergyPageState extends State<EnergyPage> {
                 title: 'Costi giornalieri',
                 unit: '€',
                 icon: Icons.show_chart_rounded,
-                legend: const [
-                  _LegendDot(color: _colGrid, label: 'Costo rete'),
-                  _LegendDot(color: _colPv,   label: 'Risparmio FV'),
+                legend: [
+                  if (hasGrid) const _LegendDot(color: _colGrid, label: 'Costo rete'),
+                  if (hasPv)   const _LegendDot(color: _colPv,   label: 'Risparmio FV'),
                 ],
                 child: _buildCostChart(records, cs, hasGrid: hasGrid, hasPv: hasPv),
               ),
             ),
           ),
 
+        // ── F5: Grafico COP stimato (solo se hasGrid && hasPv e punti > 1) ──
+        if (hasGrid && hasPv && copPoints.length > 1)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+              child: _ChartCard(
+                title: 'COP stimato PDC',
+                unit: 'x',
+                icon: Icons.speed_outlined,
+                legend: const [
+                  _LegendDot(color: _colCop, label: 'COP = PDC / Rete netta'),
+                ],
+                child: _buildCopChart(records, copPoints, cs),
+              ),
+            ),
+          ),
+
+        // ── Tabella dettaglio ──
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 24),
@@ -276,6 +408,74 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
+  // ── F5: Banner risparmio cumulativo FV ───────────────────────────────────
+  Widget _buildCumulativeSavingBanner(ColorScheme cs) {
+    final totalDays = widget.records
+        .where((r) => r.pvProduction != null && r.pvProduction! > 0)
+        .length;
+    final saving = _cumulativeSaving;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _colPv.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _colPv.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.savings_outlined, size: 15, color: _colPv),
+              const SizedBox(width: 6),
+              Text(
+                'Risparmio cumulativo FV',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurface),
+              ),
+              const Spacer(),
+              Text(
+                'su $totalDays giorni',
+                style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '${saving.toStringAsFixed(2)} €',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: _colPv,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: 1.0, // sempre piena: è il totale assoluto
+                    backgroundColor: _colPv.withValues(alpha: 0.15),
+                    color: _colPv,
+                    minHeight: 8,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${_totalPv.toStringAsFixed(1)} kWh prodotti nel periodo selezionato',
+            style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── helpers stile grafici ─────────────────────────────────────────────────
   Color _tooltipBg(ColorScheme cs)   => cs.inverseSurface;
   Color _tooltipText(ColorScheme cs) => cs.onInverseSurface;
   Color _shadowColor(ColorScheme cs) => cs.shadow.withValues(alpha: 0.12);
@@ -291,6 +491,17 @@ class _EnergyPageState extends State<EnergyPage> {
         ),
       );
 
+  FlGridData _baseGrid(ColorScheme cs) => FlGridData(
+        show: true,
+        drawVerticalLine: false,
+        getDrawingHorizontalLine: (_) => FlLine(
+          color: cs.outlineVariant.withValues(alpha: 0.18),
+          strokeWidth: 1,
+          dashArray: [4, 6],
+        ),
+      );
+
+  // ── grafico barre ─────────────────────────────────────────────────────────
   Widget _buildBarChart(
     List<DailyRecordDTO> records,
     ColorScheme cs, {
@@ -322,20 +533,14 @@ class _EnergyPageState extends State<EnergyPage> {
       ));
     }
 
+    final step = (records.length / 6).ceil().clamp(1, records.length);
+
     return SizedBox(
       height: 220,
       child: BarChart(BarChartData(
         barGroups: groups,
         borderData: _styledBorder(cs),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: cs.outlineVariant.withValues(alpha: 0.18),
-            strokeWidth: 1,
-            dashArray: [4, 6],
-          ),
-        ),
+        gridData: _baseGrid(cs),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -351,7 +556,9 @@ class _EnergyPageState extends State<EnergyPage> {
               reservedSize: 52,
               getTitlesWidget: (v, _) {
                 final idx = v.toInt();
-                if (idx < 0 || idx >= records.length) return const SizedBox.shrink();
+                if (idx < 0 || idx >= records.length || idx % step != 0) {
+                  return const SizedBox.shrink();
+                }
                 final parts = records[idx].dateIso.split('/');
                 final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
                 return Padding(
@@ -384,6 +591,7 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
+  // ── grafico costi ─────────────────────────────────────────────────────────
   Widget _buildCostChart(
     List<DailyRecordDTO> records,
     ColorScheme cs, {
@@ -407,15 +615,7 @@ class _EnergyPageState extends State<EnergyPage> {
         minX: 0,
         maxX: (records.length - 1).toDouble(),
         borderData: _styledBorder(cs),
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: cs.outlineVariant.withValues(alpha: 0.18),
-            strokeWidth: 1,
-            dashArray: [4, 6],
-          ),
-        ),
+        gridData: _baseGrid(cs),
         titlesData: FlTitlesData(
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
@@ -496,6 +696,94 @@ class _EnergyPageState extends State<EnergyPage> {
     );
   }
 
+  // ── F5: grafico COP stimato ───────────────────────────────────────────────
+  Widget _buildCopChart(
+    List<DailyRecordDTO> records,
+    List<({int index, double cop})> points,
+    ColorScheme cs,
+  ) {
+    final spots = points
+        .map((p) => FlSpot(p.index.toDouble(), p.cop))
+        .toList();
+
+    final maxCop  = points.fold(0.0, (m, p) => p.cop > m ? p.cop : m);
+    final step    = (records.length / 6).ceil().clamp(1, records.length);
+    final showDots = points.length <= 5;
+
+    return SizedBox(
+      height: 200,
+      child: LineChart(LineChartData(
+        minX: 0,
+        maxX: (records.length - 1).toDouble(),
+        minY: 0,
+        maxY: (maxCop * 1.2).ceilToDouble().clamp(1.0, 20.0),
+        borderData: _styledBorder(cs),
+        gridData: _baseGrid(cs),
+        titlesData: FlTitlesData(
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (v, _) => Text(v.toStringAsFixed(1),
+                  style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 52,
+              interval: 1,
+              getTitlesWidget: (v, _) {
+                final idx = v.toInt();
+                if (idx < 0 || idx >= records.length || idx % step != 0) {
+                  return const SizedBox.shrink();
+                }
+                final parts = records[idx].dateIso.split('/');
+                final label = parts.length >= 2 ? '${parts[0]}/${parts[1]}' : records[idx].dateIso;
+                return Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Transform.rotate(
+                    angle: -0.6,
+                    child: Text(label,
+                        style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withValues(alpha: 0.8))),
+                  ),
+                );
+              },
+            ),
+          ),
+          topTitles:   const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: spots.length > 2,
+            color: _colCop,
+            barWidth: 2.5,
+            dotData: FlDotData(
+              show: showDots,
+              getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
+                  radius: 4, color: _colCop, strokeWidth: 2, strokeColor: _dotStroke(cs)),
+            ),
+            belowBarData: BarAreaData(show: true, color: _colCop.withValues(alpha: 0.07)),
+          ),
+        ],
+        lineTouchData: LineTouchData(
+          touchTooltipData: LineTouchTooltipData(
+            getTooltipColor: (_) => _tooltipBg(cs),
+            getTooltipItems: (spots) => spots
+                .map((s) => LineTooltipItem(
+                      'COP: ${s.y.toStringAsFixed(2)}x',
+                      TextStyle(color: _tooltipText(cs), fontSize: 11, fontWeight: FontWeight.w600),
+                    ))
+                .toList(),
+          ),
+        ),
+      )),
+    );
+  }
+
+  // ── tabella dettaglio con colonna Netto ───────────────────────────────────
   Widget _buildTable(
     List<DailyRecordDTO> records,
     ColorScheme cs, {
@@ -530,17 +818,19 @@ class _EnergyPageState extends State<EnergyPage> {
             child: Row(
               children: [
                 const _TH('Data', flex: 2),
-                if (hasGrid) const _TH('Rete', color: _colGrid),
-                if (hasPv)   const _TH('FV',   color: _colPv),
-                             const _TH('PDC',  color: _colPdc),
-                             const _TH('€ Costo'),
+                if (hasGrid) const _TH('Rete',  color: _colGrid),
+                if (hasPv)   const _TH('FV',    color: _colPv),
+                             const _TH('PDC',   color: _colPdc),
+                if (hasPv)   const _TH('Netto', color: _colNet),
+                             const _TH('€ Netto'),
               ],
             ),
           ),
           ...rows.asMap().entries.map((entry) {
             final i = entry.key;
             final r = entry.value;
-            final cost = (r.energyFromGrid ?? 0.0) * _costPerKwh;
+            final net  = (r.consumption - (r.pvProduction ?? 0.0)).clamp(0.0, double.infinity);
+            final cost = net * _costPerKwh;
             final isEven = i % 2 == 0;
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
@@ -558,8 +848,9 @@ class _EnergyPageState extends State<EnergyPage> {
                         style: TextStyle(fontSize: 11, color: cs.onSurface, fontWeight: FontWeight.w500))),
                   if (hasGrid) _TD(r.energyFromGrid?.toStringAsFixed(1) ?? '–', color: _colGrid),
                   if (hasPv)   _TD(r.pvProduction?.toStringAsFixed(1)   ?? '–', color: _colPv),
-                               _TD(r.consumption.toStringAsFixed(1),                  color: _colPdc),
-                               _TD(cost.toStringAsFixed(3),                           color: cs.onSurface),
+                               _TD(r.consumption.toStringAsFixed(1),             color: _colPdc),
+                  if (hasPv)   _TD(net.toStringAsFixed(1),                       color: _colNet),
+                               _TD(cost.toStringAsFixed(3),                      color: cs.onSurface),
                 ],
               ),
             );
@@ -597,7 +888,7 @@ class _EnergyPageState extends State<EnergyPage> {
   }
 }
 
-// ── _ChartCard ──
+// ── _ChartCard ────────────────────────────────────────────────────────────────
 class _ChartCard extends StatelessWidget {
   final String title;
   final String unit;
@@ -646,7 +937,7 @@ class _ChartCard extends StatelessWidget {
   }
 }
 
-// ── _KpiCard ──
+// ── _KpiCard ──────────────────────────────────────────────────────────────────
 class _KpiCard extends StatelessWidget {
   final String label;
   final String value;
@@ -729,7 +1020,7 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-// ── helpers ──
+// ── helpers ───────────────────────────────────────────────────────────────────
 class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
