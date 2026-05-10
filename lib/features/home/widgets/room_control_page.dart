@@ -58,17 +58,14 @@ class _RoomControlPageState extends State<RoomControlPage> {
   late Color _mainColor;
   late String _headerText;
 
+  // Passo fisso 0.5 — dati puliti per l'algoritmo AI
+  static const double _step = 0.5;
+
+  int get _divisions => ((_max - _min) / _step).round();
+
   @override
   void initState() {
     super.initState();
-    _currentValue = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
-        (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
-
-    if (widget.isRoom && widget.comfortRatings != null) {
-      _currentComfort = widget.comfortRatings![widget.title] ?? 'ok';
-    } else {
-      _currentComfort = 'ok';
-    }
 
     if (widget.isRoom) {
       _min = 10; _max = 45;
@@ -83,6 +80,18 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _min = -10; _max = 40;
       _mainColor = widget.cardColor ?? const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
+    }
+
+    final raw = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
+        (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
+
+    // Snap al multiplo di _step più vicino, clampato nel range
+    _currentValue = ((raw / _step).round() * _step).clamp(_min, _max);
+
+    if (widget.isRoom && widget.comfortRatings != null) {
+      _currentComfort = widget.comfortRatings![widget.title] ?? 'ok';
+    } else {
+      _currentComfort = 'ok';
     }
   }
 
@@ -221,6 +230,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                                 value: _currentValue,
                                 min: _min,
                                 max: _max,
+                                divisions: _divisions,
                                 onChanged: (val) {
                                   setState(() { _currentValue = val; });
                                 },
