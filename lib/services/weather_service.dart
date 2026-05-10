@@ -7,7 +7,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:hive_flutter/hive_flutter.dart';
 
-// geocoding importato solo su piattaforme mobili
 import 'weather_service_geocoding.dart';
 
 class WeatherData {
@@ -94,11 +93,12 @@ class WeatherService {
       }
 
       final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.low,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.low,
+        ),
       ).timeout(_timeout);
       if (kDebugMode) debugPrint('\ud83c\udf0d Posizione ottenuta');
 
-      // Geocoding non supportato su desktop: si usa la label coordinate
       String cityName = 'Tua Posizione';
       if (!_isDesktop) {
         cityName = await GeocodingHelper.cityFromCoordinates(
