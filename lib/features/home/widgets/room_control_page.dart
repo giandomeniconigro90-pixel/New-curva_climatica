@@ -16,7 +16,7 @@ class DegreePainter extends CustomPainter {
       ..strokeWidth = 2.5;
 
     const double radius = 5.0;
-    final center = Offset(10 + radius, -9.0);
+    const center = Offset(10 + radius, -9.0);
 
     canvas.drawCircle(center, radius, paint);
   }

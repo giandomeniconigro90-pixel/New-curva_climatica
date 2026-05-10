@@ -239,10 +239,10 @@ class _EnergyPageState extends State<EnergyPage> {
               title: 'Energia giornaliera',
               unit: 'kWh',
               icon: Icons.bar_chart_rounded,
-              legend: [
-                if (hasGrid) const _LegendDot(color: _colGrid, label: 'Rete'),
-                if (hasPv)   const _LegendDot(color: _colPv,   label: 'FV'),
-                             const _LegendDot(color: _colPdc,  label: 'PDC'),
+              legend: const [
+                _LegendDot(color: _colGrid, label: 'Rete'),
+                _LegendDot(color: _colPv,   label: 'FV'),
+                _LegendDot(color: _colPdc,  label: 'PDC'),
               ],
               child: _buildBarChart(records, cs, hasGrid: hasGrid, hasPv: hasPv),
             ),
@@ -257,9 +257,9 @@ class _EnergyPageState extends State<EnergyPage> {
                 title: 'Costi giornalieri',
                 unit: '€',
                 icon: Icons.show_chart_rounded,
-                legend: [
-                  if (hasGrid) const _LegendDot(color: _colGrid, label: 'Costo rete'),
-                  if (hasPv)   const _LegendDot(color: _colPv,   label: 'Risparmio FV'),
+                legend: const [
+                  _LegendDot(color: _colGrid, label: 'Costo rete'),
+                  _LegendDot(color: _colPv,   label: 'Risparmio FV'),
                 ],
                 child: _buildCostChart(records, cs, hasGrid: hasGrid, hasPv: hasPv),
               ),
@@ -529,11 +529,11 @@ class _EnergyPageState extends State<EnergyPage> {
             ),
             child: Row(
               children: [
-                _TH('Data', flex: 2),
-                if (hasGrid) _TH('Rete', color: _colGrid),
-                if (hasPv)   _TH('FV',   color: _colPv),
-                             _TH('PDC',  color: _colPdc),
-                             _TH('€ Costo'),
+                const _TH('Data', flex: 2),
+                if (hasGrid) const _TH('Rete', color: _colGrid),
+                if (hasPv)   const _TH('FV',   color: _colPv),
+                             const _TH('PDC',  color: _colPdc),
+                             const _TH('€ Costo'),
               ],
             ),
           ),

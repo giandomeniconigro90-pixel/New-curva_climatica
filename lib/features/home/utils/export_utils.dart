@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -7,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:csv/csv.dart';
 
 import '../../../models/daily_record_dto.dart';
@@ -107,7 +107,7 @@ class ExportUtils {
     required double offset,
     required CurveSuggestion suggestion,
     required CurveStats stats,
-    required List<int>? chartImage,
+    required Uint8List? chartImage,
     required SystemMode currentMode,
   }) async {
     await _createPdf(
@@ -127,7 +127,7 @@ class ExportUtils {
         double? offset,
         CurveSuggestion? suggestion,
         CurveStats? stats,
-        List<int>? chartImage,
+        Uint8List? chartImage,
         SystemMode? currentMode,
       }) async {
     final pdf = pw.Document();
@@ -245,7 +245,7 @@ class ExportUtils {
               pw.Container(
                 height: 200,
                 width: double.infinity,
-                child: pw.Image(pw.MemoryImage(chartImage as List<int>)),
+                child: pw.Image(pw.MemoryImage(chartImage)),
               ),
               pw.SizedBox(height: 12),
             ],

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:convert';
 import 'dart:io';
@@ -339,20 +340,24 @@ class HomeNotifier extends ChangeNotifier {
       editingIndex = null;
       notifyListeners();
       final label = isToday ? 'oggi' : originalDate;
-      AppToast.show(
-        'Registrazione del $label aggiornata!',
-        context: context,
-        level: ToastLevel.success,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Registrazione del $label aggiornata!',
+          context: context,
+          level: ToastLevel.success,
+        );
+      }
     } else {
       final exists =
           allRecords.any((r) => r.dateIso == dateIso && r.mode == modeStr);
       if (exists) {
-        AppToast.show(
-          'Esiste già una registrazione per oggi. Modifica quella esistente.',
-          context: context,
-          level: ToastLevel.warning,
-        );
+        if (context.mounted) {
+          AppToast.show(
+            'Esiste già una registrazione per oggi. Modifica quella esistente.',
+            context: context,
+            level: ToastLevel.warning,
+          );
+        }
         return;
       }
 
@@ -371,11 +376,13 @@ class HomeNotifier extends ChangeNotifier {
         pvProduction: pvProduction,
       ));
       notifyListeners();
-      AppToast.show(
-        'Registrazione salvata!',
-        context: context,
-        level: ToastLevel.success,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Registrazione salvata!',
+          context: context,
+          level: ToastLevel.success,
+        );
+      }
     }
 
     await saveToHive();
@@ -531,11 +538,13 @@ class HomeNotifier extends ChangeNotifier {
       final dateStr = DateTime.now().toIso8601String().split('T').first;
       await ExportUtils.shareCsv(csv, 'ClimaSense_$dateStr.csv');
     } catch (e) {
-      AppToast.show(
-        'Errore export CSV: $e',
-        context: context,
-        level: ToastLevel.error,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Errore export CSV: $e',
+          context: context,
+          level: ToastLevel.error,
+        );
+      }
     }
   }
 
@@ -574,11 +583,13 @@ class HomeNotifier extends ChangeNotifier {
         currentMode: currentMode,
       );
     } catch (e) {
-      AppToast.show(
-        'Errore export PDF: $e',
-        context: context,
-        level: ToastLevel.error,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Errore export PDF: $e',
+          context: context,
+          level: ToastLevel.error,
+        );
+      }
     } finally {
       if (originalPage != 2) {
         currentPage = originalPage;
@@ -615,11 +626,13 @@ class HomeNotifier extends ChangeNotifier {
       await ExportUtils.shareBackupJsonString(
           backupJson, 'ClimaSenseBackup_$date.json');
     } catch (e) {
-      AppToast.show(
-        'Errore backup: $e',
-        context: context,
-        level: ToastLevel.error,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Errore backup: $e',
+          context: context,
+          level: ToastLevel.error,
+        );
+      }
     }
   }
 
@@ -687,17 +700,21 @@ class HomeNotifier extends ChangeNotifier {
 
       await loadFromHive();
 
-      AppToast.show(
-        'Ripristino completato!',
-        context: context,
-        level: ToastLevel.success,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Ripristino completato!',
+          context: context,
+          level: ToastLevel.success,
+        );
+      }
     } catch (e) {
-      AppToast.show(
-        'Errore ripristino: $e',
-        context: context,
-        level: ToastLevel.error,
-      );
+      if (context.mounted) {
+        AppToast.show(
+          'Errore ripristino: $e',
+          context: context,
+          level: ToastLevel.error,
+        );
+      }
     }
   }
 
