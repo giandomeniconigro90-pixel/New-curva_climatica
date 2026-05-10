@@ -567,7 +567,9 @@ class HomeNotifier extends ChangeNotifier {
     }
 
     try {
-      final chartImage = await captureChart() ?? await captureChart();
+      // Singola chiamata: il grafico è già visibile dopo il delay di 800ms.
+      // Un secondo tentativo immediato non aggiunge robustezza.
+      final chartImage = await captureChart();
       final windowRecords = recordsSinceLastApply(currentMode);
       final suggestion =
           computeOptimalCurveSuggestion(windowRecords, slope, offset, currentMode);
