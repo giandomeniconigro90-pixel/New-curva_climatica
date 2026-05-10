@@ -60,13 +60,11 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  // Flag in memoria: true non appena il fetch viene AVVIATO (non completato).
-  // Questo impedisce qualsiasi secondo fetch durante la sessione, anche se
-  // arriva un trigger (cambio tab, rebuild) mentre la chiamata è in corso.
+  // true non appena il fetch viene AVVIATO: blocca ogni re-fetch automatico
+  // durante la sessione finché la città non cambia o l'app non torna da background.
   bool _fetchStarted = false;
 
-  // Città usata nell'ultimo fetch completato: se l'utente la cambia in Guida
-  // _fetchStarted viene resettato e il fetch riparte.
+  // Città usata nell'ultimo fetch: se cambia in Guida, _fetchStarted si resetta.
   String? _lastFetchedCity;
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
@@ -93,11 +91,9 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  /// Scatta solo quando l'app torna in foreground dopo essere stata in background.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Reset del flag: l'app era in background, il meteo va aggiornato.
       _fetchStarted = false;
       _autoFetchIfNeeded();
     }
@@ -106,8 +102,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Controlla solo se la città è cambiata dalla tab Guida.
-    // NON esegue mai un fetch se _fetchStarted è già true.
     _autoFetchIfNeeded();
   }
 
@@ -115,16 +109,16 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     if (!mounted) return;
     final currentCity = AppStorage.getCityOverride();
 
-    // Se la città è cambiata rispetto all'ultimo fetch completato,
-    // resetta il flag per consentire un nuovo fetch.
+    // Resetta il flag solo se la città è cambiata da quando è stato fatto l'ultimo fetch.
     if (_fetchStarted && currentCity != _lastFetchedCity) {
       _fetchStarted = false;
     }
 
-    // Esce immediatamente se il fetch è già stato avviato in questa sessione.
     if (_fetchStarted) return;
 
-    _fetchWeather(silent: false);
+    // L'auto-fetch è SEMPRE silenzioso: nessun toast automatico.
+    // Il toast "Meteo aggiornato" appare solo premendo manualmente l'icona ☁️.
+    _fetchWeather(silent: true);
   }
 
   Color _cardColor(BuildContext context, Color base) {
@@ -143,8 +137,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   Future<void> _fetchWeather({bool silent = false}) async {
     if (_isLoadingWeather) return;
 
-    // Marca subito come avviato PRIMA della await: nessun trigger successivo
-    // potrà avviare un secondo fetch mentre questo è in corso.
+    // Marca subito come avviato PRIMA della await.
     _fetchStarted = true;
     final cityAtFetch = AppStorage.getCityOverride();
 
