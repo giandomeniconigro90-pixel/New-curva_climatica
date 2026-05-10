@@ -329,8 +329,9 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   void _openNotaSheet() {
     final tempController = TextEditingController(text: widget.noteController.text);
 
-    // _commitNote sincronizza sempre tempController → noteController.
-    // Viene chiamato dal bottone ✓ E da onClosing (swipe dismiss incluso).
+    // commitNote sincronizza tempController → noteController.
+    // Viene chiamato via .then() sul Future di showModalBottomSheet,
+    // coprendo sia il tap ✓ sia lo swipe-dismiss.
     void commitNote() {
       widget.noteController.text = tempController.text;
       if (mounted) setState(() {});
@@ -340,10 +341,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      // FIX #1: onClosing garantisce il salvataggio anche su swipe-dismiss.
-      // Viene invocato PRIMA che il bottom sheet venga rimosso dall'albero,
-      // quindi noteController è ancora accessibile.
-      onClosing: commitNote,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
@@ -375,7 +372,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                 maxLines: 4,
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: 'Es: finestra aperta, ospiti, anomalia caldaia…',
+                  hintText: 'Es: finestra aperta, ospiti, anomalia caldaia\u2026',
                   filled: true,
                   fillColor: Theme.of(ctx).colorScheme.surfaceContainerHighest,
                   border: OutlineInputBorder(
@@ -400,7 +397,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
           ),
         ),
       ),
-    );
+    ).then((_) => commitNote()); // ← copre sia ✓ sia swipe-dismiss
   }
 
   Widget _buildHeatpumpModeTile() {
