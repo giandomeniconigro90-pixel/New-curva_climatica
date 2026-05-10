@@ -10,8 +10,6 @@ import 'package:http/http.dart' as http;
 import 'hive_storage.dart';
 import 'weather_service_geocoding.dart';
 
-// Importa Geolocator solo su mobile (Android/iOS)
-// Su Windows/macOS/Linux il GPS non è supportato.
 import 'package:geolocator/geolocator.dart'
     if (dart.library.html) 'package:geolocator/geolocator.dart';
 
@@ -45,7 +43,6 @@ class WeatherService {
     final double? temp = box.get(_keyTemp);
     final String? city = box.get(_keyCity);
     if (temp == null || city == null) return null;
-    if (kDebugMode) debugPrint('\u2600\ufe0f Cache meteo valida (aggiornata: $tsStr)');
     return WeatherData(temp: temp, locationName: city);
   }
 
@@ -79,7 +76,7 @@ class WeatherService {
   // ---------------------------------------------------------------------------
   static Future<WeatherData?> _fetchByCityName(String cityName) async {
     try {
-      if (kDebugMode) debugPrint('\ud83c\udf0d Override città: $cityName');
+      if (kDebugMode) debugPrint('\ud83c\udf0d Fetch meteo per città: $cityName');
       final geoUrl = Uri.parse(
         'https://geocoding-api.open-meteo.com/v1/search'
         '?name=${Uri.encodeComponent(cityName)}&count=1&language=it&format=json',
@@ -129,35 +126,27 @@ class WeatherService {
   static Future<WeatherData?> _fetchByGps() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (kDebugMode) debugPrint('\ud83c\udf0d GPS abilitato: $serviceEnabled');
       if (!serviceEnabled) return null;
 
       LocationPermission permission = await Geolocator.checkPermission();
-      if (kDebugMode) debugPrint('\ud83c\udf0d Permesso iniziale: $permission');
-
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (kDebugMode) debugPrint('\ud83c\udf0d Permesso dopo richiesta: $permission');
         if (permission == LocationPermission.denied) return null;
       }
-      if (permission == LocationPermission.deniedForever) {
-        if (kDebugMode) debugPrint('\ud83c\udf0d Permesso negato per sempre');
-        return null;
-      }
+      if (permission == LocationPermission.deniedForever) return null;
 
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.low,
         ),
       ).timeout(_timeout);
-      if (kDebugMode) debugPrint('\ud83c\udf0d Posizione ottenuta');
 
       final cityName = await GeocodingHelper.cityFromCoordinates(
         position.latitude,
         position.longitude,
         timeout: _timeout,
       );
-      if (kDebugMode) debugPrint('\ud83c\udf0d Località: $cityName');
+      if (kDebugMode) debugPrint('\ud83c\udf0d GPS → $cityName');
 
       final url = Uri.parse(
         'https://api.open-meteo.com/v1/forecast'
@@ -168,20 +157,18 @@ class WeatherService {
         _timeout,
         onTimeout: () => throw TimeoutException('Timeout richiesta meteo'),
       );
-      if (kDebugMode) debugPrint('\ud83c\udf0d HTTP status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final List temps = data['daily']['temperature_2m_mean'];
         if (temps.isNotEmpty) {
           final double avgTemp = (temps[0] as num).toDouble();
-          if (kDebugMode) debugPrint('\ud83c\udf0d Temperatura media: $avgTemp\u00b0C');
+          if (kDebugMode) debugPrint('\ud83c\udf0d Temp GPS ($cityName): $avgTemp\u00b0C');
           final result = WeatherData(temp: avgTemp, locationName: cityName);
           await _writeCache(result);
           return result;
         }
       }
-      if (kDebugMode) debugPrint('\ud83c\udf0d Nessun dato meteo valido');
       return null;
     } on TimeoutException catch (e) {
       if (kDebugMode) debugPrint('\ud83c\udf0d TIMEOUT GPS: $e');
@@ -196,21 +183,19 @@ class WeatherService {
   // Entry point principale
   // ---------------------------------------------------------------------------
   static Future<WeatherData?> getDailyAvgTemp() async {
-    // 1. Cache ancora valida?
+    // 1. Cache ancora valida? Restituisce senza log rumorosi.
     final cached = _readCache();
     if (cached != null) return cached;
 
-    // 2. Override città manuale? (funziona su tutte le piattaforme)
+    // 2. Override città manuale?
     final cityOverride = AppStorage.getCityOverride();
     if (cityOverride != null) {
       return _fetchByCityName(cityOverride);
     }
 
-    // 3. GPS — solo su mobile (Android/iOS)
-    //    Su Windows/macOS/Linux Geolocator non è supportato:
-    //    la tile Esterna mostrerà '--' finché non si imposta una città manuale.
+    // 3. GPS — solo su mobile.
     if (_isDesktop) {
-      if (kDebugMode) debugPrint('\ud83d\udda5\ufe0f Desktop: GPS non disponibile. Imposta una città manuale in Guida.');
+      if (kDebugMode) debugPrint('\ud83d\udda5\ufe0f Desktop: GPS non disponibile.');
       return null;
     }
 

@@ -60,11 +60,11 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _isLoadingWeather = false;
   String? _weatherLocation;
 
-  // true non appena il fetch viene AVVIATO: blocca ogni re-fetch automatico
-  // durante la sessione finché la città non cambia o l'app non torna da background.
+  // true non appena il fetch viene AVVIATO: blocca ogni ulteriore chiamata
+  // automatica durante la sessione.
   bool _fetchStarted = false;
 
-  // Città usata nell'ultimo fetch: se cambia in Guida, _fetchStarted si resetta.
+  // Città al momento dell'ultimo fetch completato.
   String? _lastFetchedCity;
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
@@ -109,15 +109,15 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     if (!mounted) return;
     final currentCity = AppStorage.getCityOverride();
 
-    // Resetta il flag solo se la città è cambiata da quando è stato fatto l'ultimo fetch.
+    // Resetta il flag solo se la città è cambiata dall'ultimo fetch.
     if (_fetchStarted && currentCity != _lastFetchedCity) {
       _fetchStarted = false;
     }
 
+    // Guard principale: esce subito se il fetch è già stato avviato.
     if (_fetchStarted) return;
 
-    // L'auto-fetch è SEMPRE silenzioso: nessun toast automatico.
-    // Il toast "Meteo aggiornato" appare solo premendo manualmente l'icona ☁️.
+    // Auto-fetch sempre silenzioso: il toast appare solo su tap manuale ☁️.
     _fetchWeather(silent: true);
   }
 
@@ -135,9 +135,10 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   }
 
   Future<void> _fetchWeather({bool silent = false}) async {
+    // Guard doppio: blocca sia chiamate automatiche duplicate sia tap manuali
+    // sovrapposti mentre il fetch è già in corso.
     if (_isLoadingWeather) return;
 
-    // Marca subito come avviato PRIMA della await.
     _fetchStarted = true;
     final cityAtFetch = AppStorage.getCityOverride();
 
