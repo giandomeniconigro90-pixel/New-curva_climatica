@@ -76,6 +76,8 @@ class _HelpPageState extends State<HelpPage> {
             icon: Icons.checklist_rtl,
             iconColor: Colors.teal,
             title: '\ud83d\ude80 Checklist per il Nuovo Utente',
+            // FIX #2: passo 7 corretto — la notifica si imposta dall'icona
+            // campanella 🔔 in alto a destra nella barra Home, non da un menu ⋮.
             content:
                 'Segui questi passi per impostare correttamente l\u2019app dal primo giorno:\n\n'
                 '1\ufe0f\u20e3  Configura le stanze: vai in Guida \u2192 Gestisci Stanze e aggiungi i locali della tua casa.\n\n'
@@ -84,7 +86,7 @@ class _HelpPageState extends State<HelpPage> {
                 '4\ufe0f\u20e3  Inizia a registrare: ogni giorno, preferibilmente alla stessa ora, inserisci i dati dalla griglia Home e premi SALVA.\n\n'
                 '5\ufe0f\u20e3  Attendi 5 giorni: dopo 5 registrazioni l\u2019AI sar\u00e0 pronta per il primo suggerimento.\n\n'
                 '6\ufe0f\u20e3  Applica il suggerimento AI: valuta la curva proposta nella pagina Analisi e premi \u201cApplica Curva AI\u201d se ti convince.\n\n'
-                '7\ufe0f\u20e3  Imposta un promemoria: dal menu \u22ee \u2192 Impostazioni Notifica, scegli l\u2019ora per il promemoria giornaliero.',
+                '7\ufe0f\u20e3  Imposta un promemoria: tocca l\u2019icona \ud83d\udd14 in alto a destra nella barra Home per scegliere l\u2019ora del promemoria giornaliero.',
           ),
           const SizedBox(height: 24),
 
@@ -246,9 +248,9 @@ class _HelpPageState extends State<HelpPage> {
                 '\u2022 Linea blu piena: curva attuale.\n'
                 '\u2022 Linea verde tratteggiata: curva suggerita dall\u2019AI (visibile solo se disponibile).\n\n'
                 'Zona rossa:\n'
-                '  - Inverno: mandata <35 \u2103. Poco efficiente per termosifoni, ok per pavimento.\n'
+                '  - Inverno: mandata <35 \u2103. Poco efficiente per termosifoni, ok per pannelli a pavimento.\n'
                 '  - Estate: mandata <15 \u2103. Alto rischio condensa sui terminali.\n\n'
-                'Se la curva tocca spesso la zona rossa in inverno, aumenta pendenza o offset.',
+                'Se la curva tocca spesso la zona rossa in inverno con termosifoni, aumenta pendenza o offset.',
           ),
           const SizedBox(height: 12),
           _buildExpandableCard(
@@ -300,9 +302,11 @@ class _HelpPageState extends State<HelpPage> {
             icon: Icons.notifications_outlined,
             iconColor: Colors.blue,
             title: 'Promemoria Giornaliero',
+            // FIX #2: accesso notifiche tramite icona campanella in barra Home,
+            // non tramite menu ⋮ che non esiste nell'UI attuale.
             content:
                 'Puoi impostare un promemoria giornaliero che ti ricorda di inserire i dati.\n\n'
-                'Come impostarlo: dal menu \u22ee \u2192 Impostazioni Notifica \u2192 scegli l\u2019ora.\n\n'
+                'Come impostarlo: tocca l\u2019icona \ud83d\udd14 in alto a destra nella barra Home \u2192 scegli l\u2019ora.\n\n'
                 'Consiglio: imposta il promemoria la mattina, sempre alla stessa ora. La costanza dei dati \u00e8 fondamentale per ottenere buoni risultati dall\u2019AI.',
           ),
           const SizedBox(height: 12),
@@ -484,11 +488,12 @@ class _HelpPageState extends State<HelpPage> {
           const SizedBox(height: 40),
 
           // ── FOOTER ────────────────────────────────────────────────────────
+          // FIX #1: versione allineata a pubspec.yaml (1.0.0+1)
           Center(
             child: Column(
               children: [
                 Text(
-                  'ClimaSense v1.1.0',
+                  'ClimaSense v1.0.0',
                   style: TextStyle(
                     color: Colors.grey[400],
                     fontSize: 12,
