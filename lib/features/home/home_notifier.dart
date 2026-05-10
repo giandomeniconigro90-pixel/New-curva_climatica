@@ -689,13 +689,19 @@ class HomeNotifier extends ChangeNotifier {
           .map((j) => DailyRecordDTO.fromJson(j as Map<String, dynamic>))
           .toList();
 
+      // Legge la modalità dal backup; se assente o non riconosciuta usa heating.
+      final modeStr = settings['mode'] as String? ?? 'heating';
+      final restoredMode = modeStr == 'cooling'
+          ? SystemMode.cooling
+          : SystemMode.heating;
+
       await AppStorage.saveRecords(newRecords);
       await _settingsRepo.save(CurveSettings(
         heatingSlope: (settings['heatingSlope'] as num?)?.toDouble() ?? 1.0,
         heatingOffset: (settings['heatingOffset'] as num?)?.toDouble() ?? 0.0,
         coolingSlope: (settings['coolingSlope'] as num?)?.toDouble() ?? 0.5,
         coolingOffset: (settings['coolingOffset'] as num?)?.toDouble() ?? 0.0,
-        mode: SystemMode.heating,
+        mode: restoredMode,
       ));
 
       await loadFromHive();
