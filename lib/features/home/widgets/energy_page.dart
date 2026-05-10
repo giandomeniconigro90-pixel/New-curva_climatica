@@ -82,7 +82,7 @@ class _EnergyPageState extends State<EnergyPage> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+                color: Theme.of(ctx).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
@@ -140,8 +140,6 @@ class _EnergyPageState extends State<EnergyPage> {
     if (records.isEmpty) return _buildEmpty(cs);
 
     // ── KPI cards ──
-    // Usiamo un Row con gap fisso tramite mainAxisAlignment e SizedBox intercalati
-    // solo tra card effettivamente presenti, senza logica difettosa.
     final List<_KpiCard> activeCards = [
       if (hasGrid)
         _KpiCard(
@@ -185,7 +183,7 @@ class _EnergyPageState extends State<EnergyPage> {
             margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.45),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -193,7 +191,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 Container(
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
-                    color: _colGrid.withOpacity(0.15),
+                    color: _colGrid.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.bolt, color: _colGrid, size: 18),
@@ -209,9 +207,9 @@ class _EnergyPageState extends State<EnergyPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: cs.primary.withOpacity(0.12),
+                      color: cs.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: cs.primary.withOpacity(0.25)),
+                      border: Border.all(color: cs.primary.withValues(alpha: 0.25)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -284,14 +282,14 @@ class _EnergyPageState extends State<EnergyPage> {
 
   Color _tooltipBg(ColorScheme cs)   => cs.inverseSurface;
   Color _tooltipText(ColorScheme cs) => cs.onInverseSurface;
-  Color _shadowColor(ColorScheme cs) => cs.shadow.withOpacity(0.12);
+  Color _shadowColor(ColorScheme cs) => cs.shadow.withValues(alpha: 0.12);
   Color _dotStroke(ColorScheme cs)   => cs.surface;
 
   FlBorderData _styledBorder(ColorScheme cs) => FlBorderData(
         show: true,
         border: Border(
           bottom: BorderSide(
-            color: cs.outlineVariant.withOpacity(0.55),
+            color: cs.outlineVariant.withValues(alpha: 0.55),
             width: 1.5,
           ),
         ),
@@ -337,7 +335,7 @@ class _EnergyPageState extends State<EnergyPage> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) => FlLine(
-            color: cs.outlineVariant.withOpacity(0.18),
+            color: cs.outlineVariant.withValues(alpha: 0.18),
             strokeWidth: 1,
             dashArray: [4, 6],
           ),
@@ -348,7 +346,7 @@ class _EnergyPageState extends State<EnergyPage> {
               showTitles: true,
               reservedSize: 32,
               getTitlesWidget: (v, _) => Text(v.toStringAsFixed(0),
-                  style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant.withOpacity(0.7))),
+                  style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
             ),
           ),
           bottomTitles: AxisTitles(
@@ -365,7 +363,7 @@ class _EnergyPageState extends State<EnergyPage> {
                   child: Transform.rotate(
                     angle: -0.6,
                     child: Text(label,
-                        style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withOpacity(0.8))),
+                        style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withValues(alpha: 0.8))),
                   ),
                 );
               },
@@ -417,7 +415,7 @@ class _EnergyPageState extends State<EnergyPage> {
           show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (_) => FlLine(
-            color: cs.outlineVariant.withOpacity(0.18),
+            color: cs.outlineVariant.withValues(alpha: 0.18),
             strokeWidth: 1,
             dashArray: [4, 6],
           ),
@@ -428,7 +426,7 @@ class _EnergyPageState extends State<EnergyPage> {
               showTitles: true,
               reservedSize: 42,
               getTitlesWidget: (v, _) => Text('${v.toStringAsFixed(2)}\u20ac',
-                  style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withOpacity(0.7))),
+                  style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withValues(alpha: 0.7))),
             ),
           ),
           bottomTitles: AxisTitles(
@@ -450,7 +448,7 @@ class _EnergyPageState extends State<EnergyPage> {
                   child: Transform.rotate(
                     angle: -0.6,
                     child: Text(label,
-                        style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withOpacity(0.8))),
+                        style: TextStyle(fontSize: 8, color: cs.onSurfaceVariant.withValues(alpha: 0.8))),
                   ),
                 );
               },
@@ -471,7 +469,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
                     radius: 5, color: _colGrid, strokeWidth: 2, strokeColor: _dotStroke(cs)),
               ),
-              belowBarData: BarAreaData(show: true, color: _colGrid.withOpacity(0.08)),
+              belowBarData: BarAreaData(show: true, color: _colGrid.withValues(alpha: 0.08)),
             ),
           if (hasPv)
             LineChartBarData(
@@ -484,7 +482,7 @@ class _EnergyPageState extends State<EnergyPage> {
                 getDotPainter: (_, __, ___, ____) => FlDotCirclePainter(
                     radius: 5, color: _colPv, strokeWidth: 2, strokeColor: _dotStroke(cs)),
               ),
-              belowBarData: BarAreaData(show: true, color: _colPv.withOpacity(0.08)),
+              belowBarData: BarAreaData(show: true, color: _colPv.withValues(alpha: 0.08)),
             ),
         ],
         lineTouchData: LineTouchData(
@@ -531,7 +529,7 @@ class _EnergyPageState extends State<EnergyPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest.withOpacity(0.6),
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
             ),
             child: Row(
               children: [
@@ -551,8 +549,8 @@ class _EnergyPageState extends State<EnergyPage> {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
               decoration: BoxDecoration(
-                color: isEven ? Colors.transparent : cs.surfaceContainerHighest.withOpacity(0.2),
-                border: Border(bottom: BorderSide(color: cs.outlineVariant.withOpacity(0.15))),
+                color: isEven ? Colors.transparent : cs.surfaceContainerHighest.withValues(alpha: 0.2),
+                border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.15))),
                 borderRadius: i == rows.length - 1
                     ? const BorderRadius.vertical(bottom: Radius.circular(14))
                     : BorderRadius.zero,
@@ -584,7 +582,7 @@ class _EnergyPageState extends State<EnergyPage> {
           children: [
             Container(
               width: 80, height: 80,
-              decoration: BoxDecoration(color: _colGrid.withOpacity(0.12), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: _colGrid.withValues(alpha: 0.12), shape: BoxShape.circle),
               child: const Icon(Icons.bolt_outlined, size: 40, color: _colGrid),
             ),
             const SizedBox(height: 20),
@@ -624,7 +622,7 @@ class _ChartCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Card(
       elevation: 2,
-      shadowColor: cs.shadow.withOpacity(0.12),
+      shadowColor: cs.shadow.withValues(alpha: 0.12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 14, 14, 12),
@@ -676,7 +674,7 @@ class _KpiCard extends StatelessWidget {
     return Expanded(
       child: Card(
         elevation: 2,
-        shadowColor: cs.shadow.withOpacity(0.12),
+        shadowColor: cs.shadow.withValues(alpha: 0.12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -694,7 +692,7 @@ class _KpiCard extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: accentColor.withOpacity(0.15),
+                            color: accentColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Icon(icon, size: 12, color: accentColor),
