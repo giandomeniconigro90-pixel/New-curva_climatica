@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/constants/room_constants.dart';
 import '../../models/curve_settings.dart';
@@ -570,6 +571,41 @@ class HomeNotifier extends ChangeNotifier {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // F6 — Dialogo selezione range date prima dell'export
+  // ─────────────────────────────────────────────────────────────
+
+  /// Mostra il bottom-sheet di selezione range e restituisce
+  /// la lista filtrata, oppure null se l'utente annulla.
+  Future<List<DailyRecordDTO>?> _showExportRangeSheet(
+      BuildContext context) async {
+    if (records.isEmpty) return null;
+
+    // Calcola min/max dei record disponibili
+    final sorted = List<DailyRecordDTO>.from(records)
+      ..sort((a, b) {
+        final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+        final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+        return dA.compareTo(dB);
+      });
+    final firstDate =
+        parseItalianDateSafe(sorted.first.dateIso) ?? DateTime(2000);
+    final lastDate =
+        parseItalianDateSafe(sorted.last.dateIso) ?? DateTime.now();
+
+    final result = await showModalBottomSheet<List<DailyRecordDTO>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ExportRangeSheet(
+        records: records,
+        firstDate: firstDate,
+        lastDate: lastDate,
+      ),
+    );
+    return result;
+  }
+
   Future<void> exportCsv(BuildContext context) async {
     if (records.isEmpty) {
       AppToast.show(
@@ -579,9 +615,14 @@ class HomeNotifier extends ChangeNotifier {
       );
       return;
     }
+
+    // F6 — selezione range
+    final filtered = await _showExportRangeSheet(context);
+    if (filtered == null || !context.mounted) return;
+
     try {
       final csv = ExportUtils.generateCsv(
-        records,
+        filtered,
         slope: slope,
         offset: offset,
         mode: currentMode,
@@ -609,6 +650,10 @@ class HomeNotifier extends ChangeNotifier {
       return;
     }
 
+    // F6 — selezione range
+    final filtered = await _showExportRangeSheet(context);
+    if (filtered == null || !context.mounted) return;
+
     final int originalPage = currentPage;
     if (currentPage != 2) {
       currentPage = 2;
@@ -625,7 +670,7 @@ class HomeNotifier extends ChangeNotifier {
       final stats = computeCurveStats(windowRecords);
 
       await ExportUtils.generateAndSavePdf(
-        records: records,
+        records: filtered,
         slope: slope,
         offset: offset,
         suggestion: suggestion,
@@ -812,5 +857,327 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> resetCalibration() async {
     await _settingsRepo.reset();
     await loadFromHive();
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F6 — Widget bottom-sheet selezione range per export
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ExportRangeSheet extends StatefulWidget {
+  final List<DailyRecordDTO> records;
+  final DateTime firstDate;
+  final DateTime lastDate;
+
+  const _ExportRangeSheet({
+    required this.records,
+    required this.firstDate,
+    required this.lastDate,
+  });
+
+  @override
+  State<_ExportRangeSheet> createState() => _ExportRangeSheetState();
+}
+
+class _ExportRangeSheetState extends State<_ExportRangeSheet> {
+  // 0 = tutti, 1 = ultimo mese, 2 = ultimi 3 mesi, 3 = personalizzato
+  int _selected = 0;
+  DateTimeRange? _customRange;
+
+  final _fmt = DateFormat('dd/MM/yyyy');
+
+  List<DailyRecordDTO> _filtered() {
+    final now = DateTime.now();
+    DateTime? from;
+    DateTime? to;
+
+    switch (_selected) {
+      case 1:
+        from = DateTime(now.year, now.month - 1, now.day);
+        break;
+      case 2:
+        from = DateTime(now.year, now.month - 3, now.day);
+        break;
+      case 3:
+        from = _customRange?.start;
+        to = _customRange?.end;
+        break;
+      default:
+        break;
+    }
+
+    return widget.records.where((r) {
+      final d = parseItalianDateSafe(r.dateIso);
+      if (d == null) return false;
+      if (from != null && d.isBefore(from)) return false;
+      if (to != null && d.isAfter(to.add(const Duration(days: 1)))) return false;
+      return true;
+    }).toList();
+  }
+
+  Future<void> _pickCustomRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: widget.firstDate,
+      lastDate: widget.lastDate,
+      initialDateRange: _customRange ??
+          DateTimeRange(
+            start: widget.lastDate.subtract(const Duration(days: 30)),
+            end: widget.lastDate,
+          ),
+      locale: const Locale('it', 'IT'),
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _customRange = picked;
+        _selected = 3;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final count = _filtered().length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Handle bar
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: cs.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.date_range_outlined,
+                    color: cs.onPrimaryContainer, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Seleziona periodo di export',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Opzioni rapide
+          _QuickOption(
+            icon: Icons.all_inclusive_rounded,
+            label: 'Tutti i dati',
+            subtitle: '${widget.records.length} registrazioni',
+            selected: _selected == 0,
+            onTap: () => setState(() => _selected = 0),
+          ),
+          const SizedBox(height: 8),
+          _QuickOption(
+            icon: Icons.calendar_month_outlined,
+            label: 'Ultimo mese',
+            subtitle: _subtitleForPreset(1),
+            selected: _selected == 1,
+            onTap: () => setState(() => _selected = 1),
+          ),
+          const SizedBox(height: 8),
+          _QuickOption(
+            icon: Icons.calendar_today_outlined,
+            label: 'Ultimi 3 mesi',
+            subtitle: _subtitleForPreset(2),
+            selected: _selected == 2,
+            onTap: () => setState(() => _selected = 2),
+          ),
+          const SizedBox(height: 8),
+
+          // Opzione range personalizzato
+          _QuickOption(
+            icon: Icons.tune_rounded,
+            label: 'Range personalizzato',
+            subtitle: _customRange != null
+                ? '${_fmt.format(_customRange!.start)} → ${_fmt.format(_customRange!.end)}'
+                : 'Tocca per scegliere',
+            selected: _selected == 3,
+            onTap: _pickCustomRange,
+            trailing: Icon(Icons.chevron_right_rounded,
+                color: cs.onSurfaceVariant, size: 20),
+          ),
+          const SizedBox(height: 24),
+
+          // Counter registrazioni selezionate
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    size: 16, color: cs.onPrimaryContainer),
+                const SizedBox(width: 8),
+                Text(
+                  count == 0
+                      ? 'Nessuna registrazione nel periodo selezionato'
+                      : '$count registrazioni verranno esportate',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: cs.onPrimaryContainer,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Bottoni azione
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(null),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Annulla'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: count == 0
+                      ? null
+                      : () => Navigator.of(context).pop(_filtered()),
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: Text('Esporta ($count)'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _subtitleForPreset(int preset) {
+    final now = DateTime.now();
+    final months = preset == 1 ? 1 : 3;
+    final from = DateTime(now.year, now.month - months, now.day);
+    final count = widget.records.where((r) {
+      final d = parseItalianDateSafe(r.dateIso);
+      return d != null && !d.isBefore(from);
+    }).length;
+    return '$count registrazioni';
+  }
+}
+
+class _QuickOption extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  const _QuickOption({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: selected ? cs.primaryContainer : cs.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? cs.onPrimaryContainer : cs.onSurfaceVariant,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: selected
+                            ? cs.onPrimaryContainer
+                            : cs.onSurface,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: selected
+                            ? cs.onPrimaryContainer.withValues(alpha: 0.7)
+                            : cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (trailing != null) trailing!,
+              if (selected && trailing == null)
+                Icon(Icons.check_circle_rounded,
+                    color: cs.onPrimaryContainer, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
