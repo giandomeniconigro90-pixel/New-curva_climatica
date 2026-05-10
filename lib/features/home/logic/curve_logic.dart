@@ -2,7 +2,6 @@
 
 import 'package:fl_chart/fl_chart.dart';
 import '../../../models/daily_record_dto.dart';
-import '../../../utils/date_utils.dart';
 
 enum SystemMode { heating, cooling }
 
@@ -89,48 +88,38 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
 
 /// Calcola la curva ottimale suggerita dall'AI.
 ///
-/// Responsabilità di questa funzione:
-/// - Filtrare i record successivi a [lastAppliedDate] (finestra temporale AI)
-/// - Analizzare comfort ed energia
-/// - Suggerire slope/offset con passo prudenziale
+/// FIX #3 — Il parametro opzionale [lastAppliedDate] è stato RIMOSSO.
 ///
-/// Il filtro per modalità (heating/cooling) è responsabilità del chiamante:
-/// passare [HomeNotifier.records] o [HomeNotifier.recordsSinceLastApply],
-/// che sono già filtrati per modalità corrente.
+/// Motivazione: [HomeNotifier] passa già una lista pre-filtrata tramite
+/// [recordsSinceLastApply], che esclude i record precedenti all'ultimo
+/// apply AI. Mantenere qui un secondo filtro sullo stesso criterio era
+/// ridondante e pericoloso: se per errore si passava sia la lista
+/// filtrata sia lastAppliedDate, i record venivano filtrati due volte
+/// e la finestra risultava vuota o troppo corta, bloccando l'AI in
+/// modalità "apprendimento" anche con dati sufficienti.
+///
+/// Contratto attuale:
+///   - [records] deve essere già filtrato per modalità (heating/cooling)
+///     e per finestra temporale (dopo l'ultimo apply AI).
+///   - Questa funzione NON applica nessun filtro temporale interno.
+///   - Il messaggio di apprendimento usa sempre il ramo senza data,
+///     più chiaro per l'utente.
 CurveSuggestion computeOptimalCurveSuggestion(
     List<DailyRecordDTO> records,
     double currentSlope,
     double currentOffset,
-    SystemMode mode,
-    [DateTime? lastAppliedDate]) {
-  var filteredRecords = records;
-  if (lastAppliedDate != null) {
-    final lastDay = DateTime(
-        lastAppliedDate.year, lastAppliedDate.month, lastAppliedDate.day);
-    filteredRecords = records.where((r) {
-      final rDate = parseItalianDateSafe(r.dateIso);
-      if (rDate == null) return false;
-      return rDate.isAfter(lastDay);
-    }).toList();
-  }
-
+    SystemMode mode) {
   // FASE 1: APPRENDIMENTO
-  if (filteredRecords.length < 5) {
-    final String message;
-    if (lastAppliedDate == null) {
-      message =
-          'Sto imparando come reagisce la tua casa. Continua a registrare dati per almeno ${5 - filteredRecords.length} giorni.';
-    } else {
-      message =
-          'Hai modificato la curva di recente. Attendo 5 giorni di NUOVI dati per valutare le modifiche. (Giorni validi: ${filteredRecords.length}/5)';
-    }
+  if (records.length < 5) {
     return CurveSuggestion(
       suggestedSlope: currentSlope,
       suggestedOffset: currentOffset,
       comfortScore: 0.5,
-      smartTip: message,
+      smartTip:
+          'Sto imparando come reagisce la tua casa. '
+          'Continua a registrare dati per almeno ${5 - records.length} giorni.',
       isLearning: true,
-      learningProgress: filteredRecords.length,
+      learningProgress: records.length,
     );
   }
 
@@ -139,7 +128,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
   int hotComplaints = 0;
   int okDays = 0;
 
-  for (var r in filteredRecords) {
+  for (var r in records) {
     final bool dayCold = r.comfortRatings.values.contains('freddo');
     final bool dayHot = r.comfortRatings.values.contains('caldo');
     if (dayCold) {
@@ -151,20 +140,20 @@ CurveSuggestion computeOptimalCurveSuggestion(
     }
   }
 
-  final double comfortScore = okDays / filteredRecords.length;
+  final double comfortScore = okDays / records.length;
   double targetSlope = currentSlope;
   double targetOffset = currentOffset;
   String tip;
 
   if (coldComplaints > hotComplaints) {
     targetOffset += 1.0;
-    if (coldComplaints > filteredRecords.length * 0.3) targetSlope += 0.1;
+    if (coldComplaints > records.length * 0.3) targetSlope += 0.1;
     tip = mode == SystemMode.heating
         ? 'Rilevati giorni freddi. Aumento la potenza di riscaldamento.'
         : 'Raffrescamento eccessivo. Riduco l\'intensità di raffreddamento.';
   } else if (hotComplaints > coldComplaints) {
     targetOffset -= 1.0;
-    if (hotComplaints > filteredRecords.length * 0.3) targetSlope -= 0.1;
+    if (hotComplaints > records.length * 0.3) targetSlope -= 0.1;
     tip = mode == SystemMode.heating
         ? 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.'
         : 'Raffrescamento insufficiente. Aumento la potenza di raffreddamento.';
@@ -207,7 +196,7 @@ CurveSuggestion computeOptimalCurveSuggestion(
     comfortScore: comfortScore,
     smartTip: tip,
     isLearning: false,
-    learningProgress: filteredRecords.length,
+    learningProgress: records.length,
   );
 }
 
