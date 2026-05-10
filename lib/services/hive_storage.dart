@@ -77,8 +77,22 @@ class AppStorage {
     }
   }
 
+  /// FIX #2 — Crash-recovery chiave-per-chiave.
+  ///
+  /// Scenario di crash: l'app si interrompe durante [saveRecords] dopo che
+  /// alcune chiavi definitive sono già state scritte ma prima che tutte
+  /// vengano promosse dallo staging.
+  ///
+  /// Logica precedente: promuoveva lo staging SOLO se non esistevano chiavi
+  /// definitive → se almeno una definitiva era già presente, lo staging
+  /// veniva eliminato silenziosamente, perdendo i record non ancora promossi.
+  ///
+  /// Nuova logica: per ogni chiave staging, se la corrispondente chiave
+  /// definitiva è assente, la promuove. In questo modo il recovery è
+  /// granulare e non dipende dall'esistenza di ALTRE chiavi definitive.
   static Future<void> _recoverStagingIfNeeded() async {
     final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
+
     final stagingKeys = box.keys
         .whereType<String>()
         .where((k) => k.startsWith(_stagingPrefix))
@@ -91,16 +105,19 @@ class AppStorage {
         .where((k) => !k.startsWith(_stagingPrefix))
         .toSet();
 
-    if (definitiveKeys.isEmpty) {
-      for (final sk in stagingKeys) {
+    for (final sk in stagingKeys) {
+      final definitiveKey = sk.substring(_stagingPrefix.length);
+      // Promuovi solo se la chiave definitiva non esiste ancora.
+      if (!definitiveKeys.contains(definitiveKey)) {
         final record = box.get(sk);
         if (record != null) {
-          final definitiveKey = sk.substring(_stagingPrefix.length);
           await box.put(definitiveKey, _cloneRecord(record));
         }
       }
     }
 
+    // Pulisce SEMPRE tutto lo staging, a prescindere da quante chiavi
+    // definitive esistessero prima del recovery.
     await box.deleteAll(stagingKeys);
   }
 
