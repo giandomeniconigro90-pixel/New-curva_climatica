@@ -1,39 +1,23 @@
 // lib/features/home/widgets/room_control_page.dart
+//
+// Refactor #6 — validazione real-time:
+//   • errorText inline sotto il TextField (senza dialog)
+//   • Pulsante Salva disabilitato se il valore non è valido
+//   • Bordo rosso sul TextField in caso di errore
 
-import 'dart:ui';
 import 'package:flutter/material.dart';
-
-class DegreePainter extends CustomPainter {
-  final Color color;
-
-  const DegreePainter({required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-
-    const double radius = 5.0;
-    const center = Offset(10 + radius, -9.0);
-
-    canvas.drawCircle(center, radius, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
+import 'package:flutter/services.dart';
+import '../logic/record_form_validator.dart';
 
 class RoomControlPage extends StatefulWidget {
   final String title;
   final TextEditingController controller;
   final bool isConsumption;
   final bool isRoom;
-  final Map<String, String>? comfortRatings;
+  final Map<String, String> comfortRatings;
   final VoidCallback onSave;
   final bool isCooling;
-  final Color? cardColor;
+  final Color cardColor;
 
   const RoomControlPage({
     super.key,
@@ -41,10 +25,10 @@ class RoomControlPage extends StatefulWidget {
     required this.controller,
     required this.isConsumption,
     required this.isRoom,
-    this.comfortRatings,
+    required this.comfortRatings,
     required this.onSave,
     required this.isCooling,
-    this.cardColor,
+    required this.cardColor,
   });
 
   @override
@@ -52,264 +36,302 @@ class RoomControlPage extends StatefulWidget {
 }
 
 class _RoomControlPageState extends State<RoomControlPage> {
-  late double _currentValue;
-  late String _currentComfort;
-  late double _min, _max;
-  late Color _mainColor;
-  late String _headerText;
+  late TextEditingController _localCtrl;
+  String? _errorText;
+  late FieldKind _fieldKind;
 
-  static const double _step = 0.5;
-
-  int get _divisions => ((_max - _min) / _step).round();
+  // Valori per il rating di comfort (solo stanze)
+  static const _comfortOptions = [
+    ('\uD83E\uDD76', 'Troppo freddo'),
+    ('\uD83D\uDE42', 'Confortevole'),
+    ('\uD83E\uDD75', 'Troppo caldo'),
+  ];
 
   @override
   void initState() {
     super.initState();
+    _localCtrl = TextEditingController(text: widget.controller.text);
+    _fieldKind = _resolveKind();
+    // Valida il valore iniziale
+    _errorText = RecordFormValidator.validateField(
+      _localCtrl.text,
+      kind: _fieldKind,
+      label: widget.title,
+    );
+    _localCtrl.addListener(_onChanged);
+  }
 
-    if (widget.isRoom) {
-      _min = 10; _max = 45;
-      _mainColor = widget.cardColor ??
-          (widget.isCooling ? const Color(0xFF4DB6AC) : const Color(0xFFFFB74D));
-      _headerText = "TEMPERATURA INTERNA";
-    } else if (widget.isConsumption) {
-      _min = 0; _max = 25;
-      _mainColor = widget.cardColor ?? const Color(0xFF66BB6A);
-      _headerText = "CONSUMO GIORNALIERO";
-    } else {
-      _min = -10; _max = 40;
-      _mainColor = widget.cardColor ?? const Color(0xFF1976D2);
-      _headerText = "TEMPERATURA ESTERNA";
-    }
+  @override
+  void dispose() {
+    _localCtrl.removeListener(_onChanged);
+    _localCtrl.dispose();
+    super.dispose();
+  }
 
-    final raw = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
-        (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
+  FieldKind _resolveKind() {
+    if (widget.isRoom) return FieldKind.internalTemp;
+    if (widget.title == 'Esterna') return FieldKind.externalTemp;
+    if (widget.title == 'Consumo') return FieldKind.consumption;
+    if (widget.title == 'ACS') return FieldKind.consumptionAcs;
+    if (widget.title == 'Rete') return FieldKind.energyFromGrid;
+    if (widget.title == 'Fotovoltaico') return FieldKind.pvProduction;
+    return FieldKind.consumption;
+  }
 
-    _currentValue = ((raw / _step).round() * _step).clamp(_min, _max);
+  void _onChanged() {
+    final err = RecordFormValidator.validateField(
+      _localCtrl.text,
+      kind: _fieldKind,
+      label: widget.title,
+    );
+    if (err != _errorText) setState(() => _errorText = err);
+  }
 
-    if (widget.isRoom && widget.comfortRatings != null) {
-      _currentComfort = widget.comfortRatings![widget.title] ?? 'ok';
-    } else {
-      _currentComfort = 'ok';
-    }
+  void _save() {
+    if (_errorText != null) return;
+    widget.controller.text = _localCtrl.text;
+    widget.onSave();
+    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+  }
+
+  void _adjust(double delta) {
+    final current =
+        double.tryParse(_localCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    final next = (current + delta);
+    _localCtrl.text = next.toStringAsFixed(1);
   }
 
   @override
   Widget build(BuildContext context) {
-    final double sliderHeight = MediaQuery.of(context).size.height
-        .clamp(260.0 / 0.45, 420.0 / 0.45) * 0.45;
+    final cs = Theme.of(context).colorScheme;
+    final bool hasError = _errorText != null;
+    final bool canSave = !hasError;
 
-    double percentage = (_currentValue - _min) / (_max - _min);
-    percentage = percentage.clamp(0.0, 1.0);
-
-    String fullText = _currentValue.toStringAsFixed(1);
-    List<String> parts = fullText.split('.');
-    String integerPart = parts[0];
-    String decimalPart = parts.length > 1 ? parts[1] : "0";
+    final String suffix = widget.isConsumption ? 'kWh' : '\u00b0C';
+    final String hintText = widget.isConsumption
+        ? 'Es. 12.5 kWh'
+        : widget.isRoom
+            ? 'Es. 20.5 \u00b0C'
+            : 'Es. -2.0 \u00b0C';
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              color: _mainColor.withValues(alpha: 0.75),
+      backgroundColor: cs.surface,
+      appBar: AppBar(
+        backgroundColor: widget.cardColor,
+        foregroundColor: Colors.white,
+        title: Text(
+          widget.title,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          // Pulsante Salva disabilitato se errore
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: TextButton.icon(
+              key: ValueKey(canSave),
+              onPressed: canSave ? _save : null,
+              icon: Icon(
+                Icons.check,
+                color: canSave ? Colors.white : Colors.white38,
+              ),
+              label: Text(
+                'Salva',
+                style: TextStyle(
+                  color: canSave ? Colors.white : Colors.white38,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
-          SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                      IconButton(
-                        icon: const Icon(Icons.check, color: Colors.white, size: 28),
-                        onPressed: _saveAndExit,
-                      ),
-                    ],
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            // ----------------------------------------------------------------
+            // TextField principale con errorText inline
+            // ----------------------------------------------------------------
+            TextField(
+              controller: _localCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true, signed: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]')),
+              ],
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                color: hasError ? cs.error : cs.onSurface,
+              ),
+              decoration: InputDecoration(
+                hintText: hintText,
+                suffixText: suffix,
+                suffixStyle: TextStyle(
+                  fontSize: 18,
+                  color: hasError ? cs.error : cs.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+                // Messaggio di errore inline — nessun dialog
+                errorText: _errorText,
+                errorStyle: TextStyle(
+                  color: cs.error,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                filled: true,
+                fillColor: hasError
+                    ? cs.errorContainer.withValues(alpha: 0.15)
+                    : cs.surfaceContainerHighest,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: hasError
+                      ? BorderSide(color: cs.error, width: 2)
+                      : BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(
+                    color: hasError ? cs.error : cs.primary,
+                    width: 2,
                   ),
                 ),
-                const Spacer(flex: 1),
-                Column(
-                  children: [
-                    Text(_headerText, style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 2),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          integerPart,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 50,
-                            fontWeight: FontWeight.bold,
-                            height: 1.0,
-                          ),
-                        ),
-                        if (widget.isConsumption)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 25),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  ".$decimalPart",
-                                  style: const TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  "kWh",
-                                  style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          )
-                        else
-                          Transform.translate(
-                            offset: const Offset(-1.0, 0.0),
-                            child: CustomPaint(
-                              foregroundPainter: DegreePainter(color: Colors.white),
-                              child: Text(
-                                ".$decimalPart",
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 25,
-                                  fontWeight: FontWeight.bold,
-                                  height: 1.0,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
+              ),
+            ),
+            // ----------------------------------------------------------------
+            // Stepper +/- (non mostrato in caso di errore non-numerico)
+            // ----------------------------------------------------------------
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                _stepButton(
+                    icon: Icons.remove,
+                    delta: widget.isConsumption ? -0.5 : -0.5,
+                    cs: cs),
+                const SizedBox(width: 12),
+                _stepButton(
+                    icon: Icons.add,
+                    delta: widget.isConsumption ? 0.5 : 0.5,
+                    cs: cs),
+                if (!widget.isConsumption) ...[
+                  const SizedBox(width: 12),
+                  _stepButton(icon: Icons.remove, delta: -1.0, cs: cs,
+                      label: '\u22121\u00b0'),
+                  const SizedBox(width: 12),
+                  _stepButton(icon: Icons.add, delta: 1.0, cs: cs,
+                      label: '+1\u00b0'),
+                ],
+              ],
+            ),
+            // ----------------------------------------------------------------
+            // Rating comfort (solo stanze)
+            // ----------------------------------------------------------------
+            if (widget.isRoom) ...[
+              const SizedBox(height: 32),
+              Text(
+                'Come ti sei sentito?',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
                 ),
-                const Spacer(flex: 1),
-                Center(
-                  child: Container(
-                    width: 220,
-                    height: sliderHeight,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(40),
-                      child: Stack(
-                        alignment: Alignment.bottomCenter,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: _comfortOptions.map((opt) {
+                  final emoji = opt.$1;
+                  final label = opt.$2;
+                  final isSelected =
+                      widget.comfortRatings[widget.title] == label;
+                  return GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        widget.comfortRatings[widget.title] = label;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? widget.cardColor.withValues(alpha: 0.15)
+                            : cs.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected
+                              ? widget.cardColor
+                              : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Column(
                         children: [
-                          Container(
-                            width: double.infinity,
-                            height: sliderHeight * percentage,
-                            color: Colors.white,
-                          ),
-                          RotatedBox(
-                            quarterTurns: 3,
-                            child: SliderTheme(
-                              data: SliderThemeData(
-                                trackHeight: 220,
-                                thumbShape: SliderComponentShape.noThumb,
-                                overlayShape: SliderComponentShape.noOverlay,
-                                activeTrackColor: Colors.transparent,
-                                inactiveTrackColor: Colors.transparent,
-                              ),
-                              child: Slider(
-                                value: _currentValue,
-                                min: _min,
-                                max: _max,
-                                divisions: _divisions,
-                                onChanged: (val) {
-                                  setState(() { _currentValue = val; });
-                                },
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: (sliderHeight * percentage) - 10,
-                            child: Container(
-                              width: 40,
-                              height: 5,
-                              decoration: BoxDecoration(
-                                color: _mainColor.withValues(alpha: 0.8),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
+                          Text(emoji,
+                              style: const TextStyle(fontSize: 28)),
+                          const SizedBox(height: 4),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isSelected
+                                  ? cs.onSurface
+                                  : cs.onSurfaceVariant,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                const Spacer(flex: 5),
-                if (widget.isRoom)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildComfortOption('freddo', Icons.ac_unit),
-                        const SizedBox(width: 40),
-                        _buildComfortOption('ok', Icons.sentiment_satisfied_alt),
-                        const SizedBox(width: 40),
-                        _buildComfortOption('caldo', Icons.local_fire_department),
-                      ],
-                    ),
-                  )
-                else
-                  const SizedBox(height: 50),
-              ],
-            ),
-          ),
-        ],
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildComfortOption(String value, IconData icon) {
-    final isSelected = _currentComfort == value;
-    return GestureDetector(
-      onTap: () => setState(() => _currentComfort = value),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: isSelected ? _mainColor : Colors.white, size: 24),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value.toUpperCase(),
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
+  Widget _stepButton({
+    required IconData icon,
+    required double delta,
+    required ColorScheme cs,
+    String? label,
+  }) {
+    return InkWell(
+      onTap: () => _adjust(delta),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: label != null
+            ? Text(
+                label,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface),
+              )
+            : Icon(icon, color: cs.onSurface, size: 20),
       ),
     );
-  }
-
-  void _saveAndExit() {
-    widget.controller.text = _currentValue.toStringAsFixed(1);
-    if (widget.isRoom && widget.comfortRatings != null) {
-      widget.comfortRatings![widget.title] = _currentComfort;
-    }
-    widget.onSave();
-    Navigator.pop(context);
   }
 }
