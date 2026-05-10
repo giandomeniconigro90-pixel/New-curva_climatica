@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'dart:convert';
 import 'dart:io';
@@ -16,7 +15,6 @@ import '../../services/hive_storage.dart';
 import '../../services/notification_service.dart';
 import '../../utils/app_toast.dart';
 import '../../utils/date_utils.dart';
-import '../initial_settings/initial_settings_home.dart';
 
 import 'logic/curve_logic.dart';
 import 'logic/record_form_validator.dart';
