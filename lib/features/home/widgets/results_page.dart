@@ -171,7 +171,7 @@ class _ResultsPageState extends State<ResultsPage> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.06),
+                            color: Colors.black.withValues(alpha: 0.06),
                             blurRadius: 10,
                             offset: const Offset(0, 4),
                           ),
@@ -216,7 +216,7 @@ class _ResultsPageState extends State<ResultsPage> {
                                         size: 14, color: Colors.orange),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Esterna: ${r.externalTemp}°C',
+                                      'Esterna: ${r.externalTemp}\u00b0C',
                                       style: TextStyle(
                                         fontWeight: FontWeight.bold,
                                         color: cs.onSurface,
@@ -371,7 +371,7 @@ class _ResultsPageState extends State<ResultsPage> {
         border: Border.all(color: cs.outlineVariant),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -408,8 +408,8 @@ class _ResultsPageState extends State<ResultsPage> {
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: hasEnoughData
-                  ? Colors.green.withOpacity(0.1)
-                  : Colors.orange.withOpacity(0.1),
+                  ? Colors.green.withValues(alpha: 0.1)
+                  : Colors.orange.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: hasEnoughData ? Colors.green : Colors.orange,

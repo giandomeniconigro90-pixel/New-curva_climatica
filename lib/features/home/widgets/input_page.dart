@@ -73,7 +73,7 @@ class _InputPageState extends State<InputPage> {
 
   Color _cardColor(BuildContext context, Color base) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? base.withOpacity(0.55) : base;
+    return isDark ? base.withValues(alpha: 0.55) : base;
   }
 
   String get _weatherSubtitle {
@@ -251,7 +251,7 @@ class _InputPageState extends State<InputPage> {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: color.withOpacity(0.25), blurRadius: 4, offset: const Offset(0, 2))],
+        boxShadow: [BoxShadow(color: color.withValues(alpha: 0.25), blurRadius: 4, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,7 +268,7 @@ class _InputPageState extends State<InputPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 9, fontWeight: FontWeight.w500)),
+              Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 9, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
               DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
@@ -311,7 +311,7 @@ class _InputPageState extends State<InputPage> {
             decoration: BoxDecoration(
               color: effectiveColor,
               borderRadius: BorderRadius.circular(12),
-              boxShadow: [BoxShadow(color: effectiveColor.withOpacity(0.25), blurRadius: 4, offset: const Offset(0, 2))],
+              boxShadow: [BoxShadow(color: effectiveColor.withValues(alpha: 0.25), blurRadius: 4, offset: const Offset(0, 2))],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -328,7 +328,7 @@ class _InputPageState extends State<InputPage> {
                           Text(displayVal, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, height: 1.0)),
                           Padding(
                             padding: const EdgeInsets.only(top: 2, left: 2),
-                            child: Text(suffix, style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8), fontWeight: FontWeight.bold)),
+                            child: Text(suffix, style: TextStyle(fontSize: 16, color: Colors.white.withValues(alpha: 0.8), fontWeight: FontWeight.bold)),
                           ),
                         ],
                       )
@@ -344,21 +344,21 @@ class _InputPageState extends State<InputPage> {
                             padding: const EdgeInsets.all(4.0),
                             child: _isLoadingWeather
                                 ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : Icon(Icons.cloud_sync, size: 28, color: Colors.white.withOpacity(0.8)),
+                                : Icon(Icons.cloud_sync, size: 28, color: Colors.white.withValues(alpha: 0.8)),
                           ),
                         ),
                       )
                     else if (!isRoom && val == null)
                       Align(
                         alignment: Alignment.topRight,
-                        child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withOpacity(0.3)),
+                        child: Icon(icon ?? Icons.help_outline, size: 36, color: Colors.white.withValues(alpha: 0.3)),
                       ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 9, fontWeight: FontWeight.w500)),
+                    Text(subtitle, style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 9, fontWeight: FontWeight.w500)),
                     const SizedBox(height: 1),
                     Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
