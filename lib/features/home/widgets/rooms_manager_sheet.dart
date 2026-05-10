@@ -1,6 +1,7 @@
 // lib/features/home/widgets/rooms_manager_sheet.dart
 
 import 'package:flutter/material.dart';
+import '../../../core/constants/room_constants.dart';
 import '../../../services/hive_storage.dart';
 
 class RoomsManagerSheet extends StatefulWidget {
@@ -17,10 +18,21 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
   final TextEditingController _addController = TextEditingController();
   final FocusNode _addFocus = FocusNode();
 
+  /// Le zone fisiche obbligatorie non possono essere eliminate.
+  static const List<String> _fixedZones = RoomConstants.defaultRooms;
+
+  bool _isFixed(String room) => _fixedZones.contains(room);
+
   @override
   void initState() {
     super.initState();
     _rooms = List.from(widget.initialRooms);
+    // Assicura che le zone fisse siano sempre presenti in cima
+    for (final zone in _fixedZones.reversed) {
+      if (!_rooms.contains(zone)) {
+        _rooms.insert(0, zone);
+      }
+    }
   }
 
   @override
@@ -55,6 +67,17 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
   }
 
   void _deleteRoom(int index) {
+    final room = _rooms[index];
+    if (_isFixed(room)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"$room" è una zona fisica obbligatoria e non può essere eliminata.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     setState(() => _rooms.removeAt(index));
   }
 
@@ -73,6 +96,7 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Handle
           Container(
             margin: const EdgeInsets.only(top: 12, bottom: 4),
             width: 40,
@@ -82,6 +106,7 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
+          // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 16, 8),
             child: Row(
@@ -102,53 +127,78 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                   onPressed: _rooms.isEmpty ? null : _save,
                   icon: const Icon(Icons.check),
                   label: const Text('SALVA'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: cs.primary,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: cs.primary),
                 ),
               ],
             ),
           ),
+          // Sottotitolo informativo
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text(
+              'Le zone fisiche (🔒) sono obbligatorie e non eliminabili. Puoi aggiungere stanze extra opzionali.',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant, height: 1.4),
+            ),
+          ),
           Divider(height: 1, color: cs.outlineVariant),
+          // Lista stanze
           Flexible(
-            child: _rooms.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Center(
-                      child: Text(
-                        'Nessuna stanza.\nAggiungine una qui sotto.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: cs.onSurfaceVariant),
-                      ),
+            child: ReorderableListView.builder(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: _rooms.length,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) newIndex--;
+                  // Impedisce di spostare una zona fissa sotto una non-fissa
+                  // o di spostare una stanza extra sopra le zone fisse
+                  final movingFixed = _isFixed(_rooms[oldIndex]);
+                  final targetFixed = newIndex < _fixedZones.length;
+                  if (!movingFixed && targetFixed) return; // non puoi salire sopra le fisse
+                  if (movingFixed) {
+                    // Le zone fisse possono riordinarsi solo tra loro
+                    if (newIndex >= _fixedZones.length) return;
+                  }
+                  final item = _rooms.removeAt(oldIndex);
+                  _rooms.insert(newIndex, item);
+                });
+              },
+              itemBuilder: (context, index) {
+                final room = _rooms[index];
+                final fixed = _isFixed(room);
+                return ListTile(
+                  key: ValueKey(room),
+                  leading: Icon(
+                    fixed ? Icons.lock_outline : Icons.drag_handle,
+                    color: fixed ? cs.primary : cs.onSurfaceVariant,
+                    size: 20,
+                  ),
+                  title: Text(
+                    room,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontWeight: fixed ? FontWeight.w600 : FontWeight.normal,
                     ),
-                  )
-                : ReorderableListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: _rooms.length,
-                    onReorder: (oldIndex, newIndex) {
-                      setState(() {
-                        if (newIndex > oldIndex) newIndex--;
-                        final item = _rooms.removeAt(oldIndex);
-                        _rooms.insert(newIndex, item);
-                      });
-                    },
-                    itemBuilder: (context, index) {
-                      final room = _rooms[index];
-                      return ListTile(
-                        key: ValueKey(room),
-                        leading: Icon(Icons.drag_handle, color: cs.onSurfaceVariant),
-                        title: Text(room, style: TextStyle(color: cs.onSurface)),
-                        trailing: IconButton(
+                  ),
+                  subtitle: fixed
+                      ? Text(
+                          'Zona fisica obbligatoria',
+                          style: TextStyle(fontSize: 11, color: cs.primary.withValues(alpha: 0.8)),
+                        )
+                      : null,
+                  trailing: fixed
+                      ? Icon(Icons.lock_outline, color: cs.primary.withValues(alpha: 0.4), size: 18)
+                      : IconButton(
                           icon: Icon(Icons.delete_outline, color: cs.error),
                           onPressed: () => _deleteRoom(index),
                           tooltip: 'Elimina stanza',
                         ),
-                      );
-                    },
-                  ),
+                );
+              },
+            ),
           ),
           Divider(height: 1, color: cs.outlineVariant),
+          // Input aggiungi stanza
           Padding(
             padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + mq.viewInsets.bottom),
             child: Row(
@@ -159,7 +209,7 @@ class _RoomsManagerSheetState extends State<RoomsManagerSheet> {
                     focusNode: _addFocus,
                     textCapitalization: TextCapitalization.sentences,
                     decoration: InputDecoration(
-                      hintText: 'Nome nuova stanza...',
+                      hintText: 'Nome stanza extra (es. Studio)...',
                       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                     ),

@@ -41,6 +41,7 @@ class AppStorage {
     await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
     await _recoverStagingIfNeeded();
     await _migrateCostPerKwh();
+    await _migrateRooms();
   }
 
   static Future<void> _migrateCostPerKwh() async {
@@ -50,6 +51,29 @@ class AppStorage {
         (stored is double && (stored == 0.25 || stored == 0.28));
     if (isLegacy) {
       await box.put('costPerKwh', _defaultCostPerKwh);
+    }
+  }
+
+  /// Migrazione stanze: garantisce che le zone fisiche obbligatorie
+  /// (Piano Terra, Primo Piano) siano sempre presenti in cima alla lista.
+  static Future<void> _migrateRooms() async {
+    final box = Hive.box(_boxName);
+    final stored = box.get('customRooms');
+    if (stored == null) return; // nessuna lista salvata: usa i default
+
+    final current = List<String>.from(stored as List);
+    bool changed = false;
+
+    // Inserisce le zone fisse in cima se mancanti, nell'ordine corretto
+    for (final zone in RoomConstants.defaultRooms.reversed) {
+      if (!current.contains(zone)) {
+        current.insert(0, zone);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await box.put('customRooms', current);
     }
   }
 
@@ -216,8 +240,6 @@ class AppStorage {
   }
 
   // --- CITTÀ METEO (override manuale GPS) ---
-  /// Restituisce la città impostata manualmente, o null se non configurata
-  /// (in quel caso il WeatherService usa il GPS).
   static String? getCityOverride() {
     final v = Hive.box(_boxName).get('cityOverride') as String?;
     return (v == null || v.trim().isEmpty) ? null : v.trim();
@@ -230,7 +252,7 @@ class AppStorage {
     } else {
       await box.put('cityOverride', city.trim());
     }
-    // Invalida la cache meteo così al prossimo avvio ricarica con la nuova città
+    // Invalida cache meteo
     await box.delete('weatherCacheTemp');
     await box.delete('weatherCacheCity');
     await box.delete('weatherCacheTimestamp');
@@ -238,13 +260,23 @@ class AppStorage {
 
   // --- STANZE ---
   static Future<void> saveRooms(List<String> rooms) async {
-    await Hive.box(_boxName).put('customRooms', rooms);
+    // Garanzia: le zone fisse sono sempre presenti prima di salvare
+    final toSave = List<String>.from(rooms);
+    for (final zone in RoomConstants.defaultRooms.reversed) {
+      if (!toSave.contains(zone)) toSave.insert(0, zone);
+    }
+    await Hive.box(_boxName).put('customRooms', toSave);
   }
 
   static List<String> getRooms() {
     final stored = Hive.box(_boxName).get('customRooms');
     if (stored == null) return List<String>.from(RoomConstants.defaultRooms);
-    return List<String>.from(stored as List);
+    final rooms = List<String>.from(stored as List);
+    // Garanzia runtime: zone fisse sempre presenti
+    for (final zone in RoomConstants.defaultRooms.reversed) {
+      if (!rooms.contains(zone)) rooms.insert(0, zone);
+    }
+    return rooms;
   }
 
   // --- WIZARD IMPIANTO ---
