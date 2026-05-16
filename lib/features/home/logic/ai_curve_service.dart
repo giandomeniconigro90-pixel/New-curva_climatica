@@ -24,7 +24,9 @@ import '../../../models/daily_record_dto.dart';
 // Result types
 // ---------------------------------------------------------------------------
 
-sealed class AiApplyResult {}
+sealed class AiApplyResult {
+  const AiApplyResult();
+}
 
 /// L'apply è andato a buon fine: il notifier deve aggiornare _settings.
 final class AiApplySuccess extends AiApplyResult {
@@ -39,7 +41,9 @@ final class AiApplyAborted extends AiApplyResult {
   const AiApplyAborted();
 }
 
-sealed class AiUndoResult {}
+sealed class AiUndoResult {
+  const AiUndoResult();
+}
 
 final class AiUndoSuccess extends AiUndoResult {
   final CurveSettings newSettings;
