@@ -40,6 +40,9 @@ class DailyRecordDTO extends HiveObject {
   @HiveField(11)
   final double? pvProduction;
 
+  @HiveField(12)
+  final String? vmcMode;
+
   static const Set<String> validModes = {'heating', 'cooling'};
 
   static const Set<String> validHeatpumpModes = {
@@ -52,6 +55,13 @@ class DailyRecordDTO extends HiveObject {
     'accesa',
     'standby',
     'spenta',
+  };
+
+  static const Set<String> validVmcModes = {
+    'spenta',
+    'bassa',
+    'media',
+    'alta',
   };
 
   DailyRecordDTO({
@@ -67,6 +77,7 @@ class DailyRecordDTO extends HiveObject {
     this.boilerMode,
     this.energyFromGrid,
     this.pvProduction,
+    this.vmcMode,
   })  : note = note ?? '',
         mode = (mode != null && validModes.contains(mode)) ? mode : 'heating';
 
@@ -88,6 +99,8 @@ class DailyRecordDTO extends HiveObject {
     bool clearEnergyFromGrid = false,
     double? pvProduction,
     bool clearPvProduction = false,
+    String? vmcMode,
+    bool clearVmcMode = false,
   }) {
     return DailyRecordDTO(
       dateIso: dateIso ?? this.dateIso,
@@ -101,21 +114,12 @@ class DailyRecordDTO extends HiveObject {
           : Map<String, String>.from(this.comfortRatings),
       note: note ?? this.note,
       mode: mode ?? this.mode,
-      heatpumpMode: clearHeatpumpMode
-          ? null
-          : (heatpumpMode ?? this.heatpumpMode),
-      consumptionACS: clearConsumptionACS
-          ? null
-          : (consumptionACS ?? this.consumptionACS),
-      boilerMode: clearBoilerMode
-          ? null
-          : (boilerMode ?? this.boilerMode),
-      energyFromGrid: clearEnergyFromGrid
-          ? null
-          : (energyFromGrid ?? this.energyFromGrid),
-      pvProduction: clearPvProduction
-          ? null
-          : (pvProduction ?? this.pvProduction),
+      heatpumpMode: clearHeatpumpMode ? null : (heatpumpMode ?? this.heatpumpMode),
+      consumptionACS: clearConsumptionACS ? null : (consumptionACS ?? this.consumptionACS),
+      boilerMode: clearBoilerMode ? null : (boilerMode ?? this.boilerMode),
+      energyFromGrid: clearEnergyFromGrid ? null : (energyFromGrid ?? this.energyFromGrid),
+      pvProduction: clearPvProduction ? null : (pvProduction ?? this.pvProduction),
+      vmcMode: clearVmcMode ? null : (vmcMode ?? this.vmcMode),
     );
   }
 
@@ -129,6 +133,7 @@ class DailyRecordDTO extends HiveObject {
 
     final rawHeatpumpMode = json['heatpumpMode'];
     final rawBoilerMode = json['boilerMode'];
+    final rawVmcMode = json['vmcMode'];
 
     return DailyRecordDTO(
       dateIso: rawDate.trim(),
@@ -155,6 +160,9 @@ class DailyRecordDTO extends HiveObject {
       pvProduction: json['pvProduction'] != null
           ? _parseDouble(json['pvProduction'])
           : null,
+      vmcMode: (rawVmcMode is String && validVmcModes.contains(rawVmcMode))
+          ? rawVmcMode
+          : null,
     );
   }
 
@@ -172,6 +180,7 @@ class DailyRecordDTO extends HiveObject {
       if (boilerMode != null) 'boilerMode': boilerMode,
       if (energyFromGrid != null) 'energyFromGrid': energyFromGrid,
       if (pvProduction != null) 'pvProduction': pvProduction,
+      if (vmcMode != null) 'vmcMode': vmcMode,
     };
   }
 
@@ -230,13 +239,14 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       boilerMode: fields[9] as String?,
       energyFromGrid: fields[10] as double?,
       pvProduction: fields[11] as double?,
+      vmcMode: fields[12] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, DailyRecordDTO obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.dateIso)
       ..writeByte(1)
@@ -260,7 +270,9 @@ class DailyRecordDTOAdapter extends TypeAdapter<DailyRecordDTO> {
       ..writeByte(10)
       ..write(obj.energyFromGrid)
       ..writeByte(11)
-      ..write(obj.pvProduction);
+      ..write(obj.pvProduction)
+      ..writeByte(12)
+      ..write(obj.vmcMode);
   }
 
   @override

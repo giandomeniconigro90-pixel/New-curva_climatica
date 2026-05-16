@@ -4,6 +4,7 @@
 //   • FAB SALVA disabilitato (con tooltip) se almeno un campo ha errori
 //   • Tile con badge errore (bordo rosso + icona !) visibile nella griglia
 //   • Aggiornato _fetchWeather() per gestire WeatherResult sealed
+// + Tile VMC (IRSAP IRSAIR H 220 S) con dropdown velocità
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -23,6 +24,7 @@ class InputPage extends StatefulWidget {
   final TextEditingController noteController;
   final ValueNotifier<String> heatpumpModeNotifier;
   final ValueNotifier<String> boilerModeNotifier;
+  final ValueNotifier<String> vmcModeNotifier;
   final Map<String, TextEditingController> internalTempControllers;
   final Map<String, String> comfortRatings;
   final List<DailyRecordDTO> records;
@@ -45,6 +47,7 @@ class InputPage extends StatefulWidget {
     required this.noteController,
     required this.heatpumpModeNotifier,
     required this.boilerModeNotifier,
+    required this.vmcModeNotifier,
     required this.internalTempControllers,
     required this.comfortRatings,
     required this.records,
@@ -75,6 +78,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   static const Color _colorRete         = Color(0xFFF57C00);
   static const Color _colorFotovoltaico = Color(0xFFFDD835);
   static const Color _colorNota         = Color(0xFF7E57C2);
+  static const Color _colorVmc          = Color(0xFF42A5F5); // azzurro aria
 
   bool get _isDesktop =>
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -89,7 +93,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Ascolta tutti i controller per aggiornare la validazione del FAB
     widget.externalTempController.addListener(_onFieldChanged);
     widget.consumptionController.addListener(_onFieldChanged);
     widget.consumptionAcsController.addListener(_onFieldChanged);
@@ -115,7 +118,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  void _onFieldChanged() => setState(() {}); // trigger rebuild FAB + badge
+  void _onFieldChanged() => setState(() {});
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -155,7 +158,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         pvProductionController: widget.pvProductionController,
       );
 
-  /// Restituisce l’errore per una singola tile (null se ok).
   String? _tileError(TextEditingController ctrl, FieldKind kind,
       {String label = ''}) =>
       RecordFormValidator.validateField(ctrl.text, kind: kind, label: label);
@@ -190,8 +192,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         case WeatherFresh(:final data):
           if (isAutoFetch) _autoFetchDone = true;
           setState(() {
-            widget.externalTempController.text =
-                data.temp.toStringAsFixed(1);
+            widget.externalTempController.text = data.temp.toStringAsFixed(1);
             _weatherLocation = data.locationName;
           });
           if (!silent) {
@@ -204,31 +205,33 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         case WeatherStale(:final data, :final error):
           if (isAutoFetch) _autoFetchDone = true;
           setState(() {
-            widget.externalTempController.text =
-                data.temp.toStringAsFixed(1);
+            widget.externalTempController.text = data.temp.toStringAsFixed(1);
             _weatherLocation = '${data.locationName} (offline)';
           });
           if (!silent) {
             final hint = error == WeatherErrorKind.noConnection
                 ? 'Nessuna connessione — usato dato precedente.'
                 : 'Meteo non aggiornato (${error.name}).';
-            AppToast.show(hint, context: context,
+            AppToast.show(hint,
+                context: context,
                 level: ToastLevel.warning,
                 duration: const Duration(seconds: 5));
           }
         case WeatherUnavailable(:final error, :final message):
           if (!silent) {
             final hint = error == WeatherErrorKind.locationDenied
-                ? 'GPS negato. Imposta una citt\u00e0 nelle impostazioni.'
+                ? 'GPS negato. Imposta una città nelle impostazioni.'
                 : message ?? 'Meteo non disponibile.';
-            AppToast.show(hint, context: context, level: ToastLevel.warning,
+            AppToast.show(hint,
+                context: context,
+                level: ToastLevel.warning,
                 duration: const Duration(seconds: 5));
           }
       }
     } catch (e) {
       if (mounted && !silent) {
-        AppToast.show('Errore recupero meteo', context: context,
-            level: ToastLevel.error);
+        AppToast.show('Errore recupero meteo',
+            context: context, level: ToastLevel.error);
       }
     } finally {
       if (mounted) setState(() => _isLoadingWeather = false);
@@ -254,7 +257,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
       color: _colorEsterna,
       isRoom: false,
       isWeatherTile: true,
-      suffix: '\u00b0',
+      suffix: '°',
       fieldKind: FieldKind.externalTemp,
     ));
     gridItems.add(_buildTadoTile(
@@ -301,6 +304,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
       ));
     gridItems.add(_buildHeatpumpModeTile());
     gridItems.add(_buildBoilerModeTile());
+    gridItems.add(_buildVmcModeTile());
     gridItems.add(_buildNotaTile());
     for (final room in widget.rooms) {
       final ctrl = widget.internalTempControllers[room] ??
@@ -314,7 +318,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
             ? const Color(0xFF4DB6AC)
             : const Color(0xFFFFB74D),
         isRoom: true,
-        suffix: '\u00b0',
+        suffix: '°',
         fieldKind: FieldKind.internalTemp,
       ));
     }
@@ -327,7 +331,8 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         message: _hasErrors ? 'Correggi i valori evidenziati in rosso' : '',
         child: FloatingActionButton.extended(
           onPressed: _hasErrors ? null : widget.onAddRecord,
-          backgroundColor: _hasErrors ? cs.surfaceContainerHighest : cs.primary,
+          backgroundColor:
+              _hasErrors ? cs.surfaceContainerHighest : cs.primary,
           disabledElevation: 0,
           icon: Icon(
             widget.isEditing ? Icons.save_as : Icons.check,
@@ -361,8 +366,8 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                     Tooltip(
                       message: "Copia dall'ultima registrazione",
                       child: IconButton(
-                        icon:
-                            Icon(Icons.copy_all_outlined, color: cs.onSurface),
+                        icon: Icon(Icons.copy_all_outlined,
+                            color: cs.onSurface),
                         onPressed: widget.onDuplicateFromYesterday,
                       ),
                     ),
@@ -418,16 +423,15 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
       builder: (context, _) {
         final double? val =
             double.tryParse(controller.text.replaceAll(',', '.'));
-        final String displayVal =
-            val != null ? val.toStringAsFixed(1) : '--';
+        final String displayVal = val != null ? val.toStringAsFixed(1) : '--';
         final Color effectiveColor = _cardColor(context, color);
         final String? tileErr =
             _tileError(controller, fieldKind, label: title);
         final bool hasErr = tileErr != null;
 
         return GestureDetector(
-          onTap: () =>
-              _openControlPage(title, controller, suffix == 'kWh', isRoom, color),
+          onTap: () => _openControlPage(
+              title, controller, suffix == 'kWh', isRoom, color),
           child: Stack(
             children: [
               Container(
@@ -477,8 +481,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                                   suffix,
                                   style: TextStyle(
                                     fontSize: 16,
-                                    color: Colors.white
-                                        .withValues(alpha: 0.8),
+                                    color: Colors.white.withValues(alpha: 0.8),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -552,7 +555,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-              // Badge errore in alto a sinistra
               if (hasErr)
                 Positioned(
                   top: 6,
@@ -578,7 +580,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   }
 
   // -------------------------------------------------------------------------
-  // Nota tile (invariata)
+  // Nota tile
   // -------------------------------------------------------------------------
 
   Widget _buildNotaTile() {
@@ -740,7 +742,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   }
 
   // -------------------------------------------------------------------------
-  // Dropdown tiles (invariate)
+  // Dropdown tiles
   // -------------------------------------------------------------------------
 
   Widget _buildHeatpumpModeTile() {
@@ -823,6 +825,44 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
                 value: 'standby', child: Text('\u23F8 Standby')),
             DropdownMenuItem(
                 value: 'spenta', child: Text('\u26D4 Spenta')),
+          ],
+        );
+      },
+    );
+  }
+
+  // ---- TILE VMC ----
+  Widget _buildVmcModeTile() {
+    return ValueListenableBuilder<String>(
+      valueListenable: widget.vmcModeNotifier,
+      builder: (context, mode, _) {
+        Color baseColor;
+        String emoji;
+        switch (mode) {
+          case 'bassa':
+            baseColor = const Color(0xFF81D4FA);
+            emoji = '\uD83C\uDF2C';
+          case 'media':
+            baseColor = const Color(0xFF29B6F6);
+            emoji = '\uD83C\uDF2C\uD83C\uDF2C';
+          case 'alta':
+            baseColor = const Color(0xFF0288D1);
+            emoji = '\uD83C\uDF2C\uD83C\uDF2C\uD83C\uDF2C';
+          default: // spenta
+            baseColor = const Color(0xFF90A4AE);
+            emoji = '\u26D4';
+        }
+        return _buildDropdownTile(
+          color: _cardColor(context, baseColor),
+          icon: Icons.air,
+          emoji: emoji,
+          subtitle: 'IRSAIR H 220 S',
+          notifier: widget.vmcModeNotifier,
+          items: const [
+            DropdownMenuItem(value: 'spenta',  child: Text('\u26D4 Spenta')),
+            DropdownMenuItem(value: 'bassa',   child: Text('\uD83C\uDF2C Bassa')),
+            DropdownMenuItem(value: 'media',   child: Text('\uD83C\uDF2C\uD83C\uDF2C Media')),
+            DropdownMenuItem(value: 'alta',    child: Text('\uD83C\uDF2C\uD83C\uDF2C\uD83C\uDF2C Alta')),
           ],
         );
       },
@@ -937,8 +977,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
         ),
       );
     } else if (_isDesktop) {
-      Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => roomPage));
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => roomPage));
     } else {
       Navigator.of(context).push(
         PageRouteBuilder(

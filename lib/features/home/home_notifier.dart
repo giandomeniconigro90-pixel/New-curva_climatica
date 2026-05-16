@@ -5,6 +5,7 @@
 //   • Delega AI curve    → AiCurveService
 //   • Mantiene: stato UI, CRUD records, controllers, rooms
 //   • Firma pubblica invariata: nessun consumer cambia
+//   + vmcModeNotifier aggiunto per tile VMC
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -34,21 +35,15 @@ class HomeNotifier extends ChangeNotifier {
 
   late PageController pageController;
 
-  final TextEditingController externalTempController =
-      TextEditingController();
-  final TextEditingController consumptionController =
-      TextEditingController();
-  final TextEditingController consumptionAcsController =
-      TextEditingController();
+  final TextEditingController externalTempController = TextEditingController();
+  final TextEditingController consumptionController = TextEditingController();
+  final TextEditingController consumptionAcsController = TextEditingController();
   final TextEditingController noteController = TextEditingController();
-  final TextEditingController energyFromGridController =
-      TextEditingController();
-  final TextEditingController pvProductionController =
-      TextEditingController();
-  final ValueNotifier<String> heatpumpModeNotifier =
-      ValueNotifier<String>('spenta');
-  final ValueNotifier<String> boilerModeNotifier =
-      ValueNotifier<String>('spenta');
+  final TextEditingController energyFromGridController = TextEditingController();
+  final TextEditingController pvProductionController = TextEditingController();
+  final ValueNotifier<String> heatpumpModeNotifier = ValueNotifier<String>('spenta');
+  final ValueNotifier<String> boilerModeNotifier = ValueNotifier<String>('spenta');
+  final ValueNotifier<String> vmcModeNotifier = ValueNotifier<String>('spenta');
   final Map<String, TextEditingController> internalTempControllers = {};
   final Map<String, String> comfortRatings = {};
 
@@ -59,7 +54,7 @@ class HomeNotifier extends ChangeNotifier {
   List<String> rooms = [];
 
   // -------------------------------------------------------------------------
-  // Getters (invariati)
+  // Getters
   // -------------------------------------------------------------------------
 
   List<DailyRecordDTO> get records => allRecords
@@ -120,6 +115,7 @@ class HomeNotifier extends ChangeNotifier {
     pvProductionController.dispose();
     heatpumpModeNotifier.dispose();
     boilerModeNotifier.dispose();
+    vmcModeNotifier.dispose();
     for (final c in internalTempControllers.values) {
       c.dispose();
     }
@@ -147,8 +143,7 @@ class HomeNotifier extends ChangeNotifier {
   void _syncRoomControllers(List<String> newRooms) {
     rooms = newRooms;
     for (final room in newRooms) {
-      internalTempControllers.putIfAbsent(
-          room, () => TextEditingController());
+      internalTempControllers.putIfAbsent(room, () => TextEditingController());
       comfortRatings.putIfAbsent(room, () => 'ok');
     }
     final toRemove = internalTempControllers.keys
@@ -176,8 +171,7 @@ class HomeNotifier extends ChangeNotifier {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) =>
-          RoomsManagerSheet(initialRooms: List.from(rooms)),
+      builder: (_) => RoomsManagerSheet(initialRooms: List.from(rooms)),
     );
     final updated = AppStorage.getRooms();
     _syncRoomControllers(updated);
@@ -194,23 +188,19 @@ class HomeNotifier extends ChangeNotifier {
         isDark = false;
       case ThemeMode.system:
         isDark =
-            ui.PlatformDispatcher.instance.platformBrightness ==
-            ui.Brightness.dark;
+            ui.PlatformDispatcher.instance.platformBrightness == ui.Brightness.dark;
     }
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            isDark ? Brightness.light : Brightness.dark,
-        statusBarBrightness:
-            isDark ? Brightness.dark : Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
     );
   }
 
   void toggleMode(bool value) {
-    final newMode =
-        value ? SystemMode.cooling : SystemMode.heating;
+    final newMode = value ? SystemMode.cooling : SystemMode.heating;
     _settings = _settings.mode == SystemMode.heating
         ? _settings.copyWith(
             heatingSlope: slope,
@@ -260,6 +250,7 @@ class HomeNotifier extends ChangeNotifier {
     pvProductionController.clear();
     heatpumpModeNotifier.value = 'spenta';
     boilerModeNotifier.value = 'spenta';
+    vmcModeNotifier.value = 'spenta';
     internalTempControllers.forEach((_, c) => c.clear());
 
     if (preFillFromLast && records.isNotEmpty) {
@@ -273,9 +264,8 @@ class HomeNotifier extends ChangeNotifier {
   }
 
   void startEditRecordByDateIso(String dateIso) {
-    final index = allRecords.indexWhere((r) =>
-        r.dateIso == dateIso &&
-        r.mode == currentMode.toModeString());
+    final index = allRecords.indexWhere(
+        (r) => r.dateIso == dateIso && r.mode == currentMode.toModeString());
     if (index == -1) return;
     startEditRecordByAllIndex(index);
   }
@@ -292,18 +282,16 @@ class HomeNotifier extends ChangeNotifier {
     editingIndex = allIndex;
     externalTempController.text = r.externalTemp.toString();
     consumptionController.text = r.consumption.toString();
-    consumptionAcsController.text =
-        r.consumptionACS?.toString() ?? '';
+    consumptionAcsController.text = r.consumptionACS?.toString() ?? '';
     noteController.text = r.note;
-    energyFromGridController.text =
-        r.energyFromGrid?.toString() ?? '';
+    energyFromGridController.text = r.energyFromGrid?.toString() ?? '';
     pvProductionController.text = r.pvProduction?.toString() ?? '';
     heatpumpModeNotifier.value = r.heatpumpMode ?? 'spenta';
     boilerModeNotifier.value = r.boilerMode ?? 'spenta';
+    vmcModeNotifier.value = r.vmcMode ?? 'spenta';
     r.internalTemps.forEach((room, value) {
       if (internalTempControllers.containsKey(room)) {
-        internalTempControllers[room]!.text =
-            value.toStringAsFixed(1);
+        internalTempControllers[room]!.text = value.toStringAsFixed(1);
       }
     });
     comfortRatings
@@ -326,8 +314,7 @@ class HomeNotifier extends ChangeNotifier {
     );
 
     if (result is RecordValidationError) {
-      AppToast.show(result.message,
-          context: context, level: ToastLevel.error);
+      AppToast.show(result.message, context: context, level: ToastLevel.error);
       return;
     }
 
@@ -335,12 +322,12 @@ class HomeNotifier extends ChangeNotifier {
     final now = DateTime.now();
     final dateIso = formatItalianDate(now);
     final modeStr = currentMode.toModeString();
-    final consumptionAcs = double.tryParse(
-        consumptionAcsController.text.replaceAll(',', '.'));
-    final energyFromGrid = double.tryParse(
-        energyFromGridController.text.replaceAll(',', '.'));
-    final pvProduction = double.tryParse(
-        pvProductionController.text.replaceAll(',', '.'));
+    final consumptionAcs =
+        double.tryParse(consumptionAcsController.text.replaceAll(',', '.'));
+    final energyFromGrid =
+        double.tryParse(energyFromGridController.text.replaceAll(',', '.'));
+    final pvProduction =
+        double.tryParse(pvProductionController.text.replaceAll(',', '.'));
 
     if (editingIndex != null) {
       final originalDate = allRecords[editingIndex!].dateIso;
@@ -358,6 +345,7 @@ class HomeNotifier extends ChangeNotifier {
         boilerMode: boilerModeNotifier.value,
         energyFromGrid: energyFromGrid,
         pvProduction: pvProduction,
+        vmcMode: vmcModeNotifier.value,
       );
       editingIndex = null;
       notifyListeners();
@@ -392,6 +380,7 @@ class HomeNotifier extends ChangeNotifier {
         boilerMode: boilerModeNotifier.value,
         energyFromGrid: energyFromGrid,
         pvProduction: pvProduction,
+        vmcMode: vmcModeNotifier.value,
       ));
       notifyListeners();
       if (context.mounted) {
@@ -404,7 +393,6 @@ class HomeNotifier extends ChangeNotifier {
     clearFields();
     if (context.mounted) FocusScope.of(context).unfocus();
 
-    // Notifica contestuale AI (delegata ad AiCurveService)
     await _aiService.maybeShowNotification(
       windowRecords: recordsSinceLastApply(currentMode),
       slope: slope,
@@ -415,8 +403,8 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<void> deleteRecordByDateIso(String dateIso) async {
     final modeStr = currentMode.toModeString();
-    final index = allRecords.indexWhere(
-        (r) => r.dateIso == dateIso && r.mode == modeStr);
+    final index = allRecords
+        .indexWhere((r) => r.dateIso == dateIso && r.mode == modeStr);
     if (index == -1) return;
     if (editingIndex == index) editingIndex = null;
     allRecords.removeAt(index);
@@ -427,8 +415,8 @@ class HomeNotifier extends ChangeNotifier {
   Future<void> deleteToday(BuildContext context) async {
     final today = formatItalianDate(DateTime.now());
     final modeStr = currentMode.toModeString();
-    final index = allRecords.indexWhere(
-        (r) => r.dateIso == today && r.mode == modeStr);
+    final index = allRecords
+        .indexWhere((r) => r.dateIso == today && r.mode == modeStr);
     if (index == -1) {
       AppToast.show('Nessuna registrazione trovata per oggi',
           context: context, level: ToastLevel.warning);
@@ -445,10 +433,8 @@ class HomeNotifier extends ChangeNotifier {
     if (records.isEmpty) return;
     final last = (List<DailyRecordDTO>.from(records)
           ..sort((a, b) {
-            final dA =
-                parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
-            final dB =
-                parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
+            final dA = parseItalianDateSafe(a.dateIso) ?? DateTime(2000);
+            final dB = parseItalianDateSafe(b.dateIso) ?? DateTime(2000);
             return dB.compareTo(dA);
           }))
         .first;
@@ -462,10 +448,9 @@ class HomeNotifier extends ChangeNotifier {
       ..addAll(last.comfortRatings);
     heatpumpModeNotifier.value = last.heatpumpMode ?? 'spenta';
     boilerModeNotifier.value = last.boilerMode ?? 'spenta';
-    consumptionAcsController.text =
-        last.consumptionACS?.toString() ?? '';
-    energyFromGridController.text =
-        last.energyFromGrid?.toString() ?? '';
+    vmcModeNotifier.value = last.vmcMode ?? 'spenta';
+    consumptionAcsController.text = last.consumptionACS?.toString() ?? '';
+    energyFromGridController.text = last.energyFromGrid?.toString() ?? '';
     pvProductionController.text = last.pvProduction?.toString() ?? '';
     notifyListeners();
     AppToast.show("Dati copiati dall'ultima registrazione",
@@ -513,8 +498,7 @@ class HomeNotifier extends ChangeNotifier {
 
   Future<Uint8List?> captureChart() => _exportService.captureChart();
 
-  Future<void> exportCsv(BuildContext context) =>
-      _exportService.exportCsv(
+  Future<void> exportCsv(BuildContext context) => _exportService.exportCsv(
         context,
         records: records,
         slope: slope,
@@ -522,8 +506,7 @@ class HomeNotifier extends ChangeNotifier {
         mode: currentMode,
       );
 
-  Future<void> exportPdf(BuildContext context) =>
-      _exportService.exportPdf(
+  Future<void> exportPdf(BuildContext context) => _exportService.exportPdf(
         context,
         records: records,
         windowRecords: recordsSinceLastApply(currentMode),
@@ -535,16 +518,12 @@ class HomeNotifier extends ChangeNotifier {
           currentPage = 2;
           notifyListeners();
           pageController.jumpToPage(2);
-          await Future.delayed(
-              const Duration(milliseconds: 800));
+          await Future.delayed(const Duration(milliseconds: 800));
         },
-        onRestorePage: () async {
-          // currentPage già salvato in exportPdf tramite needSwitch
-        },
+        onRestorePage: () async {},
       );
 
-  Future<void> doBackup(BuildContext context) =>
-      _exportService.doBackup(
+  Future<void> doBackup(BuildContext context) => _exportService.doBackup(
         context,
         allRecords: allRecords,
         mode: currentMode,
@@ -576,8 +555,7 @@ class HomeNotifier extends ChangeNotifier {
       initialTime: TimeOfDay.now(),
       initialEntryMode: TimePickerEntryMode.input,
       builder: (ctx, child) => MediaQuery(
-        data: MediaQuery.of(ctx)
-            .copyWith(alwaysUse24HourFormat: true),
+        data: MediaQuery.of(ctx).copyWith(alwaysUse24HourFormat: true),
         child: child!,
       ),
     );
@@ -586,10 +564,8 @@ class HomeNotifier extends ChangeNotifier {
     await NotificationService.cancelAll();
     await NotificationService.scheduleDailyReminder();
     if (context.mounted) {
-      AppToast.show(
-          'Notifica impostata alle ${picked.format(context)}',
-          context: context,
-          level: ToastLevel.info);
+      AppToast.show('Notifica impostata alle ${picked.format(context)}',
+          context: context, level: ToastLevel.info);
     }
   }
 
