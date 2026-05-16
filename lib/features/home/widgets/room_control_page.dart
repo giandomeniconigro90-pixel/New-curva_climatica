@@ -4,6 +4,7 @@
 //   • Sfondo blur colorato fullscreen
 //   • Slider bianco verticale che si riempie dal basso
 //   • Validazione real-time mantenuta (RecordFormValidator) senza rompere l'UX
+//   • SnackBar al tap su ✓ se errore (mobile-friendly, sostituisce Tooltip)
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -90,7 +91,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _headerText = "CONSUMO GIORNALIERO";
       _fieldKind = _resolveConsumptionKind();
     } else {
-      _min = -30; _max = 40; // esteso da -10 a -30°C
+      _min = -30; _max = 40;
       _mainColor = widget.cardColor ?? const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
       _fieldKind = FieldKind.externalTemp;
@@ -115,6 +116,23 @@ class _RoomControlPageState extends State<RoomControlPage> {
   }
 
   bool get _canSave => _errorText == null;
+
+  void _onSaveTap() {
+    if (_canSave) {
+      _saveAndExit();
+    } else {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(_errorText ?? 'Valore non valido'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,16 +177,14 @@ class _RoomControlPageState extends State<RoomControlPage> {
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w600)),
-                      Tooltip(
-                        message: hasError ? (_errorText ?? '') : '',
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.check,
-                            color: _canSave ? Colors.white : Colors.white38,
-                            size: 28,
-                          ),
-                          onPressed: _canSave ? _saveAndExit : null,
+                      // Sempre tappabile: se errore mostra SnackBar
+                      IconButton(
+                        icon: Icon(
+                          Icons.check,
+                          color: _canSave ? Colors.white : Colors.white38,
+                          size: 28,
                         ),
+                        onPressed: _onSaveTap,
                       ),
                     ],
                   ),
