@@ -1,12 +1,12 @@
 // lib/features/home/widgets/room_control_page.dart
 //
-// Refactor #6 — validazione real-time:
-//   • errorText inline sotto il TextField (senza dialog)
-//   • Pulsante Salva disabilitato se il valore non è valido
-//   • Bordo rosso sul TextField in caso di errore
+// UX Tado-style:
+//   • Trascina su/giù sul display numerico per cambiare il valore
+//   • Validazione real-time mantenuta (RecordFormValidator)
+//   • Pulsante Salva disabilitato se errore
+//   • Stepper +/- come fallback
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../logic/record_form_validator.dart';
 
 class RoomControlPage extends StatefulWidget {
@@ -36,11 +36,14 @@ class RoomControlPage extends StatefulWidget {
 }
 
 class _RoomControlPageState extends State<RoomControlPage> {
-  late TextEditingController _localCtrl;
+  late double _currentValue;
   String? _errorText;
   late FieldKind _fieldKind;
 
-  // Valori per il rating di comfort (solo stanze)
+  // Sensibilità drag: quanti pixel verticali = 1 unità
+  static const double _pixelsPerUnit = 8.0;
+  double _dragAccum = 0.0;
+
   static const _comfortOptions = [
     ('\uD83E\uDD76', 'Troppo freddo'),
     ('\uD83D\uDE42', 'Confortevole'),
@@ -50,22 +53,11 @@ class _RoomControlPageState extends State<RoomControlPage> {
   @override
   void initState() {
     super.initState();
-    _localCtrl = TextEditingController(text: widget.controller.text);
     _fieldKind = _resolveKind();
-    // Valida il valore iniziale
-    _errorText = RecordFormValidator.validateField(
-      _localCtrl.text,
-      kind: _fieldKind,
-      label: widget.title,
-    );
-    _localCtrl.addListener(_onChanged);
-  }
-
-  @override
-  void dispose() {
-    _localCtrl.removeListener(_onChanged);
-    _localCtrl.dispose();
-    super.dispose();
+    _currentValue =
+        double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
+            (widget.isConsumption ? 0.0 : 20.0);
+    _validate();
   }
 
   FieldKind _resolveKind() {
@@ -78,27 +70,32 @@ class _RoomControlPageState extends State<RoomControlPage> {
     return FieldKind.consumption;
   }
 
-  void _onChanged() {
+  void _validate() {
     final err = RecordFormValidator.validateField(
-      _localCtrl.text,
+      _currentValue.toStringAsFixed(1),
       kind: _fieldKind,
       label: widget.title,
     );
     if (err != _errorText) setState(() => _errorText = err);
   }
 
-  void _save() {
-    if (_errorText != null) return;
-    widget.controller.text = _localCtrl.text;
-    widget.onSave();
-    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+  void _updateValue(double newVal) {
+    final step = widget.isConsumption ? 0.5 : 0.5;
+    // Arrotonda al mezzo più vicino
+    final snapped = (newVal / step).round() * step;
+    setState(() => _currentValue = snapped);
+    _validate();
   }
 
   void _adjust(double delta) {
-    final current =
-        double.tryParse(_localCtrl.text.replaceAll(',', '.')) ?? 0.0;
-    final next = (current + delta);
-    _localCtrl.text = next.toStringAsFixed(1);
+    _updateValue(_currentValue + delta);
+  }
+
+  void _save() {
+    if (_errorText != null) return;
+    widget.controller.text = _currentValue.toStringAsFixed(1);
+    widget.onSave();
+    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
   }
 
   @override
@@ -106,13 +103,8 @@ class _RoomControlPageState extends State<RoomControlPage> {
     final cs = Theme.of(context).colorScheme;
     final bool hasError = _errorText != null;
     final bool canSave = !hasError;
-
     final String suffix = widget.isConsumption ? 'kWh' : '\u00b0C';
-    final String hintText = widget.isConsumption
-        ? 'Es. 12.5 kWh'
-        : widget.isRoom
-            ? 'Es. 20.5 \u00b0C'
-            : 'Es. -2.0 \u00b0C';
+    final String displayText = _currentValue.toStringAsFixed(1);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -124,7 +116,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          // Pulsante Salva disabilitato se errore
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: TextButton.icon(
@@ -148,70 +139,113 @@ class _RoomControlPageState extends State<RoomControlPage> {
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
+
             // ----------------------------------------------------------------
-            // TextField principale con errorText inline
+            // Display numerico Tado-style — trascina su/giù
             // ----------------------------------------------------------------
-            TextField(
-              controller: _localCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true, signed: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,\-]')),
-              ],
-              autofocus: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _save(),
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                color: hasError ? cs.error : cs.onSurface,
-              ),
-              decoration: InputDecoration(
-                hintText: hintText,
-                suffixText: suffix,
-                suffixStyle: TextStyle(
-                  fontSize: 18,
-                  color: hasError ? cs.error : cs.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-                // Messaggio di errore inline — nessun dialog
-                errorText: _errorText,
-                errorStyle: TextStyle(
-                  color: cs.error,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-                filled: true,
-                fillColor: hasError
-                    ? cs.errorContainer.withValues(alpha: 0.15)
-                    : cs.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: hasError
-                      ? BorderSide(color: cs.error, width: 2)
-                      : BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide(
-                    color: hasError ? cs.error : cs.primary,
-                    width: 2,
+            GestureDetector(
+              onVerticalDragStart: (_) => _dragAccum = 0.0,
+              onVerticalDragUpdate: (details) {
+                _dragAccum -= details.delta.dy;
+                if (_dragAccum.abs() >= _pixelsPerUnit) {
+                  final steps = (_dragAccum / _pixelsPerUnit).truncate();
+                  _adjust(steps * (widget.isConsumption ? 0.5 : 0.5));
+                  _dragAccum -= steps * _pixelsPerUnit;
+                }
+              },
+              child: Column(
+                children: [
+                  // Freccia su
+                  Icon(
+                    Icons.keyboard_arrow_up_rounded,
+                    size: 36,
+                    color: hasError
+                        ? cs.error.withValues(alpha: 0.5)
+                        : widget.cardColor.withValues(alpha: 0.5),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  // Valore principale
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        displayText,
+                        style: TextStyle(
+                          fontSize: 80,
+                          fontWeight: FontWeight.w300,
+                          color: hasError ? cs.error : cs.onSurface,
+                          height: 1.0,
+                          letterSpacing: -2,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12, left: 4),
+                        child: Text(
+                          suffix,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w500,
+                            color: hasError
+                                ? cs.error
+                                : cs.onSurface.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Freccia giù
+                  Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 36,
+                    color: hasError
+                        ? cs.error.withValues(alpha: 0.5)
+                        : widget.cardColor.withValues(alpha: 0.5),
+                  ),
+                  // Hint drag
+                  const SizedBox(height: 8),
+                  Text(
+                    'Trascina su / giù per modificare',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: cs.onSurface.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
               ),
             ),
+
+            // Messaggio errore inline
+            if (hasError) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: cs.error, size: 16),
+                  const SizedBox(width: 6),
+                  Text(
+                    _errorText!,
+                    style: TextStyle(
+                      color: cs.error,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 32),
+
             // ----------------------------------------------------------------
-            // Stepper +/- (non mostrato in caso di errore non-numerico)
+            // Stepper +/- come fallback
             // ----------------------------------------------------------------
-            const SizedBox(height: 20),
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _stepButton(
                     icon: Icons.remove,
@@ -224,14 +258,18 @@ class _RoomControlPageState extends State<RoomControlPage> {
                     cs: cs),
                 if (!widget.isConsumption) ...[
                   const SizedBox(width: 12),
-                  _stepButton(icon: Icons.remove, delta: -1.0, cs: cs,
+                  _stepButton(
+                      icon: Icons.remove,
+                      delta: -1.0,
+                      cs: cs,
                       label: '\u22121\u00b0'),
                   const SizedBox(width: 12),
-                  _stepButton(icon: Icons.add, delta: 1.0, cs: cs,
-                      label: '+1\u00b0'),
+                  _stepButton(
+                      icon: Icons.add, delta: 1.0, cs: cs, label: '+1\u00b0'),
                 ],
               ],
             ),
+
             // ----------------------------------------------------------------
             // Rating comfort (solo stanze)
             // ----------------------------------------------------------------
