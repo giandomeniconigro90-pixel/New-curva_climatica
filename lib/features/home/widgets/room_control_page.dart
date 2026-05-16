@@ -4,7 +4,8 @@
 //   • Sfondo blur colorato fullscreen
 //   • Slider bianco verticale che si riempie dal basso
 //   • Validazione real-time mantenuta (RecordFormValidator) senza rompere l'UX
-//   • SnackBar al tap su ✓ se errore (mobile-friendly, sostituisce Tooltip)
+//   • SnackBar al tap su ✓ se errore (mobile-friendly)
+//   • Range slider temperatura interna allineato al validator: 5-40°C
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -80,7 +81,9 @@ class _RoomControlPageState extends State<RoomControlPage> {
     }
 
     if (widget.isRoom) {
-      _min = 10; _max = 45;
+      // Allineato al validator: intTempMin=5, intTempMax=40
+      _min = RecordFormValidator.intTempMin;
+      _max = RecordFormValidator.intTempMax;
       _mainColor = widget.cardColor ??
           (widget.isCooling ? const Color(0xFF4DB6AC) : const Color(0xFFFFB74D));
       _headerText = "TEMPERATURA INTERNA";
@@ -96,6 +99,9 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _headerText = "TEMPERATURA ESTERNA";
       _fieldKind = FieldKind.externalTemp;
     }
+
+    // Clamp il valore iniziale al nuovo range
+    _currentValue = _currentValue.clamp(_min, _max);
     _validate();
   }
 
@@ -177,7 +183,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w600)),
-                      // Sempre tappabile: se errore mostra SnackBar
                       IconButton(
                         icon: Icon(
                           Icons.check,
