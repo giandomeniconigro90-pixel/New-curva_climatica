@@ -85,12 +85,12 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _headerText = "TEMPERATURA INTERNA";
       _fieldKind = FieldKind.internalTemp;
     } else if (widget.isConsumption) {
-      _min = 0; _max = 100; // alzato da 25 a 100 kWh
+      _min = 0; _max = 100;
       _mainColor = widget.cardColor ?? const Color(0xFF66BB6A);
       _headerText = "CONSUMO GIORNALIERO";
       _fieldKind = _resolveConsumptionKind();
     } else {
-      _min = -10; _max = 40;
+      _min = -30; _max = 40; // esteso da -10 a -30°C
       _mainColor = widget.cardColor ?? const Color(0xFF1976D2);
       _headerText = "TEMPERATURA ESTERNA";
       _fieldKind = FieldKind.externalTemp;
