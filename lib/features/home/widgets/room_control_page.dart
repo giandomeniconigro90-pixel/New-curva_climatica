@@ -85,7 +85,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
       _headerText = "TEMPERATURA INTERNA";
       _fieldKind = FieldKind.internalTemp;
     } else if (widget.isConsumption) {
-      _min = 0; _max = 25;
+      _min = 0; _max = 100; // alzato da 25 a 100 kWh
       _mainColor = widget.cardColor ?? const Color(0xFF66BB6A);
       _headerText = "CONSUMO GIORNALIERO";
       _fieldKind = _resolveConsumptionKind();
@@ -159,7 +159,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
                               color: Colors.white,
                               fontSize: 18,
                               fontWeight: FontWeight.w600)),
-                      // Salva disabilitato se errore
                       Tooltip(
                         message: hasError ? (_errorText ?? '') : '',
                         child: IconButton(
@@ -194,9 +193,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                         Text(
                           integerPart,
                           style: TextStyle(
-                            color: hasError
-                                ? Colors.red.shade200
-                                : Colors.white,
+                            color: hasError ? Colors.red.shade200 : Colors.white,
                             fontSize: 50,
                             fontWeight: FontWeight.bold,
                             height: 1.0,
@@ -212,9 +209,7 @@ class _RoomControlPageState extends State<RoomControlPage> {
                                 Text(
                                   ".$decimalPart",
                                   style: TextStyle(
-                                      color: hasError
-                                          ? Colors.red.shade200
-                                          : Colors.white,
+                                      color: hasError ? Colors.red.shade200 : Colors.white,
                                       fontSize: 25,
                                       fontWeight: FontWeight.bold),
                                 ),
@@ -233,14 +228,11 @@ class _RoomControlPageState extends State<RoomControlPage> {
                           Transform.translate(
                             offset: const Offset(-1.0, 0.0),
                             child: CustomPaint(
-                              foregroundPainter:
-                                  DegreePainter(color: Colors.white),
+                              foregroundPainter: DegreePainter(color: Colors.white),
                               child: Text(
                                 ".$decimalPart",
                                 style: TextStyle(
-                                  color: hasError
-                                      ? Colors.red.shade200
-                                      : Colors.white,
+                                  color: hasError ? Colors.red.shade200 : Colors.white,
                                   fontSize: 25,
                                   fontWeight: FontWeight.bold,
                                   height: 1.0,
@@ -250,7 +242,6 @@ class _RoomControlPageState extends State<RoomControlPage> {
                           ),
                       ],
                     ),
-                    // Messaggio errore sotto il valore
                     if (hasError)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
@@ -354,21 +345,16 @@ class _RoomControlPageState extends State<RoomControlPage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isSelected
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.2),
+              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon,
-                color: isSelected ? _mainColor : Colors.white, size: 24),
+            child: Icon(icon, color: isSelected ? _mainColor : Colors.white, size: 24),
           ),
           const SizedBox(height: 8),
           Text(
             value.toUpperCase(),
             style: TextStyle(
-              color: isSelected
-                  ? Colors.white
-                  : Colors.white.withValues(alpha: 0.6),
+              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
               fontSize: 10,
               fontWeight: FontWeight.bold,
             ),
