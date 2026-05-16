@@ -1,26 +1,45 @@
 // lib/features/home/widgets/room_control_page.dart
 //
-// UX Tado-style — barra verticale:
-//   • Barra verticale che si riempie dal basso verso l'alto
-//   • Trascina su/giù sulla barra per cambiare il valore
-//   • Tap diretto sulla barra per impostare il valore in proporzione
-//   • Validazione real-time mantenuta (RecordFormValidator)
-//   • Pulsante Salva disabilitato se errore
-//   • Stepper +/- come fallback
+// UX originale Tado ripristinata:
+//   • Sfondo blur colorato fullscreen
+//   • Slider bianco verticale che si riempie dal basso
+//   • Validazione real-time mantenuta (RecordFormValidator) senza rompere l'UX
 
-import 'dart:math' as math;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../logic/record_form_validator.dart';
+
+class DegreePainter extends CustomPainter {
+  final Color color;
+
+  DegreePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    const double radius = 5.0;
+    final center = Offset(10 + radius, -9.0);
+
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
 
 class RoomControlPage extends StatefulWidget {
   final String title;
   final TextEditingController controller;
   final bool isConsumption;
   final bool isRoom;
-  final Map<String, String> comfortRatings;
+  final Map<String, String>? comfortRatings;
   final VoidCallback onSave;
   final bool isCooling;
-  final Color cardColor;
+  final Color? cardColor;
 
   const RoomControlPage({
     super.key,
@@ -28,91 +47,62 @@ class RoomControlPage extends StatefulWidget {
     required this.controller,
     required this.isConsumption,
     required this.isRoom,
-    required this.comfortRatings,
+    this.comfortRatings,
     required this.onSave,
     required this.isCooling,
-    required this.cardColor,
+    this.cardColor,
   });
 
   @override
   State<RoomControlPage> createState() => _RoomControlPageState();
 }
 
-class _RoomControlPageState extends State<RoomControlPage>
-    with SingleTickerProviderStateMixin {
+class _RoomControlPageState extends State<RoomControlPage> {
   late double _currentValue;
+  late String _currentComfort;
+  late double _min, _max;
+  late Color _mainColor;
+  late String _headerText;
   String? _errorText;
   late FieldKind _fieldKind;
-  late AnimationController _animCtrl;
-  late Animation<double> _fillAnim;
-  double _prevFill = 0.0;
-
-  // Range dipendente dal tipo di campo
-  late double _minVal;
-  late double _maxVal;
-
-  static const _comfortOptions = [
-    ('\uD83E\uDD76', 'Troppo freddo'),
-    ('\uD83D\uDE42', 'Confortevole'),
-    ('\uD83E\uDD75', 'Troppo caldo'),
-  ];
 
   @override
   void initState() {
     super.initState();
-    _fieldKind = _resolveKind();
-    _setRange();
-    _currentValue = (double.tryParse(
-                widget.controller.text.replaceAll(',', '.')) ??
-            (widget.isConsumption ? 0.0 : 20.0))
-        .clamp(_minVal, _maxVal);
-    _animCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 300));
-    _fillAnim = Tween<double>(begin: _fillFraction, end: _fillFraction)
-        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
-    _prevFill = _fillFraction;
+    _currentValue = double.tryParse(widget.controller.text.replaceAll(',', '.')) ??
+        (widget.isConsumption ? 5.0 : (widget.isRoom ? 20.0 : 15.0));
+
+    if (widget.isRoom && widget.comfortRatings != null) {
+      _currentComfort = widget.comfortRatings![widget.title] ?? 'ok';
+    } else {
+      _currentComfort = 'ok';
+    }
+
+    if (widget.isRoom) {
+      _min = 10; _max = 45;
+      _mainColor = widget.cardColor ??
+          (widget.isCooling ? const Color(0xFF4DB6AC) : const Color(0xFFFFB74D));
+      _headerText = "TEMPERATURA INTERNA";
+      _fieldKind = FieldKind.internalTemp;
+    } else if (widget.isConsumption) {
+      _min = 0; _max = 25;
+      _mainColor = widget.cardColor ?? const Color(0xFF66BB6A);
+      _headerText = "CONSUMO GIORNALIERO";
+      _fieldKind = _resolveConsumptionKind();
+    } else {
+      _min = -10; _max = 40;
+      _mainColor = widget.cardColor ?? const Color(0xFF1976D2);
+      _headerText = "TEMPERATURA ESTERNA";
+      _fieldKind = FieldKind.externalTemp;
+    }
     _validate();
   }
 
-  @override
-  void dispose() {
-    _animCtrl.dispose();
-    super.dispose();
-  }
-
-  FieldKind _resolveKind() {
-    if (widget.isRoom) return FieldKind.internalTemp;
-    if (widget.title == 'Esterna') return FieldKind.externalTemp;
-    if (widget.title == 'Consumo') return FieldKind.consumption;
+  FieldKind _resolveConsumptionKind() {
     if (widget.title == 'ACS') return FieldKind.consumptionAcs;
     if (widget.title == 'Rete') return FieldKind.energyFromGrid;
     if (widget.title == 'Fotovoltaico') return FieldKind.pvProduction;
     return FieldKind.consumption;
-  }
-
-  void _setRange() {
-    if (widget.isConsumption) {
-      _minVal = 0.0;
-      _maxVal = 100.0;
-    } else if (_fieldKind == FieldKind.externalTemp) {
-      _minVal = -30.0;
-      _maxVal = 50.0;
-    } else {
-      _minVal = 0.0;
-      _maxVal = 40.0;
-    }
-  }
-
-  double get _fillFraction =>
-      ((_currentValue - _minVal) / (_maxVal - _minVal)).clamp(0.0, 1.0);
-
-  void _animateTo(double newFill) {
-    _fillAnim = Tween<double>(begin: _prevFill, end: newFill).animate(
-        CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
-    _prevFill = newFill;
-    _animCtrl
-      ..reset()
-      ..forward();
   }
 
   void _validate() {
@@ -124,386 +114,277 @@ class _RoomControlPageState extends State<RoomControlPage>
     if (err != _errorText) setState(() => _errorText = err);
   }
 
-  void _updateValue(double newVal) {
-    const step = 0.5;
-    final snapped = ((newVal / step).round() * step).clamp(_minVal, _maxVal);
-    if (snapped == _currentValue) return;
-    setState(() => _currentValue = snapped);
-    _animateTo(_fillFraction);
-    _validate();
-  }
-
-  void _adjust(double delta) => _updateValue(_currentValue + delta);
-
-  void _save() {
-    if (_errorText != null) return;
-    widget.controller.text = _currentValue.toStringAsFixed(1);
-    widget.onSave();
-    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-  }
-
-  // Drag sulla barra
-  double _barHeight = 300.0;
-  double _dragStartY = 0.0;
-  double _dragStartVal = 0.0;
-
-  void _onBarTapDown(TapDownDetails d, double barH) {
-    final fraction = 1.0 - (d.localPosition.dy / barH).clamp(0.0, 1.0);
-    _updateValue(_minVal + fraction * (_maxVal - _minVal));
-  }
-
-  void _onDragStart(DragStartDetails d) {
-    _dragStartY = d.localPosition.dy;
-    _dragStartVal = _currentValue;
-  }
-
-  void _onDragUpdate(DragUpdateDetails d, double barH) {
-    final dy = d.localPosition.dy - _dragStartY;
-    final delta = -(dy / barH) * (_maxVal - _minVal);
-    _updateValue(_dragStartVal + delta);
-  }
+  bool get _canSave => _errorText == null;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final double sliderHeight = MediaQuery.of(context).size.height
+        .clamp(260.0 / 0.45, 420.0 / 0.45) * 0.45;
+
+    double percentage = (_currentValue - _min) / (_max - _min);
+    percentage = percentage.clamp(0.0, 1.0);
+
+    String fullText = _currentValue.toStringAsFixed(1);
+    List<String> parts = fullText.split('.');
+    String integerPart = parts[0];
+    String decimalPart = parts.length > 1 ? parts[1] : "0";
+
     final bool hasError = _errorText != null;
-    final bool canSave = !hasError;
-    final String suffix = widget.isConsumption ? 'kWh' : '\u00b0C';
-    final Color barColor = hasError ? cs.error : widget.cardColor;
 
     return Scaffold(
-      backgroundColor: cs.surface,
-      appBar: AppBar(
-        backgroundColor: widget.cardColor,
-        foregroundColor: Colors.white,
-        title:
-            Text(widget.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: TextButton.icon(
-              key: ValueKey(canSave),
-              onPressed: canSave ? _save : null,
-              icon: Icon(Icons.check,
-                  color: canSave ? Colors.white : Colors.white38),
-              label: Text('Salva',
-                  style: TextStyle(
-                      color: canSave ? Colors.white : Colors.white38,
-                      fontWeight: FontWeight.bold)),
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: Container(
+              color: _mainColor.withValues(alpha: 0.75),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      Text(widget.title,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600)),
+                      // Salva disabilitato se errore
+                      Tooltip(
+                        message: hasError ? (_errorText ?? '') : '',
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.check,
+                            color: _canSave ? Colors.white : Colors.white38,
+                            size: 28,
+                          ),
+                          onPressed: _canSave ? _saveAndExit : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(flex: 1),
+                Column(
+                  children: [
+                    Text(
+                      _headerText,
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 11,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          integerPart,
+                          style: TextStyle(
+                            color: hasError
+                                ? Colors.red.shade200
+                                : Colors.white,
+                            fontSize: 50,
+                            fontWeight: FontWeight.bold,
+                            height: 1.0,
+                          ),
+                        ),
+                        if (widget.isConsumption)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 25),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  ".$decimalPart",
+                                  style: TextStyle(
+                                      color: hasError
+                                          ? Colors.red.shade200
+                                          : Colors.white,
+                                      fontSize: 25,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  "kWh",
+                                  style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.8),
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          Transform.translate(
+                            offset: const Offset(-1.0, 0.0),
+                            child: CustomPaint(
+                              foregroundPainter:
+                                  DegreePainter(color: Colors.white),
+                              child: Text(
+                                ".$decimalPart",
+                                style: TextStyle(
+                                  color: hasError
+                                      ? Colors.red.shade200
+                                      : Colors.white,
+                                  fontSize: 25,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.0,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    // Messaggio errore sotto il valore
+                    if (hasError)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          _errorText!,
+                          style: TextStyle(
+                              color: Colors.red.shade200,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                  ],
+                ),
+                const Spacer(flex: 1),
+                Center(
+                  child: Container(
+                    width: 220,
+                    height: sliderHeight,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(40),
+                      child: Stack(
+                        alignment: Alignment.bottomCenter,
+                        children: [
+                          Container(
+                            width: double.infinity,
+                            height: sliderHeight * percentage,
+                            color: Colors.white,
+                          ),
+                          RotatedBox(
+                            quarterTurns: 3,
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                trackHeight: 220,
+                                thumbShape: SliderComponentShape.noThumb,
+                                overlayShape: SliderComponentShape.noOverlay,
+                                activeTrackColor: Colors.transparent,
+                                inactiveTrackColor: Colors.transparent,
+                              ),
+                              child: Slider(
+                                value: _currentValue,
+                                min: _min,
+                                max: _max,
+                                onChanged: (val) {
+                                  setState(() => _currentValue = val);
+                                  _validate();
+                                },
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: (sliderHeight * percentage) - 10,
+                            child: Container(
+                              width: 40,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: _mainColor.withValues(alpha: 0.8),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const Spacer(flex: 5),
+                if (widget.isRoom)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildComfortOption('freddo', Icons.ac_unit),
+                        const SizedBox(width: 40),
+                        _buildComfortOption('ok', Icons.sentiment_satisfied_alt),
+                        const SizedBox(width: 40),
+                        _buildComfortOption('caldo', Icons.local_fire_department),
+                      ],
+                    ),
+                  )
+                else
+                  const SizedBox(height: 50),
+              ],
             ),
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 8),
+    );
+  }
 
-            // ----------------------------------------------------------------
-            // Layout principale: barra a sinistra + valore a destra
-            // ----------------------------------------------------------------
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-
-                  // -------------- BARRA VERTICALE TADO ----------------------
-                  LayoutBuilder(builder: (ctx, constraints) {
-                    _barHeight = constraints.maxHeight;
-                    return GestureDetector(
-                      onTapDown: (d) => _onBarTapDown(d, _barHeight),
-                      onVerticalDragStart: _onDragStart,
-                      onVerticalDragUpdate: (d) =>
-                          _onDragUpdate(d, _barHeight),
-                      child: SizedBox(
-                        width: 72,
-                        height: _barHeight,
-                        child: AnimatedBuilder(
-                          animation: _fillAnim,
-                          builder: (_, __) {
-                            final fill = _fillAnim.value;
-                            return CustomPaint(
-                              painter: _TadoBarPainter(
-                                fillFraction: fill,
-                                fillColor: barColor,
-                                trackColor: cs.surfaceContainerHighest,
-                                radius: 36,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    );
-                  }),
-
-                  const SizedBox(width: 32),
-
-                  // -------------- VALORE + STEPPER --------------------------
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Valore numerico grande
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                _currentValue.toStringAsFixed(1),
-                                style: TextStyle(
-                                  fontSize: 72,
-                                  fontWeight: FontWeight.w300,
-                                  color: hasError ? cs.error : cs.onSurface,
-                                  height: 1.0,
-                                  letterSpacing: -2,
-                                ),
-                              ),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(bottom: 10, left: 4),
-                                child: Text(
-                                  suffix,
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    color: hasError
-                                        ? cs.error
-                                        : cs.onSurface.withValues(alpha: 0.55),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Errore
-                        if (hasError) ...[
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Icon(Icons.error_outline,
-                                  color: cs.error, size: 15),
-                              const SizedBox(width: 4),
-                              Flexible(
-                                child: Text(_errorText!,
-                                    style: TextStyle(
-                                        color: cs.error,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w500)),
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        const SizedBox(height: 32),
-
-                        // Stepper +/-
-                        Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            _stepButton(
-                                icon: Icons.remove,
-                                delta: -0.5,
-                                cs: cs),
-                            _stepButton(
-                                icon: Icons.add,
-                                delta: 0.5,
-                                cs: cs),
-                            if (!widget.isConsumption) ...[
-                              _stepButton(
-                                  icon: Icons.remove,
-                                  delta: -1.0,
-                                  cs: cs,
-                                  label: '\u22121\u00b0'),
-                              _stepButton(
-                                  icon: Icons.add,
-                                  delta: 1.0,
-                                  cs: cs,
-                                  label: '+1\u00b0'),
-                            ],
-                          ],
-                        ),
-
-                        const SizedBox(height: 16),
-                        Text(
-                          'Scorri la barra o usa i tasti',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: cs.onSurface.withValues(alpha: 0.35)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+  Widget _buildComfortOption(String value, IconData icon) {
+    final isSelected = _currentComfort == value;
+    return GestureDetector(
+      onTap: () => setState(() => _currentComfort = value),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
             ),
-
-            // ----------------------------------------------------------------
-            // Rating comfort (solo stanze)
-            // ----------------------------------------------------------------
-            if (widget.isRoom) ...[
-              const SizedBox(height: 16),
-              Text('Come ti sei sentito?',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: cs.onSurface)),
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: _comfortOptions.map((opt) {
-                  final emoji = opt.$1;
-                  final label = opt.$2;
-                  final isSelected =
-                      widget.comfortRatings[widget.title] == label;
-                  return GestureDetector(
-                    onTap: () =>
-                        setState(() => widget.comfortRatings[widget.title] = label),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? widget.cardColor.withValues(alpha: 0.15)
-                            : cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isSelected
-                              ? widget.cardColor
-                              : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(emoji, style: const TextStyle(fontSize: 28)),
-                          const SizedBox(height: 4),
-                          Text(label,
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: isSelected
-                                      ? cs.onSurface
-                                      : cs.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _stepButton({
-    required IconData icon,
-    required double delta,
-    required ColorScheme cs,
-    String? label,
-  }) {
-    return InkWell(
-      onTap: () => _adjust(delta),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: label != null
-            ? Text(label,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: cs.onSurface))
-            : Icon(icon, color: cs.onSurface, size: 20),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// CustomPainter — barra verticale stile Tado
-// ---------------------------------------------------------------------------
-
-class _TadoBarPainter extends CustomPainter {
-  final double fillFraction;
-  final Color fillColor;
-  final Color trackColor;
-  final double radius;
-
-  const _TadoBarPainter({
-    required this.fillFraction,
-    required this.fillColor,
-    required this.trackColor,
-    required this.radius,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rr = math.min(radius, size.width / 2);
-    final rrect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, size.height), Radius.circular(rr));
-
-    // Track (sfondo)
-    canvas.drawRRect(rrect, Paint()..color = trackColor);
-
-    // Fill dal basso
-    final fillHeight = size.height * fillFraction;
-    if (fillHeight > 0) {
-      final fillRect = Rect.fromLTWH(
-          0, size.height - fillHeight, size.width, fillHeight);
-      final fillRRect = RRect.fromRectAndCorners(
-        fillRect,
-        bottomLeft: Radius.circular(rr),
-        bottomRight: Radius.circular(rr),
-        topLeft: fillFraction >= 0.99 ? Radius.circular(rr) : Radius.zero,
-        topRight: fillFraction >= 0.99 ? Radius.circular(rr) : Radius.zero,
-      );
-      // Gradient verticale per effetto Tado
-      final paint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            fillColor,
-            fillColor.withValues(alpha: 0.75),
-          ],
-        ).createShader(fillRect);
-      canvas.drawRRect(fillRRect, paint);
-
-      // Linea indicatore in cima al fill
-      if (fillFraction > 0.01 && fillFraction < 0.99) {
-        final lineY = size.height - fillHeight;
-        canvas.drawRRect(
-          RRect.fromRectAndRadius(
-            Rect.fromLTWH(0, lineY, size.width, 3),
-            const Radius.circular(2),
+            child: Icon(icon,
+                color: isSelected ? _mainColor : Colors.white, size: 24),
           ),
-          Paint()..color = Colors.white.withValues(alpha: 0.9),
-        );
-      }
-    }
+          const SizedBox(height: 8),
+          Text(
+            value.toUpperCase(),
+            style: TextStyle(
+              color: isSelected
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.6),
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  @override
-  bool shouldRepaint(_TadoBarPainter old) =>
-      old.fillFraction != fillFraction ||
-      old.fillColor != fillColor ||
-      old.trackColor != trackColor;
+  void _saveAndExit() {
+    if (!_canSave) return;
+    widget.controller.text = _currentValue.toStringAsFixed(1);
+    if (widget.isRoom && widget.comfortRatings != null) {
+      widget.comfortRatings![widget.title] = _currentComfort;
+    }
+    widget.onSave();
+    Navigator.pop(context);
+  }
 }
