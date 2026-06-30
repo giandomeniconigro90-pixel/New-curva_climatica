@@ -319,3 +319,88 @@ List<FlSpot> buildCurveSpots({
   }
   return spots;
 }
+
+// ---------------------------------------------------------------------------
+// SHERPA BRIDGE — Olimpia Splendid Sherpa Monobloc S2 E
+//
+// La Sherpa S2 E usa una curva climatica a DUE PUNTI:
+//   • Punto freddo  (T_ext bassa  → T_mandata alta)
+//   • Punto mite    (T_ext alta   → T_mandata bassa)
+//
+// Questa classe traduce i parametri interni dell'app (slope + offset)
+// nei due valori concreti da inserire nell'app ILETCOMFORT o sull'HMI.
+// ---------------------------------------------------------------------------
+
+/// Coppia di punti da impostare sulla Sherpa Monobloc S2 E.
+///
+/// Riscaldamento:
+///   [coldExtTemp]  = temperatura esterna punto freddo (default -5 °C)
+///   [coldMandata]  = mandata corrispondente  [clamp 35–60 °C]
+///   [mildExtTemp]  = temperatura esterna punto mite  (default +15 °C)
+///   [mildMandata]  = mandata corrispondente  [clamp 35–60 °C]
+///
+/// Raffrescamento:
+///   [coldExtTemp]  = temperatura esterna punto "freddo esterno" (default 20 °C)
+///   [coldMandata]  = mandata corrispondente  [clamp 7–25 °C]
+///   [mildExtTemp]  = temperatura esterna punto "caldo esterno"  (default 40 °C)
+///   [mildMandata]  = mandata corrispondente  [clamp 7–25 °C]
+class SherpaSetpoints {
+  /// Temperatura esterna del punto freddo (°C)
+  final double coldExtTemp;
+
+  /// Temperatura di mandata al punto freddo (°C)
+  final double coldMandata;
+
+  /// Temperatura esterna del punto mite (°C)
+  final double mildExtTemp;
+
+  /// Temperatura di mandata al punto mite (°C)
+  final double mildMandata;
+
+  const SherpaSetpoints({
+    required this.coldExtTemp,
+    required this.coldMandata,
+    required this.mildExtTemp,
+    required this.mildMandata,
+  });
+
+  @override
+  String toString() =>
+      'SherpaSetpoints('
+      'T_ext_freddo: $coldExtTemp °C → mandata: $coldMandata °C | '
+      'T_ext_mite: $mildExtTemp °C → mandata: $mildMandata °C)';
+}
+
+/// Converte [slope] e [offset] dell'app nei due setpoint da inserire
+/// nell'interfaccia della Sherpa Monobloc S2 E.
+///
+/// Parametri opzionali:
+///   [coldExtTemp] — T esterna del punto freddo  (riscaldamento: -5 °C, raffrescamento: 20 °C)
+///   [mildExtTemp] — T esterna del punto mite    (riscaldamento: +15 °C, raffrescamento: 40 °C)
+///
+/// I valori di mandata vengono arrotondati a 0.5 °C (passo minimo
+/// dell'HMI Sherpa) e clampati ai limiti fisici dell'impianto.
+SherpaSetpoints computeSherpaSetpoints({
+  required double slope,
+  required double offset,
+  required SystemMode mode,
+  double? coldExtTemp,
+  double? mildExtTemp,
+}) {
+  final double tCold = coldExtTemp ?? (mode == SystemMode.heating ? -5.0 : 20.0);
+  final double tMild = mildExtTemp ?? (mode == SystemMode.heating ? 15.0 : 40.0);
+
+  double mandataCold = computeMandata(tCold, slope, offset, mode);
+  double mandataMild = computeMandata(tMild, slope, offset, mode);
+
+  // Arrotonda a 0.5 °C — passo minimo impostabile sull'HMI Sherpa
+  mandataCold = (mandataCold * 2).round() / 2.0;
+  mandataMild = (mandataMild * 2).round() / 2.0;
+
+  return SherpaSetpoints(
+    coldExtTemp: tCold,
+    coldMandata: mandataCold,
+    mildExtTemp: tMild,
+    mildMandata: mandataMild,
+  );
+}
