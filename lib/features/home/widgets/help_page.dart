@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../services/hive_storage.dart';
 import '../../../services/theme_notifier.dart';
+import '../../../services/growatt_notifier.dart';
 import '../../../utils/app_toast.dart';
+import 'growatt_settings_page.dart';
 
 class HelpPage extends StatefulWidget {
   final VoidCallback? onResetCalibration;
@@ -32,7 +34,7 @@ class _HelpPageState extends State<HelpPage> {
   late TextEditingController _cityController;
   String? _savedCity;
 
-  // ── Sezione Dev ────────────────────────────────────────────────────────
+  // ── Sezione Dev ────────────────────────────────────────────────────────────────
   static const String _devPassword = 'climasense2025';
   bool _devUnlocked = false;
   final TextEditingController _pwdController = TextEditingController();
@@ -96,7 +98,7 @@ class _HelpPageState extends State<HelpPage> {
           _buildHeader(context),
           const SizedBox(height: 20),
 
-          // ── SEZIONE 1: PRIMI PASSI ────────────────────────────────────────
+          // ── SEZIONE 1: PRIMI PASSI ──────────────────────────────────────────────
           _buildSectionTitle(context, 'Inizia da Qui'),
           _buildExpandableCard(
             context: context,
@@ -115,7 +117,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 2: UTILIZZO QUOTIDIANO ───────────────────────────────
+          // ── SEZIONE 2: UTILIZZO QUOTIDIANO ──────────────────────────────────────
           _buildSectionTitle(context, 'Utilizzo Quotidiano'),
           _buildExpandableCard(
             context: context,
@@ -160,7 +162,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 3: TILE HOME ──────────────────────────────────────────
+          // ── SEZIONE 3: TILE HOME ───────────────────────────────────────────────────
           _buildSectionTitle(context, 'Griglia Home e Tile'),
           _buildExpandableCard(
             context: context,
@@ -203,7 +205,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 4: CONCETTI BASE ──────────────────────────────────────
+          // ── SEZIONE 4: CONCETTI BASE ────────────────────────────────────────────────
           _buildSectionTitle(context, 'Concetti della Curva Climatica'),
           _buildExpandableCard(
             context: context,
@@ -245,7 +247,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 5: AI E ANALISI ───────────────────────────────────────
+          // ── SEZIONE 5: AI E ANALISI ───────────────────────────────────────────────────
           _buildSectionTitle(context, 'Intelligenza Artificiale'),
           _buildExpandableCard(
             context: context,
@@ -290,7 +292,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 6: COMFORT E STANZE ───────────────────────────────────
+          // ── SEZIONE 6: COMFORT E STANZE ───────────────────────────────────────────────
           _buildSectionTitle(context, 'Comfort e Stanze'),
           _buildExpandableCard(
             context: context,
@@ -320,7 +322,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 7: NOTIFICHE ──────────────────────────────────────────
+          // ── SEZIONE 7: NOTIFICHE ────────────────────────────────────────────────────────
           _buildSectionTitle(context, 'Notifiche'),
           _buildExpandableCard(
             context: context,
@@ -346,10 +348,15 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 8: STRUMENTI AVANZATI ────────────────────────────────
+          // ── SEZIONE 8: STRUMENTI AVANZATI ────────────────────────────────────────────
           _buildSectionTitle(context, 'Strumenti Avanzati'),
           _buildCityCard(context),
           const SizedBox(height: 12),
+
+          // ── TILE GROWATT (NUOVA) ─────────────────────────────────────────────────
+          _buildGrowattTile(context),
+          const SizedBox(height: 12),
+
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -417,7 +424,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 9: FAQ ────────────────────────────────────────────────
+          // ── SEZIONE 9: FAQ ────────────────────────────────────────────────────────────────
           _buildSectionTitle(context, 'Domande Frequenti'),
           _buildExpandableCard(
             context: context,
@@ -471,7 +478,7 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 10: APPROFONDIMENTI TECNICI ──────────────────────────
+          // ── SEZIONE 10: APPROFONDIMENTI TECNICI ──────────────────────────────────
           _buildSectionTitle(context, 'Approfondimenti Tecnici'),
           _buildExpandableCard(
             context: context,
@@ -505,12 +512,12 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── SEZIONE 11: AREA DEV (protetta da password) ────────────────────
+          // ── SEZIONE 11: AREA DEV (protetta da password) ────────────────────────
           _buildSectionTitle(context, 'Area Sviluppatore'),
           _devUnlocked ? _buildDevSection(context) : _buildDevLock(context),
           const SizedBox(height: 40),
 
-          // ── FOOTER ────────────────────────────────────────────────────────
+          // ── FOOTER ────────────────────────────────────────────────────────────────────
           Center(
             child: Column(
               children: [
@@ -535,6 +542,74 @@ class _HelpPageState extends State<HelpPage> {
           ),
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // TILE GROWATT
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  Widget _buildGrowattTile(BuildContext context) {
+    // GrowattNotifier potrebbe non essere ancora nel tree se non è configurato.
+    // Usiamo listen:false per non ricostruire tutta la pagina ad ogni poll.
+    final growatt = context.watch<GrowattNotifier>();
+    final isOk = growatt.state == GrowattPollingState.ok;
+    final isConfigured = growatt.state != GrowattPollingState.notConfigured;
+
+    String subtitle;
+    if (!isConfigured) {
+      subtitle = 'Tocca per collegare l\u2019impianto Growatt';
+    } else if (isOk && growatt.data != null) {
+      final d = growatt.data!;
+      subtitle =
+          'Oggi: ${d.pvTodayKwh.toStringAsFixed(2)} kWh  \u2022  '
+          '${d.pvPowerW.toStringAsFixed(0)} W ora  \u2022  '
+          'Rete: ${d.gridImportTodayKwh.toStringAsFixed(2)} kWh';
+    } else if (growatt.state == GrowattPollingState.error) {
+      subtitle = growatt.errorMessage ?? 'Errore connessione';
+    } else {
+      subtitle = 'Connessione in corso\u2026';
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Icon(
+          Icons.solar_power,
+          color: isOk ? Colors.amber[700] : Colors.grey,
+        ),
+        title: const Text('Fotovoltaico Growatt'),
+        subtitle: Text(
+          subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isConfigured)
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                tooltip: 'Aggiorna ora',
+                onPressed: () => growatt.refresh(),
+              ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const GrowattSettingsPage(),
+            ),
+          );
+          // Dopo il ritorno riconfigura il notifier se le credenziali sono cambiate
+          if (context.mounted) {
+            await context.read<GrowattNotifier>().reconfigure();
+          }
+        },
       ),
     );
   }
@@ -622,7 +697,6 @@ class _HelpPageState extends State<HelpPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header area con pulsante blocca
         Card(
           elevation: 0,
           color: cs.primaryContainer,
@@ -657,8 +731,6 @@ class _HelpPageState extends State<HelpPage> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // ── CARD 1: Eseguire i test ────────────────────────────────────
         _buildExpandableCard(
           context: context,
           icon: Icons.science_outlined,
@@ -686,8 +758,6 @@ class _HelpPageState extends State<HelpPage> {
               'Se un test fallisce, il report indica il file, il gruppo e la riga esatta del mismatch.',
         ),
         const SizedBox(height: 12),
-
-        // ── CARD 2: Copertura test ──────────────────────────────────────
         _buildExpandableCard(
           context: context,
           icon: Icons.checklist,
@@ -695,24 +765,18 @@ class _HelpPageState extends State<HelpPage> {
           title: '\ud83d\udcca Copertura dei Test',
           content:
               'curve_logic_test.dart (28 test)\n'
-              '\u2022 computeMandata heating: clamp min 35\u00b0, clamp max 60\u00b0, crescita al freddo, effetto offset\n'
-              '\u2022 computeMandata cooling: clamp min 7\u00b0, clamp max 25\u00b0, decrescita al caldo\n'
-              '\u2022 computeCurveStats: lista vuota, media consumo, range temperatura\n'
-              '\u2022 computeOptimalCurveSuggestion: modalit\u00e0 apprendimento (<5 record), freddo/caldo/ok, max step slope/offset, cooling\n'
-              '\u2022 analyzeRoomComfort: lista vuota, stanze ok escluse, ordinamento issueRate\n'
-              '\u2022 AiCurveService.recordsSinceLastApply: filtro null, filtro temporale, boundary giorno\n\n'
+              '\u2022 computeMandata heating/cooling, clamp, offset, slope\n'
+              '\u2022 computeCurveStats: lista vuota, media, range\n'
+              '\u2022 computeOptimalCurveSuggestion: apprendimento, freddo/caldo/ok, max step\n'
+              '\u2022 analyzeRoomComfort: vuota, ordinamento issueRate\n'
+              '\u2022 AiCurveService.recordsSinceLastApply: filtro null/temporale\n\n'
               'record_form_validator_test.dart (22 test)\n'
-              '\u2022 validateField per tutti i FieldKind: vuoto, non numerico, fuori range min/max, boundary, virgola decimale\n'
-              '\u2022 Campi opzionali: vuoto = ok, valore valido = ok, fuori range = errore\n'
-              '\u2022 validate() form completo: ogni campo mancante/sbagliato, multi-stanza, virgola decimale\n\n'
+              '\u2022 validateField per tutti i FieldKind\n'
+              '\u2022 validate() form completo\n\n'
               'date_utils_test.dart (11 test)\n'
-              '\u2022 parseItalianDateSafe: formato italiano e ISO, stringa vuota, mese/giorno fuori range\n'
-              '\u2022 Casi limite: 29 feb bisestile vs non bisestile, anno fuori range, caratteri non numerici\n'
-              '\u2022 formatItalianDate: padding zero, round-trip format\u2192parse',
+              '\u2022 parseItalianDateSafe, formatItalianDate, round-trip',
         ),
         const SizedBox(height: 12),
-
-        // ── CARD 3: Aggiungere nuovi test ─────────────────────────────────
         _buildExpandableCard(
           context: context,
           icon: Icons.add_circle_outline,
@@ -731,18 +795,9 @@ class _HelpPageState extends State<HelpPage> {
               '    });\n'
               '  });\n'
               '}\n\n'
-              'MATCHER UTILI\n'
-              '\u2022 expect(x, isNull) / isNotNull\n'
-              '\u2022 expect(x, isA<RecordValidationOk>())\n'
-              '\u2022 expect(x, closeTo(15.0, 0.01))\n'
-              '\u2022 expect(x, greaterThan(y)) / lessThan(y)\n'
-              '\u2022 expect(list, isEmpty) / isNotEmpty\n'
-              '\u2022 expect(list, contains(\'valore\'))\n\n'
               'REGOLA: testa solo funzioni pure (no Hive, no context, no Navigator).',
         ),
         const SizedBox(height: 12),
-
-        // ── CARD 4: Note di sviluppo ───────────────────────────────────
         _buildExpandableCard(
           context: context,
           icon: Icons.build_circle_outlined,
@@ -752,19 +807,19 @@ class _HelpPageState extends State<HelpPage> {
               'ARCHITETTURA\n'
               '\u2022 State management: Provider + ChangeNotifier (HomeNotifier)\n'
               '\u2022 Persistenza: Hive (AppStorage) + CurveSettingsRepository\n'
-              '\u2022 Logica AI: lib/features/home/logic/curve_logic.dart\n'
-              '\u2022 Validazione: lib/features/home/logic/record_form_validator.dart\n'
-              '\u2022 Export: lib/features/home/logic/export_service.dart\n\n'
+              '\u2022 Growatt polling: GrowattNotifier (10 min, auto re-login)\n'
+              '\u2022 Credenziali FV: flutter_secure_storage (Keystore/Keychain)\n\n'
               'REFACTORING COMPLETATI\n'
-              '\u2022 #8 — HomeNotifier split: ExportService + AiCurveService\n'
-              '\u2022 #9 — climate_curve_home: 4 widget privati (_HomeAppBar, _HomePageView, _HomeNavBar, _TabItem)\n'
-              '\u2022 #11 — new_thermostat_home.dart eliminato (dead code)\n'
-              '\u2022 #12 — utils/ struttura verificata e confermata\n'
+              '\u2022 #2  — AI pesa T_ext nelle correzioni slope/offset\n'
+              '\u2022 #8  — HomeNotifier split: ExportService + AiCurveService\n'
+              '\u2022 #9  — climate_curve_home: 4 widget privati\n'
+              '\u2022 #11 — new_thermostat_home.dart eliminato\n'
+              '\u2022 #12 — utils/ struttura verificata\n'
               '\u2022 #13 — 55 unit test aggiunti\n'
-              '\u2022 #15 — main.dart verificato, nessuna modifica necessaria\n\n'
+              '\u2022 #15 — main.dart verificato\n\n'
               'IN SOSPESO\n'
-              '\u2022 #10 — Repository pattern: RecordRepository da implementare\n'
-              '         (consigliato in parallelo con nuovi test)\n\n'
+              '\u2022 #4  — AppStorage non iniettabile (refactor interfaccia)\n'
+              '\u2022 #10 — Repository pattern: RecordRepository\n\n'
               'COMANDO BUILD RELEASE\n'
               '   flutter build apk --release\n'
               '   flutter build appbundle --release',
@@ -773,7 +828,7 @@ class _HelpPageState extends State<HelpPage> {
     );
   }
 
-  // ── CARD CITTÀ METEO ───────────────────────────────────────────────────
+  // ── CARD CITTÀ METEO ──────────────────────────────────────────────────────────────────
   Widget _buildCityCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
@@ -884,7 +939,7 @@ class _HelpPageState extends State<HelpPage> {
     );
   }
 
-  // ── WIDGETS ───────────────────────────────────────────────────────────
+  // ── WIDGETS ────────────────────────────────────────────────────────────────────────────
 
   Widget _buildThemeCard(BuildContext context) {
     final themeNotifier = context.watch<ThemeNotifier>();
