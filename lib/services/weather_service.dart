@@ -198,7 +198,7 @@ class WeatherService {
     return _fetchWithFallback();
   }
 
-  /// Versione che espone il tipo stale all’UI (per mostrare badge "aggiornando…")
+  /// Versione che espone il tipo stale all'UI (per mostrare badge "aggiornando…")
   static Future<WeatherResult> getDailyAvgTempVerbose() async {
     final fresh = _readCache(allowStale: false);
     if (fresh != null) return WeatherFresh(fresh);
@@ -447,11 +447,4 @@ class WeatherService {
   static void _log(String msg) {
     if (kDebugMode) debugPrint('[WeatherService] $msg');
   }
-}
-
-// ignore: prefer_void_to_null
-void unawaited(Future<dynamic> future) {
-  future.catchError((Object e) {
-    WeatherService._log('unawaited error: $e');
-  });
 }
