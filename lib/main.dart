@@ -12,6 +12,7 @@ import 'services/hive_storage.dart';
 import 'services/notification_service.dart';
 import 'services/theme_notifier.dart';
 import 'services/weather_service.dart';
+import 'services/growatt_notifier.dart';
 import 'features/splash/splash_screen.dart';
 
 void main() async {
@@ -36,8 +37,15 @@ void main() async {
   _applyOverlay(isDarkAtStart);
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeNotifier.fromStorage(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => ThemeNotifier.fromStorage(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => GrowattNotifier()..init(),
+        ),
+      ],
       child: const ClimaSenseApp(),
     ),
   );
