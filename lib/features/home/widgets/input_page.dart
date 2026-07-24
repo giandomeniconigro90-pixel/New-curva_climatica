@@ -5,6 +5,7 @@
 //   • Tile con badge errore (bordo rosso + icona !) visibile nella griglia
 //   • Aggiornato _fetchWeather() per gestire WeatherResult sealed
 // + Tile VMC (IRSAP IRSAIR H 220 S) con dropdown velocità
+// fix: auto-fetch meteo bloccato se isEditing == true
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -78,7 +79,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   static const Color _colorRete         = Color(0xFFF57C00);
   static const Color _colorFotovoltaico = Color(0xFFFDD835);
   static const Color _colorNota         = Color(0xFF7E57C2);
-  static const Color _colorVmc          = Color(0xFF42A5F5); // azzurro aria
+  static const Color _colorVmc          = Color(0xFF42A5F5);
 
   bool get _isDesktop =>
       defaultTargetPlatform == TargetPlatform.windows ||
@@ -123,19 +124,29 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _autoFetchDone = false;
-      _autoFetchIfNeeded();
+      // Non resettare _autoFetchDone se siamo in modalità modifica:
+      // il fetch automatico non deve sovrascrivere i campi precompilati.
+      if (!widget.isEditing) {
+        _autoFetchDone = false;
+        _autoFetchIfNeeded();
+      }
     }
   }
 
   @override
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Se si esce dalla modalità modifica, consenti il prossimo auto-fetch.
+    if (oldWidget.isEditing && !widget.isEditing) {
+      _autoFetchDone = false;
+    }
     _autoFetchIfNeeded();
   }
 
   void _autoFetchIfNeeded() {
     if (!mounted) return;
+    // Non sovrascrivere i campi quando l'utente sta modificando un record.
+    if (widget.isEditing) return;
     final currentCity = AppStorage.getCityOverride();
     if (_autoFetchDone && currentCity != _lastAutoFetchCity) {
       _autoFetchDone = false;
@@ -831,7 +842,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     );
   }
 
-  // ---- TILE VMC ----
   Widget _buildVmcModeTile() {
     return ValueListenableBuilder<String>(
       valueListenable: widget.vmcModeNotifier,
@@ -848,7 +858,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
           case 'alta':
             baseColor = const Color(0xFF0288D1);
             emoji = '\uD83C\uDF2C\uD83C\uDF2C\uD83C\uDF2C';
-          default: // spenta
+          default:
             baseColor = const Color(0xFF90A4AE);
             emoji = '\u26D4';
         }

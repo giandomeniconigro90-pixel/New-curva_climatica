@@ -438,6 +438,8 @@ class HomeNotifier extends ChangeNotifier {
             return dB.compareTo(dA);
           }))
         .first;
+    // fix: copia anche il consumo principale (era mancante)
+    consumptionController.text = last.consumption.toString();
     last.internalTemps.forEach((room, val) {
       if (internalTempControllers.containsKey(room)) {
         internalTempControllers[room]!.text = val.toStringAsFixed(1);
