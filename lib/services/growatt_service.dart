@@ -2,21 +2,17 @@
 //
 // Integrazione Growatt cloud API per leggere i dati del fotovoltaico.
 //
+// Endpoint reali utilizzati (documentazione community Growatt):
+//   POST /login                                      → login + JSESSIONID
+//   POST /newTwoPlantAPI/getPlantData                → dati impianto oggi
+//   POST /panel/plant/getPlantData (DEPRECATO/404)   → non usare
+//
 // Dati disponibili:
 //   • Produzione PV oggi (kWh)            → GrowattData.pvTodayKwh
 //   • Potenza PV istantanea (W)            → GrowattData.pvPowerW
 //   • Energia importata da rete oggi (kWh) → GrowattData.gridImportTodayKwh
 //   • Energia esportata in rete oggi (kWh) → GrowattData.gridExportTodayKwh
 //   • Autoconsumo oggi (kWh)               → GrowattData.selfConsumptionTodayKwh
-//
-// Uso:
-//   final service = GrowattService();
-//   await service.login(username: 'email@example.com', password: 'password');
-//   final result = await service.fetchToday();
-//   result.when(
-//     ok: (data) => print(data.pvTodayKwh),
-//     error: (e) => print(e),
-//   );
 //
 // NOTA SICUREZZA: non hardcodare mai username/password nel codice.
 // Usare flutter_secure_storage per persistere le credenziali.
@@ -66,7 +62,7 @@ class GrowattData {
 }
 
 // ---------------------------------------------------------------------------
-// Result sealed (stesso pattern di WeatherResult)
+// Result sealed
 // ---------------------------------------------------------------------------
 
 sealed class GrowattResult {
@@ -85,17 +81,11 @@ final class GrowattError extends GrowattResult {
 }
 
 enum GrowattErrorKind {
-  /// Credenziali errate
   authFailed,
-  /// Sessione scaduta — serve ri-login
   sessionExpired,
-  /// Errore di rete (nessuna connessione)
   networkError,
-  /// Risposta API non parsabile o struttura cambiata
   parseError,
-  /// Impianto non trovato con il Plant ID fornito
   plantNotFound,
-  /// Errore generico server Growatt
   serverError,
 }
 
@@ -112,7 +102,6 @@ class GrowattService {
   final int plantId;
   final http.Client _client;
 
-  /// Cookie di sessione ottenuto dopo il login
   String? _sessionCookie;
 
   GrowattService({
@@ -126,15 +115,6 @@ class GrowattService {
   // LOGIN
   // -------------------------------------------------------------------------
 
-  /// Autentica con le credenziali Shine Phone.
-  ///
-  /// Restituisce [GrowattOk] con dati vuoti (pvTodayKwh = 0) se il login
-  /// va a buon fine — i dati reali si ottengono con [fetchToday].
-  /// Restituisce [GrowattError] con [GrowattErrorKind.authFailed] se le
-  /// credenziali sono errate.
-  ///
-  /// Le credenziali NON devono essere hardcodate — passarle da
-  /// flutter_secure_storage o da un form di configurazione.
   Future<GrowattResult> login({
     required String username,
     required String password,
@@ -168,11 +148,10 @@ class GrowattService {
       if (result != 1) {
         return const GrowattError(
           GrowattErrorKind.authFailed,
-          'Credenziali non valide. Verifica email e password di Shine Phone.',
+          'Credenziali non valide. Verifica username/email e password di Shine Phone.',
         );
       }
 
-      // Estrai il cookie di sessione
       final setCookie = response.headers['set-cookie'];
       if (setCookie == null) {
         return const GrowattError(
@@ -180,7 +159,6 @@ class GrowattService {
           'Login OK ma nessun cookie di sessione ricevuto.',
         );
       }
-      // Il cookie ha formato: "JSESSIONID=xxxx; Path=/; HttpOnly"
       _sessionCookie = setCookie.split(';').first.trim();
 
       debugPrint('[GrowattService] Login OK — sessione attiva.');
@@ -198,13 +176,18 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // FETCH DATI OGGI
+  //
+  // Endpoint corretto: POST /newTwoPlantAPI/getPlantData
+  // Body form: plantId=<id>
+  // Risposta: { "result": 1, "obj": { "plantData": { ... } } }
+  //
+  // Campi rilevanti in obj.plantData:
+  //   etoday        → kWh prodotti oggi
+  //   currentPower  → kW istantanei (moltiplicare ×1000 per W)
+  //   etoGridToday  → kWh esportati in rete oggi
+  //   eUsedToday    → kWh consumati oggi
   // -------------------------------------------------------------------------
 
-  /// Recupera i dati energetici di oggi per l'impianto [plantId].
-  ///
-  /// Richiede che [login] sia stato chiamato con successo.
-  /// Se la sessione è scaduta, restituisce [GrowattErrorKind.sessionExpired]
-  /// — in quel caso ri-chiama [login] e poi riprova.
   Future<GrowattResult> fetchToday() async {
     if (_sessionCookie == null) {
       return const GrowattError(
@@ -214,19 +197,21 @@ class GrowattService {
     }
 
     try {
-      // Endpoint che restituisce i dati energetici del giorno corrente
-      final uri = Uri.parse(
-        '$_baseUrl/panel/plant/getPlantData?plantId=$plantId',
-      );
-
-      final response = await _client.get(
-        uri,
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/newTwoPlantAPI/getPlantData'),
         headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': _sessionCookie!,
           'User-Agent': 'Mozilla/5.0',
           'Referer': '$_baseUrl/index',
         },
+        body: {
+          'plantId': plantId.toString(),
+        },
       ).timeout(const Duration(seconds: 15));
+
+      debugPrint('[GrowattService] fetchToday status=${response.statusCode}');
+      debugPrint('[GrowattService] fetchToday body=${response.body.substring(0, response.body.length.clamp(0, 300))}');
 
       if (response.statusCode == 302 ||
           response.body.contains('"result":-1')) {
@@ -252,20 +237,35 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // PARSER
+  //
+  // La risposta di /newTwoPlantAPI/getPlantData ha struttura:
+  // {
+  //   "result": 1,
+  //   "obj": {
+  //     "plantData": {
+  //       "etoday": "12.5",
+  //       "currentPower": "1.23",   ← kW
+  //       "etoGridToday": "3.2",
+  //       "eUsedToday": "9.3"
+  //     }
+  //   }
+  // }
   // -------------------------------------------------------------------------
 
   GrowattResult _parsePlantData(String body) {
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
 
-      // La risposta ha struttura: { "result": 1, "obj": { ... } }
       final obj = json['obj'] as Map<String, dynamic>?;
       if (obj == null) {
-        return const GrowattError(
+        return GrowattError(
           GrowattErrorKind.parseError,
-          'Campo "obj" mancante nella risposta Growatt.',
+          'Campo "obj" mancante. Risposta: ${body.substring(0, body.length.clamp(0, 200))}',
         );
       }
+
+      // /newTwoPlantAPI/getPlantData annida i dati in obj.plantData
+      final plantData = (obj['plantData'] as Map<String, dynamic>?) ?? obj;
 
       double _d(dynamic v) {
         if (v == null) return 0.0;
@@ -273,17 +273,19 @@ class GrowattService {
         return double.tryParse(v.toString()) ?? 0.0;
       }
 
-      // Campi principali dell'endpoint getPlantData
-      final double pvTodayKwh       = _d(obj['etoday']);       // kWh prodotti oggi
-      final double pvPowerW         = _d(obj['currentPower']); // W istantanei (kW × 1000)
-      final double gridImport        = _d(obj['etoGridToday']); // kWh importati da rete
-      final double gridExport        = _d(obj['etoday']) - _d(obj['eselfToday']); // kWh esportati
+      final double pvTodayKwh    = _d(plantData['etoday']);
+      final double pvPowerKw     = _d(plantData['currentPower']); // kW
+      final double gridExport    = _d(plantData['etoGridToday']);
+      final double usedToday     = _d(plantData['eUsedToday']);
+      // gridImport = consumo - (produzione - esportazione)
+      final double selfCons      = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
+      final double gridImport    = (usedToday - selfCons).clamp(0.0, double.infinity);
 
       return GrowattOk(GrowattData(
         pvTodayKwh: pvTodayKwh,
-        pvPowerW: pvPowerW * 1000, // l'API restituisce kW, convertiamo in W
+        pvPowerW: pvPowerKw * 1000,
         gridImportTodayKwh: gridImport,
-        gridExportTodayKwh: gridExport.clamp(0.0, double.infinity),
+        gridExportTodayKwh: gridExport,
         fetchedAt: DateTime.now().toUtc(),
       ));
     } catch (e) {
