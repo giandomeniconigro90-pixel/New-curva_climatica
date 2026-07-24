@@ -6,6 +6,7 @@
 //   • Aggiornato _fetchWeather() per gestire WeatherResult sealed
 // + Tile VMC (IRSAP IRSAIR H 220 S) con dropdown velocità
 // fix: auto-fetch meteo bloccato se isEditing == true
+// fix: auto-fetch riparte automaticamente dopo AGGIORNA (postFrameCallback)
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -136,9 +137,15 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Se si esce dalla modalità modifica, consenti il prossimo auto-fetch.
+    // Uscita dalla modalità modifica (es. dopo AGGIORNA):
+    // reset + fetch differito al frame successivo, così clearFields() ha
+    // già svuotato i controller prima che il meteo sovrascriva.
     if (oldWidget.isEditing && !widget.isEditing) {
       _autoFetchDone = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _autoFetchIfNeeded();
+      });
+      return; // non chiamare _autoFetchIfNeeded() nello stesso frame
     }
     _autoFetchIfNeeded();
   }
