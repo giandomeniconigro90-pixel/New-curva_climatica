@@ -6,7 +6,7 @@
 //   • Aggiornato _fetchWeather() per gestire WeatherResult sealed
 // + Tile VMC (IRSAP IRSAIR H 220 S) con dropdown velocità
 // fix: auto-fetch meteo bloccato se isEditing == true
-// fix: auto-fetch riparte automaticamente dopo AGGIORNA (postFrameCallback)
+// fix: auto-fetch garantito dopo AGGIORNA via _needsAutoFetchAfterSave
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -74,6 +74,11 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   bool _autoFetchDone = false;
   String? _lastAutoFetchCity;
 
+  /// Flag monouso: quando true, il prossimo postFrameCallback esegue
+  /// _fetchWeather incondizionatamente (bypassando _autoFetchDone).
+  /// Viene impostato a true quando si esce dalla modalità modifica.
+  bool _needsAutoFetchAfterSave = false;
+
   static const Color _colorEsterna      = Color(0xFF1976D2);
   static const Color _colorConsumo      = Color(0xFF66BB6A);
   static const Color _colorAcs          = Color(0xFF26A69A);
@@ -125,8 +130,6 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Non resettare _autoFetchDone se siamo in modalità modifica:
-      // il fetch automatico non deve sovrascrivere i campi precompilati.
       if (!widget.isEditing) {
         _autoFetchDone = false;
         _autoFetchIfNeeded();
@@ -138,21 +141,25 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Uscita dalla modalità modifica (es. dopo AGGIORNA):
-    // reset + fetch differito al frame successivo, così clearFields() ha
-    // già svuotato i controller prima che il meteo sovrascriva.
+    // imposta il flag monouso e schedula il fetch al frame successivo,
+    // così clearFields() ha già svuotato tutti i controller.
     if (oldWidget.isEditing && !widget.isEditing) {
+      _needsAutoFetchAfterSave = true;
       _autoFetchDone = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _autoFetchIfNeeded();
+        if (!mounted) return;
+        if (_needsAutoFetchAfterSave) {
+          _needsAutoFetchAfterSave = false;
+          _fetchWeather(silent: true, isAutoFetch: true);
+        }
       });
-      return; // non chiamare _autoFetchIfNeeded() nello stesso frame
+      return;
     }
     _autoFetchIfNeeded();
   }
 
   void _autoFetchIfNeeded() {
     if (!mounted) return;
-    // Non sovrascrivere i campi quando l'utente sta modificando un record.
     if (widget.isEditing) return;
     final currentCity = AppStorage.getCityOverride();
     if (_autoFetchDone && currentCity != _lastAutoFetchCity) {
