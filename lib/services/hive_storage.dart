@@ -53,6 +53,8 @@ class AppStorage {
   static String _stagingKey(DailyRecordDTO r) =>
       '$_stagingPrefix${_recordKey(r)}';
 
+  static bool _isStaging(String key) => key.startsWith(_stagingPrefix);
+
   static DailyRecordDTO _cloneRecord(DailyRecordDTO r) => DailyRecordDTO(
         dateIso: r.dateIso,
         externalTemp: r.externalTemp,
@@ -103,8 +105,6 @@ class AppStorage {
       await Hive.deleteBoxFromDisk(_recordsBoxName);
       await Hive.openBox(_boxName);
       await Hive.openBox<DailyRecordDTO>(_recordsBoxName);
-      // Dopo recovery il box è vuoto: le migrazioni non trovano
-      // dati legacy, ma registrano comunque la versione corrente.
       await HiveMigrationRunner.run();
       debugPrint('[AppStorage] Recupero completato: box reinizializzati.');
     } catch (e) {
@@ -112,23 +112,20 @@ class AppStorage {
     }
   }
 
-  // _migrateCostPerKwh e _migrateRooms rimossi:
-  // la loro logica vive ora in HiveMigrationRunner v1 e v2.
-
   static Future<void> _recoverStagingIfNeeded() async {
     try {
       final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
 
       final stagingKeys = box.keys
           .whereType<String>()
-          .where((k) => k.startsWith(_stagingPrefix))
+          .where(_isStaging)
           .toList();
 
       if (stagingKeys.isEmpty) return;
 
       final definitiveKeys = box.keys
           .whereType<String>()
-          .where((k) => !k.startsWith(_stagingPrefix))
+          .where((k) => !_isStaging(k))
           .toSet();
 
       for (final sk in stagingKeys) {
@@ -515,26 +512,44 @@ class AppStorage {
     }
   }
 
+  /// Salva la lista completa dei record in modo atomico.
+  ///
+  /// Flusso sicuro (i definitivi non vengono mai cancellati
+  /// prima che i nuovi siano al loro posto):
+  ///   1. Scrivi staging   — i definitivi esistono ancora intatti
+  ///   2. Promuovi staging → definitivi (overwrite)
+  ///   3. Cancella i vecchi definitivi non più presenti nella nuova lista
+  ///   4. Cancella staging
+  ///
+  /// Un crash in qualsiasi punto è recuperabile da [_recoverStagingIfNeeded].
   static Future<void> saveRecords(List<DailyRecordDTO> records) async {
     try {
       final box = Hive.box<DailyRecordDTO>(_recordsBoxName);
 
+      // STEP 1 — Scrivi staging (i definitivi esistono ancora intatti)
       final Map<String, DailyRecordDTO> staging = {
         for (final r in records) _stagingKey(r): _cloneRecord(r),
       };
       await box.putAll(staging);
 
-      final definitiveKeys = box.keys
-          .whereType<String>()
-          .where((k) => !k.startsWith(_stagingPrefix))
-          .toList();
-      await box.deleteAll(definitiveKeys);
-
+      // STEP 2 — Promuovi staging → definitivi
+      // A questo punto i dati esistono sia come staging che come definitivi:
+      // un crash qui è innocuo perché _recoverStagingIfNeeded() li recupera.
       final Map<String, DailyRecordDTO> promoted = {
         for (final r in records) _recordKey(r): _cloneRecord(r),
       };
       await box.putAll(promoted);
 
+      // STEP 3 — Rimuovi i vecchi definitivi non presenti nella nuova lista
+      // (es. record eliminati dall'utente)
+      final newDefinitiveKeys = promoted.keys.toSet();
+      final oldToDelete = box.keys
+          .whereType<String>()
+          .where((k) => !_isStaging(k) && !newDefinitiveKeys.contains(k))
+          .toList();
+      if (oldToDelete.isNotEmpty) await box.deleteAll(oldToDelete);
+
+      // STEP 4 — Cancella staging (operazione finale, non critica)
       await box.deleteAll(staging.keys.toList());
     } on HiveError catch (e) {
       debugPrint('[AppStorage] saveRecords HiveError: $e');
@@ -550,7 +565,7 @@ class AppStorage {
       return Hive.box<DailyRecordDTO>(_recordsBoxName)
           .toMap()
           .entries
-          .where((e) => !(e.key as String).startsWith(_stagingPrefix))
+          .where((e) => !_isStaging(e.key as String))
           .map((e) => e.value)
           .toList();
     } catch (e) {
