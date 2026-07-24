@@ -4,9 +4,12 @@
 // Accessibile dalle impostazioni dell'app.
 //
 // Flusso:
-//   1. Utente inserisce email + password Shine Phone
+//   1. Utente inserisce username (o email) + password Shine Phone
 //   2. Tap "Connetti" → login() → se OK salva con GrowattCredentialsService
 //   3. Da quel momento GrowattService può fare fetchToday() automaticamente
+//
+// fix: il campo username accetta sia email (mario@example.com)
+//      che username puro (es. "mariobianchi") — Growatt supporta entrambi.
 
 import 'package:flutter/material.dart';
 import '../../../services/growatt_credentials_service.dart';
@@ -124,7 +127,7 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
   String _errorMessage(GrowattError e) {
     switch (e.kind) {
       case GrowattErrorKind.authFailed:
-        return 'Credenziali errate. Verifica email e password Shine Phone.';
+        return 'Credenziali errate. Verifica username/email e password Shine Phone.';
       case GrowattErrorKind.networkError:
         return 'Nessuna connessione. Controlla la rete e riprova.';
       case GrowattErrorKind.sessionExpired:
@@ -164,7 +167,7 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Le credenziali vengono salvate in modo cifrato nel keystore del dispositivo e non vengono mai trasmesse a terzi.',
+              'Inserisci le stesse credenziali che usi per accedere al sito Growatt o all\'app Shine Phone. Puoi usare sia la email che lo username. Le credenziali vengono salvate in modo cifrato nel keystore del dispositivo.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurface.withOpacity(0.6),
               ),
@@ -175,18 +178,22 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
               key: _formKey,
               child: Column(
                 children: [
+                  // USERNAME — accetta sia email che username puro
                   TextFormField(
                     controller: _usernameCtrl,
-                    keyboardType: TextInputType.emailAddress,
+                    keyboardType: TextInputType.text,
+                    autocorrect: false,
                     decoration: const InputDecoration(
-                      labelText: 'Email Shine Phone',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      labelText: 'Username o Email Shine Phone',
+                      prefixIcon: Icon(Icons.person_outline),
                       border: OutlineInputBorder(),
+                      hintText: 'es. mario.bianchi oppure mario@example.com',
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty) return 'Inserisci la email';
-                      if (!v.contains('@')) return 'Email non valida';
-                      return null;
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Inserisci lo username o la email';
+                      }
+                      return null; // accetta qualsiasi stringa non vuota
                     },
                   ),
                   const SizedBox(height: 16),
