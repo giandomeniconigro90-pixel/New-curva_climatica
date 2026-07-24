@@ -174,22 +174,21 @@ CurveStats computeCurveStats(List<DailyRecordDTO> records) {
 
 /// Calcola la curva ottimale suggerita dall'AI.
 ///
-/// FIX #3 — Il parametro opzionale [lastAppliedDate] è stato RIMOSSO.
+/// FIX #2 — Le correzioni su slope e offset vengono ora pesate per T_ext.
 ///
-/// Motivazione: [HomeNotifier] passa già una lista pre-filtrata tramite
-/// [recordsSinceLastApply], che esclude i record precedenti all'ultimo
-/// apply AI. Mantenere qui un secondo filtro sullo stesso criterio era
-/// ridondante e pericoloso: se per errore si passava sia la lista
-/// filtrata sia lastAppliedDate, i record venivano filtrati due volte
-/// e la finestra risultava vuota o troppo corta, bloccando l'AI in
-/// modalità "apprendimento" anche con dati sufficienti.
+/// Logica di peso:
+///   - Si calcola avgTExt sull'intera finestra di records.
+///   - Per ogni giorno con lamentela (freddo/caldo) si accumula il delta
+///     (tExt - avgTExt):
+///       • delta grande in valore assoluto → il problema è ai picchi di T_ext
+///         → correzione prevalente su slope
+///       • delta vicino a zero → il problema è uniforme su tutto il range
+///         → correzione prevalente su offset
+///   - La soglia di discriminazione è 3 °C di delta medio pesato.
 ///
-/// Contratto attuale:
-///   - [records] deve essere già filtrato per modalità (heating/cooling)
-///     e per finestra temporale (dopo l'ultimo apply AI).
+/// Contratto:
+///   - [records] deve essere già filtrato per modalità e finestra temporale.
 ///   - Questa funzione NON applica nessun filtro temporale interno.
-///   - Il messaggio di apprendimento usa sempre il ramo senza data,
-///     più chiaro per l'utente.
 CurveSuggestion computeOptimalCurveSuggestion(
     List<DailyRecordDTO> records,
     double currentSlope,
@@ -209,18 +208,34 @@ CurveSuggestion computeOptimalCurveSuggestion(
     );
   }
 
-  // FASE 2: ANALISI
+  // FASE 2: ANALISI con peso T_ext
+  //
+  // avgTExt: media delle temperature esterne nel dataset
+  final double avgTExt =
+      records.map((r) => r.externalTemp).reduce((a, b) => a + b) / records.length;
+
   int coldComplaints = 0;
   int hotComplaints = 0;
   int okDays = 0;
 
+  // Somma dei delta (tExt - avgTExt) per i giorni con lamentela:
+  //   coldWeightedDelta > 0  → le lamentele freddo arrivano quando fuori fa CALDO
+  //                            (impianto sottodimensionato ai picchi caldi in riscaldamento)
+  //   coldWeightedDelta < 0  → le lamentele freddo arrivano quando fuori fa FREDDO
+  //                            (slope troppo bassa, impianto non scala abbastanza)
+  double coldWeightedDelta = 0;
+  double hotWeightedDelta = 0;
+
   for (var r in records) {
     final bool dayCold = r.comfortRatings.values.contains('freddo');
     final bool dayHot = r.comfortRatings.values.contains('caldo');
+    final double delta = r.externalTemp - avgTExt;
     if (dayCold) {
       coldComplaints++;
+      coldWeightedDelta += delta;
     } else if (dayHot) {
       hotComplaints++;
+      hotWeightedDelta += delta;
     } else {
       okDays++;
     }
@@ -231,18 +246,42 @@ CurveSuggestion computeOptimalCurveSuggestion(
   double targetOffset = currentOffset;
   String tip;
 
+  // Soglia: se il delta medio pesato supera ±3 °C, la correzione principale
+  // è sullo slope (problema ai picchi); altrimenti sull'offset (problema uniforme).
+  const double deltaSlopeThreshold = 3.0;
+
   if (coldComplaints > hotComplaints) {
-    targetOffset += 1.0;
-    if (coldComplaints > records.length * 0.3) targetSlope += 0.1;
-    tip = mode == SystemMode.heating
-        ? 'Rilevati giorni freddi. Aumento la potenza di riscaldamento.'
-        : 'Raffrescamento eccessivo. Riduco l\'intensità di raffreddamento.';
+    final double avgColdDelta =
+        coldComplaints > 0 ? coldWeightedDelta / coldComplaints : 0.0;
+    // In heating: lamentele freddo con T_ext bassa (avgColdDelta < 0) → slope bassa
+    // In cooling: lamentele freddo (raffrescamento eccessivo) con T_ext alta → slope alta
+    if (avgColdDelta.abs() >= deltaSlopeThreshold) {
+      // Problema ai picchi → correggi principalmente slope
+      targetSlope += mode == SystemMode.heating ? 0.1 : -0.1;
+      tip = mode == SystemMode.heating
+          ? 'Freddo principalmente nelle giornate più rigide. Aumento la pendenza della curva.'
+          : 'Raffrescamento eccessivo nelle giornate più calde. Riduco la pendenza.';
+    } else {
+      // Problema uniforme → correggi principalmente offset
+      targetOffset += mode == SystemMode.heating ? 1.0 : -1.0;
+      tip = mode == SystemMode.heating
+          ? 'Freddo distribuito su tutto il periodo. Aumento la temperatura base.'
+          : 'Raffrescamento eccessivo su tutto il periodo. Riduco la temperatura base.';
+    }
   } else if (hotComplaints > coldComplaints) {
-    targetOffset -= 1.0;
-    if (hotComplaints > records.length * 0.3) targetSlope -= 0.1;
-    tip = mode == SystemMode.heating
-        ? 'Rilevato eccesso di calore. Riduco la potenza per risparmiare.'
-        : 'Raffrescamento insufficiente. Aumento la potenza di raffreddamento.';
+    final double avgHotDelta =
+        hotComplaints > 0 ? hotWeightedDelta / hotComplaints : 0.0;
+    if (avgHotDelta.abs() >= deltaSlopeThreshold) {
+      targetSlope += mode == SystemMode.heating ? -0.1 : 0.1;
+      tip = mode == SystemMode.heating
+          ? 'Eccesso di calore nelle giornate più miti. Riduco la pendenza della curva.'
+          : 'Raffrescamento insufficiente nelle giornate più calde. Aumento la pendenza.';
+    } else {
+      targetOffset += mode == SystemMode.heating ? -1.0 : 1.0;
+      tip = mode == SystemMode.heating
+          ? 'Eccesso di calore distribuito. Riduco la temperatura base.'
+          : 'Raffrescamento insufficiente su tutto il periodo. Aumento la temperatura base.';
+    }
   } else {
     if (mode == SystemMode.heating) {
       targetOffset -= 0.5;
@@ -332,29 +371,10 @@ List<FlSpot> buildCurveSpots({
 // ---------------------------------------------------------------------------
 
 /// Coppia di punti da impostare sulla Sherpa Monobloc S2 E.
-///
-/// Riscaldamento:
-///   [coldExtTemp]  = temperatura esterna punto freddo (default -5 °C)
-///   [coldMandata]  = mandata corrispondente  [clamp 35–60 °C]
-///   [mildExtTemp]  = temperatura esterna punto mite  (default +15 °C)
-///   [mildMandata]  = mandata corrispondente  [clamp 35–60 °C]
-///
-/// Raffrescamento:
-///   [coldExtTemp]  = temperatura esterna punto "freddo esterno" (default 20 °C)
-///   [coldMandata]  = mandata corrispondente  [clamp 7–25 °C]
-///   [mildExtTemp]  = temperatura esterna punto "caldo esterno"  (default 40 °C)
-///   [mildMandata]  = mandata corrispondente  [clamp 7–25 °C]
 class SherpaSetpoints {
-  /// Temperatura esterna del punto freddo (°C)
   final double coldExtTemp;
-
-  /// Temperatura di mandata al punto freddo (°C)
   final double coldMandata;
-
-  /// Temperatura esterna del punto mite (°C)
   final double mildExtTemp;
-
-  /// Temperatura di mandata al punto mite (°C)
   final double mildMandata;
 
   const SherpaSetpoints({
@@ -371,15 +391,6 @@ class SherpaSetpoints {
       'T_ext_mite: $mildExtTemp °C → mandata: $mildMandata °C)';
 }
 
-/// Converte [slope] e [offset] dell'app nei due setpoint da inserire
-/// nell'interfaccia della Sherpa Monobloc S2 E.
-///
-/// Parametri opzionali:
-///   [coldExtTemp] — T esterna del punto freddo  (riscaldamento: -5 °C, raffrescamento: 20 °C)
-///   [mildExtTemp] — T esterna del punto mite    (riscaldamento: +15 °C, raffrescamento: 40 °C)
-///
-/// I valori di mandata vengono arrotondati a 0.5 °C (passo minimo
-/// dell'HMI Sherpa) e clampati ai limiti fisici dell'impianto.
 SherpaSetpoints computeSherpaSetpoints({
   required double slope,
   required double offset,
@@ -393,7 +404,6 @@ SherpaSetpoints computeSherpaSetpoints({
   double mandataCold = computeMandata(tCold, slope, offset, mode);
   double mandataMild = computeMandata(tMild, slope, offset, mode);
 
-  // Arrotonda a 0.5 °C — passo minimo impostabile sull'HMI Sherpa
   mandataCold = (mandataCold * 2).round() / 2.0;
   mandataMild = (mandataMild * 2).round() / 2.0;
 
