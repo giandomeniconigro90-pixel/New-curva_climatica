@@ -7,6 +7,7 @@
 //   • Firma pubblica invariata: nessun consumer cambia
 //   + vmcModeNotifier aggiunto per tile VMC
 // + cancelEdit(): esce dalla modifica senza salvare
+// fix: clearFields() prima di notifyListeners() nel ramo editing di addRecord
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -242,7 +243,6 @@ class HomeNotifier extends ChangeNotifier {
   }
 
   /// Esce dalla modalità modifica senza salvare nulla.
-  /// I controller vengono svuotati e il meteo ripartirà automaticamente.
   void cancelEdit() {
     if (editingIndex == null) return;
     clearFields();
@@ -355,8 +355,10 @@ class HomeNotifier extends ChangeNotifier {
         pvProduction: pvProduction,
         vmcMode: vmcModeNotifier.value,
       );
-      editingIndex = null;
-      notifyListeners();
+      // IMPORTANTE: clearFields() PRIMA di notifyListeners() così quando
+      // didUpdateWidget scatta (isEditing: true→false) i controller sono
+      // già vuoti e il re-fetch meteo trova la tile Esterna a '--'.
+      clearFields();
       final label = isToday ? 'oggi' : originalDate;
       if (context.mounted) {
         AppToast.show('Registrazione del $label aggiornata!',
@@ -398,7 +400,6 @@ class HomeNotifier extends ChangeNotifier {
     }
 
     await saveToHive();
-    clearFields();
     if (context.mounted) FocusScope.of(context).unfocus();
 
     await _aiService.maybeShowNotification(
