@@ -6,6 +6,7 @@
 //   • Mantiene: stato UI, CRUD records, controllers, rooms
 //   • Firma pubblica invariata: nessun consumer cambia
 //   + vmcModeNotifier aggiunto per tile VMC
+// + cancelEdit(): esce dalla modifica senza salvare
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -240,6 +241,13 @@ class HomeNotifier extends ChangeNotifier {
     );
   }
 
+  /// Esce dalla modalità modifica senza salvare nulla.
+  /// I controller vengono svuotati e il meteo ripartirà automaticamente.
+  void cancelEdit() {
+    if (editingIndex == null) return;
+    clearFields();
+  }
+
   void clearFields({bool preFillFromLast = false}) {
     editingIndex = null;
     externalTempController.clear();
@@ -438,7 +446,6 @@ class HomeNotifier extends ChangeNotifier {
             return dB.compareTo(dA);
           }))
         .first;
-    // fix: copia anche il consumo principale (era mancante)
     consumptionController.text = last.consumption.toString();
     last.internalTemps.forEach((room, val) {
       if (internalTempControllers.containsKey(room)) {

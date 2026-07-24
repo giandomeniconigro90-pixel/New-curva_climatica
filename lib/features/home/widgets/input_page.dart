@@ -6,7 +6,8 @@
 //   • Aggiornato _fetchWeather() per gestire WeatherResult sealed
 // + Tile VMC (IRSAP IRSAIR H 220 S) con dropdown velocità
 // fix: auto-fetch meteo bloccato se isEditing == true
-// fix: auto-fetch garantito dopo AGGIORNA via _needsAutoFetchAfterSave
+// fix: auto-fetch garantito dopo AGGIORNA/ANNULLA via _needsAutoFetchAfterSave
+// feat: FAB ANNULLA visibile in modalità modifica
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -32,6 +33,7 @@ class InputPage extends StatefulWidget {
   final List<DailyRecordDTO> records;
   final List<String> rooms;
   final VoidCallback onAddRecord;
+  final VoidCallback onCancelEdit;
   final bool isEditing;
   final bool isCooling;
   final VoidCallback onDuplicateFromYesterday;
@@ -55,6 +57,7 @@ class InputPage extends StatefulWidget {
     required this.records,
     required this.rooms,
     required this.onAddRecord,
+    required this.onCancelEdit,
     required this.isEditing,
     required this.isCooling,
     required this.onDuplicateFromYesterday,
@@ -76,7 +79,8 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
 
   /// Flag monouso: quando true, il prossimo postFrameCallback esegue
   /// _fetchWeather incondizionatamente (bypassando _autoFetchDone).
-  /// Viene impostato a true quando si esce dalla modalità modifica.
+  /// Viene impostato a true quando si esce dalla modalità modifica
+  /// (sia con AGGIORNA che con ANNULLA).
   bool _needsAutoFetchAfterSave = false;
 
   static const Color _colorEsterna      = Color(0xFF1976D2);
@@ -140,7 +144,7 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Uscita dalla modalità modifica (es. dopo AGGIORNA):
+    // Uscita dalla modalità modifica (AGGIORNA o ANNULLA):
     // imposta il flag monouso e schedula il fetch al frame successivo,
     // così clearFields() ha già svuotato tutti i controller.
     if (oldWidget.isEditing && !widget.isEditing) {
@@ -352,25 +356,52 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
     final bool isPhone = screenWidth < 600;
 
     return Scaffold(
-      floatingActionButton: Tooltip(
-        message: _hasErrors ? 'Correggi i valori evidenziati in rosso' : '',
-        child: FloatingActionButton.extended(
-          onPressed: _hasErrors ? null : widget.onAddRecord,
-          backgroundColor:
-              _hasErrors ? cs.surfaceContainerHighest : cs.primary,
-          disabledElevation: 0,
-          icon: Icon(
-            widget.isEditing ? Icons.save_as : Icons.check,
-            color: _hasErrors ? cs.onSurfaceVariant : cs.onPrimary,
-          ),
-          label: Text(
-            widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: _hasErrors ? cs.onSurfaceVariant : cs.onPrimary,
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // FAB ANNULLA — visibile solo in modalità modifica
+          if (widget.isEditing) ...
+            [
+              FloatingActionButton.extended(
+                heroTag: 'fab_cancel',
+                onPressed: widget.onCancelEdit,
+                backgroundColor: cs.errorContainer,
+                elevation: 2,
+                icon: Icon(Icons.close, color: cs.onErrorContainer),
+                label: Text(
+                  'ANNULLA',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: cs.onErrorContainer,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+          // FAB principale SALVA / AGGIORNA
+          Tooltip(
+            message: _hasErrors ? 'Correggi i valori evidenziati in rosso' : '',
+            child: FloatingActionButton.extended(
+              heroTag: 'fab_save',
+              onPressed: _hasErrors ? null : widget.onAddRecord,
+              backgroundColor:
+                  _hasErrors ? cs.surfaceContainerHighest : cs.primary,
+              disabledElevation: 0,
+              icon: Icon(
+                widget.isEditing ? Icons.save_as : Icons.check,
+                color: _hasErrors ? cs.onSurfaceVariant : cs.onPrimary,
+              ),
+              label: Text(
+                widget.isEditing ? 'AGGIORNA' : 'SALVA TUTTO',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: _hasErrors ? cs.onSurfaceVariant : cs.onPrimary,
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
       body: CustomScrollView(
         slivers: [

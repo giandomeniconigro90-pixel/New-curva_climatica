@@ -8,6 +8,7 @@
 //   • _HomePageView            — PageView + costruzione lista pagine
 //
 // Firma pubblica invariata.
+// + onCancelEdit passato a InputPage
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -174,6 +175,7 @@ class _HomePageView extends StatelessWidget {
         records: notifier.records,
         rooms: notifier.rooms,
         onAddRecord: () => notifier.addRecord(context),
+        onCancelEdit: notifier.cancelEdit,
         isEditing: notifier.editingIndex != null,
         isCooling: isCooling,
         onDuplicateFromYesterday: () =>
@@ -220,10 +222,6 @@ class _HomePageView extends StatelessWidget {
       children: pages,
     );
   }
-
-  // --------------------------------------------------------------------------
-  // Dialog reset calibrazione — estratto dal builder inline
-  // --------------------------------------------------------------------------
 
   Future<void> _confirmReset(BuildContext context) async {
     final confirm = await showDialog<bool>(
