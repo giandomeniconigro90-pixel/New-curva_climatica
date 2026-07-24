@@ -168,6 +168,7 @@ class _HomePageView extends StatelessWidget {
         noteController: notifier.noteController,
         heatpumpModeNotifier: notifier.heatpumpModeNotifier,
         boilerModeNotifier: notifier.boilerModeNotifier,
+        vmcModeNotifier: notifier.vmcModeNotifier,
         internalTempControllers: notifier.internalTempControllers,
         comfortRatings: notifier.comfortRatings,
         records: notifier.records,
