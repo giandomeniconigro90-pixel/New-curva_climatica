@@ -8,6 +8,7 @@
 // fix: auto-fetch meteo bloccato se isEditing == true
 // fix: auto-fetch garantito dopo AGGIORNA/ANNULLA via _needsAutoFetchAfterSave
 // feat: FAB ANNULLA visibile in modalità modifica
+// fix: tile Esterna mostra '--' durante re-fetch dopo AGGIORNA/ANNULLA
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
@@ -145,15 +146,27 @@ class _InputPageState extends State<InputPage> with WidgetsBindingObserver {
   void didUpdateWidget(covariant InputPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Uscita dalla modalità modifica (AGGIORNA o ANNULLA):
-    // imposta il flag monouso e schedula il fetch al frame successivo,
-    // così clearFields() ha già svuotato tutti i controller.
+    // 1. Azzera subito la tile Esterna (mostra '--') così l'utente vede
+    //    che il reset è avvenuto, anche se il meteo restituisce lo stesso valore.
+    // 2. Schedula il fetch al frame successivo, dopo clearFields().
     if (oldWidget.isEditing && !widget.isEditing) {
       _needsAutoFetchAfterSave = true;
       _autoFetchDone = false;
+      // Azzeramento visivo immediato — il controller è già stato svuotato
+      // da clearFields() nel notifier, ma forziamo anche _weatherLocation
+      // per resettare il subtitle della tile.
+      setState(() {
+        _weatherLocation = null;
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_needsAutoFetchAfterSave) {
           _needsAutoFetchAfterSave = false;
+          // Assicura che externalTempController sia vuoto prima del fetch,
+          // così la tile mostra '--' anche se la cache restituisce lo stesso valore.
+          if (widget.externalTempController.text.isNotEmpty) {
+            widget.externalTempController.clear();
+          }
           _fetchWeather(silent: true, isAutoFetch: true);
         }
       });
