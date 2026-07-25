@@ -2,7 +2,7 @@
 //
 // Flusso autenticazione Growatt (server.growatt.com):
 //
-//  STEP 1 — POST https://server.growatt.com/newLoginAPI.do
+//  STEP 1 — POST https://server.growatt.com/newTwoLoginAPI.do
 //            body form: userName=<user>&password=<growattMd5(pass)>
 //            Growatt MD5: md5 normale ma ogni byte hex che inizia con '0' → 'c'
 //            Risposta: { "result": 1, "back": { "user": { "id": ... } } }
@@ -20,8 +20,8 @@
 //            body form: sn=MVP1EZ5054&date=2026-07-25
 //            Risposta: { "result": 1, "obj": { "eacToday": "12.5", "pac": "1230", ... } }
 //
-// Riferimento: https://github.com/Sjord/growatt_api_client
-// MD5 Growatt: ogni coppia hex che inizia con '0' viene sostituita da 'c' + cifra
+// Riferimento: https://github.com/indykoning/PyPi_GrowattServer
+// MD5 Growatt: ogni coppia hex che inizia con '0' viene sostituita da 'c'
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -119,7 +119,6 @@ class GrowattService {
 
   /// Growatt MD5: MD5 normale, ma ogni byte hex che inizia con '0' → 'c'
   /// Es: "0a" → "ca", "0f" → "cf", "1a" → "1a" (invariato)
-  /// Riferimento: https://github.com/Sjord/growatt_api_client
   String _growattMd5(String input) {
     final hash = md5.convert(utf8.encode(input)).toString();
     final buf = StringBuffer();
@@ -138,16 +137,16 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // STEP 1 — Login
-  // POST /newLoginAPI.do  body: userName=<user>&password=<growattMd5>
+  // POST /newTwoLoginAPI.do  body: userName=<user>&password=<growattMd5>
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _login() async {
     try {
       final hashedPass = _growattMd5(password);
-      debugPrint('[Growatt] POST /newLoginAPI.do (user=$username)');
+      debugPrint('[Growatt] POST /newTwoLoginAPI.do (user=$username)');
 
       final response = await _client.post(
-        Uri.parse('$_baseUrl/newLoginAPI.do'),
+        Uri.parse('$_baseUrl/newTwoLoginAPI.do'),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
@@ -158,8 +157,8 @@ class GrowattService {
         },
       ).timeout(const Duration(seconds: 15));
 
-      debugPrint('[Growatt] POST /newLoginAPI.do status=${response.statusCode}');
-      debugPrint('[Growatt] POST /newLoginAPI.do body=${_preview(response.body)}');
+      debugPrint('[Growatt] POST /newTwoLoginAPI.do status=${response.statusCode}');
+      debugPrint('[Growatt] POST /newTwoLoginAPI.do body=${_preview(response.body)}');
 
       if (response.statusCode != 200) {
         return GrowattError(GrowattErrorKind.authFailed,
@@ -175,12 +174,11 @@ class GrowattService {
       }
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
-      // newLoginAPI.do: { "result": 1, "back": { "success": true, ... } }
-      final topResult = json['result'] as int?;
       final back = json['back'] as Map<String, dynamic>?;
+      final topResult = json['result'] as int?;
       final success = back?['success'] as bool?;
-
       final ok = (topResult == 1) || (success == true);
+
       if (!ok) {
         _sessionCookie = null;
         final msg = back?['msg'] ?? json['msg'] ?? 'credenziali non valide';
