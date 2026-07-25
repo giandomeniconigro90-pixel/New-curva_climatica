@@ -3,8 +3,8 @@
 // ChangeNotifier che gestisce il polling periodico dei dati Growatt.
 //
 // Ciclo di vita:
-//   1. All'avvio legge le credenziali da GrowattCredentialsService.
-//   2. Se esistono, fa il login e avvia il timer (ogni 10 minuti).
+//   1. All'avvio legge il token API da GrowattCredentialsService.
+//   2. Se esiste, fa subito un fetchToday() e avvia il timer (ogni 10 minuti).
 //   3. Ad ogni tick aggiorna [data] e notifica i listener.
 //   4. dispose() cancella il timer e chiude il client HTTP.
 //
@@ -39,27 +39,16 @@ class GrowattNotifier extends ChangeNotifier {
   // -------------------------------------------------------------------------
 
   Future<void> init() async {
-    final creds = await GrowattCredentialsService.load();
-    if (creds == null) {
+    final token = await GrowattCredentialsService.load();
+    if (token == null || token.isEmpty) {
       state = GrowattPollingState.notConfigured;
       notifyListeners();
       return;
     }
 
-    _service = GrowattService();
-    final loginResult = await _service!.login(
-      username: creds.username,
-      password: creds.password,
-    );
+    _service = GrowattService(apiToken: token);
 
-    if (loginResult is GrowattError) {
-      state = GrowattPollingState.error;
-      errorMessage = _describe(loginResult);
-      notifyListeners();
-      return;
-    }
-
-    // Login OK: fetch immediato poi avvia timer
+    // Fetch immediato poi avvia timer
     await _fetch();
     _timer = Timer.periodic(pollInterval, (_) => _fetch());
   }
@@ -80,25 +69,14 @@ class GrowattNotifier extends ChangeNotifier {
       state = GrowattPollingState.ok;
       errorMessage = null;
     } else if (result is GrowattError) {
-      // Se sessione scaduta prova a ri-loggarsi una volta
-      if (result.kind == GrowattErrorKind.sessionExpired) {
-        final creds = await GrowattCredentialsService.load();
-        if (creds != null) {
-          final relogin = await _service!.login(
-            username: creds.username,
-            password: creds.password,
-          );
-          if (relogin is GrowattOk) {
-            final retry = await _service!.fetchToday();
-            if (retry is GrowattOk) {
-              data = retry.data;
-              state = GrowattPollingState.ok;
-              errorMessage = null;
-              notifyListeners();
-              return;
-            }
-          }
-        }
+      // Se token non valido, segnala subito senza retry
+      if (result.kind == GrowattErrorKind.authFailed) {
+        _timer?.cancel();
+        _timer = null;
+        state = GrowattPollingState.error;
+        errorMessage = _describe(result);
+        notifyListeners();
+        return;
       }
       state = GrowattPollingState.error;
       errorMessage = _describe(result);
@@ -111,7 +89,7 @@ class GrowattNotifier extends ChangeNotifier {
   Future<void> refresh() => _fetch();
 
   // -------------------------------------------------------------------------
-  // Riconfigura dopo aver salvato nuove credenziali
+  // Riconfigura dopo aver salvato un nuovo token
   // -------------------------------------------------------------------------
 
   Future<void> reconfigure() async {
@@ -132,13 +110,13 @@ class GrowattNotifier extends ChangeNotifier {
   String _describe(GrowattError e) {
     switch (e.kind) {
       case GrowattErrorKind.authFailed:
-        return 'Credenziali errate. Riconfigura in Impostazioni > Fotovoltaico.';
+        return 'Token non valido. Riconfigura in Impostazioni > Fotovoltaico.';
       case GrowattErrorKind.networkError:
         return 'Nessuna connessione. Riprovo al prossimo aggiornamento.';
       case GrowattErrorKind.sessionExpired:
-        return 'Sessione Growatt scaduta.';
+        return 'Token scaduto. Rigenera il token su server.growatt.com.';
       case GrowattErrorKind.plantNotFound:
-        return 'Impianto non trovato.';
+        return 'Nessun impianto trovato per questo token.';
       default:
         return e.message;
     }
