@@ -1,18 +1,12 @@
 // lib/services/growatt_service.dart
 //
-// Fix 302: il redirect era causato dall'endpoint sbagliato.
-// Per impianti type=0 (inverter standard) l'endpoint corretto è:
-//   POST /newTwoPlantAPI/getPlantCurrentInfo
-// con body: plantId=<id>&type=<type>
-//
-// Usiamo anche un IOClient con followRedirects=false per evitare
-// che Dart segua silenziosamente i redirect perdendo i cookie.
+// Fix build Android: HttpClient.followRedirects non esiste su dart:_http mobile.
+// Invece di IOClient, usiamo http.Client() standard e gestiamo il 302
+// manualmente nel codice (non seguiamo il redirect, restituiamo errore leggibile).
 
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
 
 // ---------------------------------------------------------------------------
 // Data model
@@ -80,8 +74,6 @@ enum GrowattErrorKind {
 class GrowattService {
   static const String _baseUrl = 'https://server.growatt.com';
   static const int defaultPlantId = 11037032;
-
-  /// Tipo impianto letto dal cookie onePlantType (0 = inverter standard)
   static const int defaultPlantType = 0;
 
   final int plantId;
@@ -93,16 +85,7 @@ class GrowattService {
     this.plantId = defaultPlantId,
     this.plantType = defaultPlantType,
     http.Client? client,
-  }) : _client = client ?? _buildNoRedirectClient();
-
-  /// Client che NON segue i redirect automaticamente.
-  /// Questo evita che il 302 di Growatt venga seguito perdendo i cookie.
-  static http.Client _buildNoRedirectClient() {
-    final httpClient = HttpClient()
-      ..followRedirects = false
-      ..maxConnectionsPerHost = 4;
-    return IOClient(httpClient);
-  }
+  }) : _client = client ?? http.Client();
 
   bool get isLoggedIn => _sessionCookie != null;
 
@@ -152,37 +135,21 @@ class GrowattService {
       ).timeout(const Duration(seconds: 15));
 
       debugPrint('[GrowattService] login status=${response.statusCode}');
-      debugPrint('[GrowattService] login headers=${response.headers}');
 
-      // Con followRedirects=false il login potrebbe rispondere 302 verso /index
-      // Il body JSON è comunque nel body della risposta 302 oppure nel 200.
-      if (response.statusCode != 200 && response.statusCode != 302) {
+      if (response.statusCode != 200) {
         return GrowattError(
           GrowattErrorKind.serverError,
           'Login HTTP ${response.statusCode}',
         );
       }
 
-      // Tenta il parse del body solo se non è vuoto
-      if (response.body.isNotEmpty) {
-        try {
-          final body = jsonDecode(response.body) as Map<String, dynamic>;
-          final result = body['result'] as int? ?? -1;
-          if (result != 1) {
-            return const GrowattError(
-              GrowattErrorKind.authFailed,
-              'Credenziali non valide.',
-            );
-          }
-        } catch (_) {
-          // body non JSON (es. HTML redirect) — accettiamo se lo status è 302
-          if (response.statusCode != 302) {
-            return const GrowattError(
-              GrowattErrorKind.authFailed,
-              'Risposta login non valida.',
-            );
-          }
-        }
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = body['result'] as int? ?? -1;
+      if (result != 1) {
+        return const GrowattError(
+          GrowattErrorKind.authFailed,
+          'Credenziali non valide.',
+        );
       }
 
       final rawCookie = response.headers['set-cookie'];
@@ -210,12 +177,14 @@ class GrowattService {
   // -------------------------------------------------------------------------
   // FETCH DATI OGGI
   //
-  // Endpoint per impianto type=0 (inverter standard):
-  //   POST /newTwoPlantAPI/getPlantCurrentInfo
-  //   body: plantId=<id>&type=<type>
+  // NOTA: http.Client di Dart segue i redirect automaticamente.
+  // Se il server risponde 302, il client lo segue e la risposta finale
+  // potrebbe essere la pagina di login HTML (status 200 ma body HTML).
+  // Per questo controlliamo se il body inizia con '<' (HTML) prima
+  // di tentare il parse JSON.
   //
-  // Risposta attesa:
-  // { "result": 1, "obj": { "etoday": "12.5", "currentPower": "1.23", ... } }
+  // Endpoint: POST /newTwoPlantAPI/getPlantCurrentInfo
+  // body: plantId=<id>&type=<plantType>
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
@@ -253,18 +222,22 @@ class GrowattService {
     debugPrint('[GrowattService] fetchToday status=$status');
     debugPrint('[GrowattService] fetchToday body=$rawBody');
 
-    if (status == 302) {
-      _sessionCookie = null;
-      return GrowattError(
-        GrowattErrorKind.sessionExpired,
-        '[302] Cookie non accettato. Location: ${response.headers["location"]}',
-      );
-    }
-
     if (status != 200) {
       return GrowattError(
         GrowattErrorKind.serverError,
         '[HTTP $status] $rawBody',
+      );
+    }
+
+    // Se il body e' HTML il client ha seguito un redirect verso la pagina di login
+    final trimmed = response.body.trimLeft();
+    if (trimmed.startsWith('<')) {
+      _sessionCookie = null;
+      return GrowattError(
+        GrowattErrorKind.sessionExpired,
+        'Il server ha reindirizzato al login (risposta HTML).\n'
+        'Probabilmente il cookie non viene accettato.\n'
+        'body preview: ${rawBody.substring(0, rawBody.length.clamp(0, 200))}',
       );
     }
 
@@ -281,10 +254,6 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // PARSER
-  //
-  // Struttura attesa da getPlantCurrentInfo:
-  // { "result": 1, "obj": { "etoday": "12.5", "currentPower": "1.23",
-  //                          "etoGridToday": "3.2", "eUsedToday": "9.3" } }
   // -------------------------------------------------------------------------
 
   GrowattResult _parsePlantData(String body) {
@@ -298,7 +267,6 @@ class GrowattService {
         );
       }
 
-      // getPlantCurrentInfo può annidare in obj.plantData o mettere tutto in obj
       final data = (obj['plantData'] as Map<String, dynamic>?) ?? obj;
 
       double d(dynamic v) {
