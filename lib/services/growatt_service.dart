@@ -3,18 +3,16 @@
 // Flusso OpenAPI Growatt (openapi.growatt.com):
 //
 //  STEP 1 — GET /v1/plant/list
-//            Header: token: <API_TOKEN>
 //            Risposta: { "data": { "plants": [...] }, "error_code": 0 }
 //
 //  STEP 2 — GET /v1/device/list?plant_id={plantId}
-//            Header: token: <API_TOKEN>
-//            Risposta: { "data": { "devices": [...] }, "error_code": 0 }
+//            Risposta: { "data": { "devices": [{"device_sn":"...","type":7,...}] } }
 //
-//  STEP 3 — GET /v1/device/{deviceSn}/energy?date=YYYY-MM-DD
-//            Header: token: <API_TOKEN>
-//            Restituisce i dati energetici del giorno
+//  STEP 3 — POST /v1/device/tlx/tlx_data   (per type=7 MIN/TLX)
+//            body: device_sn, start_date, end_date, timezone_id
+//            Risposta: { "data": { "tlx": [{"eacToday":...,"pac":...}] } }
 //
-// Riferimento: https://github.com/indykoning/PyPi_GrowattServer/blob/master/docs/openapiv1.md
+// Riferimento: https://www.showdoc.com.cn/262556420217021/8559849784929961
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -99,7 +97,7 @@ class GrowattService {
 
   Map<String, String> get _headers => {
         'token': apiToken,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
       };
 
@@ -114,7 +112,6 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // STEP 1 — GET /v1/plant/list
-  // Risposta: { "data": { "plants": [ { "plant_id": 11037032, ... } ] }, "error_code": 0 }
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _fetchPlantId() async {
@@ -141,8 +138,6 @@ class GrowattService {
         return GrowattError(GrowattErrorKind.authFailed, 'error_code=$errorCode msg=${json['error_msg']}');
       }
 
-      // Struttura reale: { "data": { "plants": [...], "count": N } }
-      // Fallback: { "data": [...] }
       List<dynamic>? plantList;
       final dataField = json['data'];
       if (dataField is Map<String, dynamic>) {
@@ -171,7 +166,6 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // STEP 2 — GET /v1/device/list?plant_id={plantId}
-  // Risposta: { "data": { "devices": [ { "device_sn": "...", "type": 7, ... } ] }, "error_code": 0 }
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _fetchDeviceSn() async {
@@ -200,7 +194,6 @@ class GrowattService {
         return GrowattError(GrowattErrorKind.serverError, 'error_code=$errorCode msg=${json['error_msg']}');
       }
 
-      // Supporta sia { "data": { "devices": [...] } } che { "data": [...] }
       List<dynamic>? deviceList;
       final dataField = json['data'];
       if (dataField is Map<String, dynamic>) {
@@ -210,17 +203,22 @@ class GrowattService {
       }
 
       if (deviceList == null || deviceList.isEmpty) {
-        return GrowattError(GrowattErrorKind.plantNotFound, 'Nessun device trovato per plantId=$_plantId. body=$rawBody');
+        return GrowattError(GrowattErrorKind.plantNotFound, 'Nessun device trovato per plantId=$_plantId.');
       }
 
-      final first = deviceList.first as Map<String, dynamic>;
-      _deviceSn = (first['device_sn'] ?? first['deviceSn'] ?? first['sn'])?.toString();
+      // Preferisci il device di tipo 7 (MIN/TLX inverter), fallback al primo
+      final Map<String, dynamic> target = deviceList
+          .cast<Map<String, dynamic>>()
+          .firstWhere((d) => (d['type'] as int? ?? 0) == 7,
+              orElse: () => deviceList!.first as Map<String, dynamic>);
+
+      _deviceSn = (target['device_sn'] ?? target['deviceSn'] ?? target['sn'])?.toString();
 
       if (_deviceSn == null || _deviceSn!.isEmpty) {
-        return GrowattError(GrowattErrorKind.parseError, 'device_sn non trovato. data[0]=$first');
+        return GrowattError(GrowattErrorKind.parseError, 'device_sn non trovato. target=$target');
       }
 
-      debugPrint('[Growatt] deviceSn: $_deviceSn');
+      debugPrint('[Growatt] deviceSn: $_deviceSn (type=${target['type']})');
       return null;
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
@@ -228,7 +226,10 @@ class GrowattService {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 3 — GET /v1/device/{deviceSn}/energy?date=YYYY-MM-DD
+  // STEP 3 — POST /v1/device/tlx/tlx_data  (MIN/TLX inverter, type=7)
+  // body: device_sn, start_date, end_date, timezone_id
+  // Risposta: { "data": { "tlx": [ { "eacToday": 12.5, "pac": 1230, ... } ] }, "error_code": 0 }
+  // L'array tlx è ordinato per ora: l'ultimo elemento è il dato più recente.
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
@@ -247,33 +248,43 @@ class GrowattService {
 
     http.Response response;
     try {
-      final uri = Uri.parse('$_baseUrl/v1/device/$_deviceSn/energy?date=$dateStr');
-      response = await _client
-          .get(uri, headers: _headers)
-          .timeout(const Duration(seconds: 15));
+      response = await _client.post(
+        Uri.parse('$_baseUrl/v1/device/tlx/tlx_data'),
+        headers: _headers,
+        body: {
+          'device_sn': _deviceSn!,
+          'start_date': dateStr,
+          'end_date': dateStr,
+          'timezone_id': 'Europe/Rome',
+        },
+      ).timeout(const Duration(seconds: 15));
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
     }
 
     final rawBody = _preview(response.body);
-    debugPrint('[Growatt] GET /v1/device/$_deviceSn/energy status=${response.statusCode}');
-    debugPrint('[Growatt] GET /v1/device/$_deviceSn/energy body=$rawBody');
+    debugPrint('[Growatt] POST /v1/device/tlx/tlx_data status=${response.statusCode}');
+    debugPrint('[Growatt] POST /v1/device/tlx/tlx_data body=$rawBody');
 
     if (response.statusCode == 401 || response.statusCode == 403) {
       return const GrowattError(GrowattErrorKind.authFailed, 'Token API non valido o scaduto.');
     }
     if (response.statusCode != 200) {
-      return GrowattError(GrowattErrorKind.serverError, '[energy HTTP ${response.statusCode}] $rawBody');
+      return GrowattError(GrowattErrorKind.serverError, '[tlx_data HTTP ${response.statusCode}] $rawBody');
     }
 
-    return _parseEnergyData(response.body);
+    return _parseTlxData(response.body);
   }
 
   // -------------------------------------------------------------------------
-  // PARSER
+  // PARSER — /v1/device/tlx/tlx_data
+  // L'array tlx contiene un record ogni 5 minuti.
+  // Prendiamo l'ultimo elemento (dato più recente del giorno).
+  // Campi: eacToday (kWh prodotti oggi), pac (W istantanei),
+  //        etoGridToday (kWh immessi), etoUserToday (kWh consumati da rete)
   // -------------------------------------------------------------------------
 
-  GrowattResult _parseEnergyData(String body) {
+  GrowattResult _parseTlxData(String body) {
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
       final errorCode = json['error_code'] as int? ?? -1;
@@ -284,19 +295,33 @@ class GrowattService {
         );
       }
 
-      final obj = json['data'] as Map<String, dynamic>?;
-      if (obj == null) {
+      final dataObj = json['data'] as Map<String, dynamic>?;
+      if (dataObj == null) {
         return GrowattError(GrowattErrorKind.parseError, '"data" mancante. body: ${_preview(body, 400)}');
       }
 
-      final pvTodayKwh = _d(obj['etoday']);
-      final pvPowerW   = _d(obj['pac']);
-      final gridExport = _d(obj['etoGridToday'] ?? obj['export_energy']);
-      final usedToday  = _d(obj['eUsedToday'] ?? obj['consume_energy']);
-      final selfCons   = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
-      final gridImport = (usedToday - selfCons).clamp(0.0, double.infinity);
+      final tlxList = dataObj['tlx'] as List<dynamic>?;
+      if (tlxList == null || tlxList.isEmpty) {
+        // Nessun dato disponibile per oggi (es. notte o impianto spento)
+        debugPrint('[Growatt] tlx list vuota — nessun dato per oggi');
+        return GrowattOk(GrowattData(
+          pvTodayKwh: 0,
+          pvPowerW: 0,
+          gridImportTodayKwh: 0,
+          gridExportTodayKwh: 0,
+          fetchedAt: DateTime.now().toUtc(),
+        ));
+      }
 
-      debugPrint('[Growatt] parsed: pv=$pvTodayKwh kWh, power=$pvPowerW W');
+      // Ultimo record = dato più aggiornato del giorno
+      final last = tlxList.last as Map<String, dynamic>;
+
+      final pvTodayKwh = _d(last['eacToday']);
+      final pvPowerW   = _d(last['pac']);
+      final gridExport = _d(last['etoGridToday']);
+      final gridImport = _d(last['etoUserToday']);
+
+      debugPrint('[Growatt] parsed: pv=$pvTodayKwh kWh, power=$pvPowerW W, export=$gridExport kWh, import=$gridImport kWh');
 
       return GrowattOk(GrowattData(
         pvTodayKwh: pvTodayKwh,
