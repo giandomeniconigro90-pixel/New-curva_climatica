@@ -1,10 +1,12 @@
 // lib/services/growatt_service.dart
 //
-// Flusso autenticazione Growatt (server.growatt.com — web API):
+// Flusso autenticazione Growatt (server.growatt.com):
 //
-//  STEP 1 — POST https://server.growatt.com/login
-//            body form: account=<username>&password=<md5(password)>&validateCode=
-//            Risposta: cookie JSESSIONID + { "result": 1, "obj": { "id": ... } }
+//  STEP 1 — POST https://server.growatt.com/newLoginAPI.do
+//            body form: userName=<user>&password=<growattMd5(pass)>
+//            Growatt MD5: md5 normale ma ogni byte hex che inizia con '0' → 'c'
+//            Risposta: { "result": 1, "back": { "user": { "id": ... } } }
+//            Cookie: JSESSIONID=...
 //
 //  STEP 2 — POST https://server.growatt.com/index/getPlantListTitle
 //            Cookie: JSESSIONID=...
@@ -18,7 +20,8 @@
 //            body form: sn=MVP1EZ5054&date=2026-07-25
 //            Risposta: { "result": 1, "obj": { "eacToday": "12.5", "pac": "1230", ... } }
 //
-// Riferimento: https://github.com/indykoning/PyPi_GrowattServer
+// Riferimento: https://github.com/Sjord/growatt_api_client
+// MD5 Growatt: ogni coppia hex che inizia con '0' viene sostituita da 'c' + cifra
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
@@ -114,9 +117,17 @@ class GrowattService {
     return double.tryParse(v.toString()) ?? 0.0;
   }
 
-  /// MD5 della password come richiesto da Growatt
-  String _md5(String input) {
-    return md5.convert(utf8.encode(input)).toString();
+  /// Growatt MD5: MD5 normale, ma ogni byte hex che inizia con '0' → 'c'
+  /// Es: "0a" → "ca", "0f" → "cf", "1a" → "1a" (invariato)
+  /// Riferimento: https://github.com/Sjord/growatt_api_client
+  String _growattMd5(String input) {
+    final hash = md5.convert(utf8.encode(input)).toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < hash.length; i += 2) {
+      final pair = hash.substring(i, i + 2);
+      buf.write(pair[0] == '0' ? 'c${pair[1]}' : pair);
+    }
+    return buf.toString();
   }
 
   Map<String, String> get _headers => {
@@ -126,50 +137,54 @@ class GrowattService {
       };
 
   // -------------------------------------------------------------------------
-  // STEP 1 — Login e ottenimento cookie di sessione
-  // POST /login  body: account=<user>&password=<md5>&validateCode=
+  // STEP 1 — Login
+  // POST /newLoginAPI.do  body: userName=<user>&password=<growattMd5>
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _login() async {
     try {
+      final hashedPass = _growattMd5(password);
+      debugPrint('[Growatt] POST /newLoginAPI.do (user=$username)');
+
       final response = await _client.post(
-        Uri.parse('$_baseUrl/login'),
+        Uri.parse('$_baseUrl/newLoginAPI.do'),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
         },
         body: {
-          'account': username,
-          'password': _md5(password),
-          'validateCode': '',
+          'userName': username,
+          'password': hashedPass,
         },
       ).timeout(const Duration(seconds: 15));
 
-      debugPrint('[Growatt] POST /login status=${response.statusCode}');
-      debugPrint('[Growatt] POST /login body=${_preview(response.body)}');
+      debugPrint('[Growatt] POST /newLoginAPI.do status=${response.statusCode}');
+      debugPrint('[Growatt] POST /newLoginAPI.do body=${_preview(response.body)}');
 
       if (response.statusCode != 200) {
         return GrowattError(GrowattErrorKind.authFailed,
             'Login HTTP ${response.statusCode}');
       }
 
-      // Estrai cookie JSESSIONID dall'header Set-Cookie
+      // Estrai cookie JSESSIONID
       final setCookie = response.headers['set-cookie'] ?? '';
       final match = RegExp(r'JSESSIONID=([^;]+)').firstMatch(setCookie);
-      if (match == null) {
-        return const GrowattError(GrowattErrorKind.authFailed,
-            'JSESSIONID non trovato nella risposta di login.');
+      if (match != null) {
+        _sessionCookie = 'JSESSIONID=${match.group(1)}';
+        debugPrint('[Growatt] session cookie ok');
       }
-      _sessionCookie = 'JSESSIONID=${match.group(1)}';
-      debugPrint('[Growatt] session cookie: $_sessionCookie');
 
-      // Verifica result
       final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final result = json['result'] as int? ?? 0;
-      if (result != 1) {
+      // newLoginAPI.do: { "result": 1, "back": { "success": true, ... } }
+      final topResult = json['result'] as int?;
+      final back = json['back'] as Map<String, dynamic>?;
+      final success = back?['success'] as bool?;
+
+      final ok = (topResult == 1) || (success == true);
+      if (!ok) {
         _sessionCookie = null;
-        return GrowattError(GrowattErrorKind.authFailed,
-            'Login fallito: result=$result msg=${json["msg"]}');
+        final msg = back?['msg'] ?? json['msg'] ?? 'credenziali non valide';
+        return GrowattError(GrowattErrorKind.authFailed, 'Login fallito: $msg');
       }
 
       return null;
@@ -203,8 +218,8 @@ class GrowattService {
       final dataList = back?['data'] as List<dynamic>?;
 
       if (dataList == null || dataList.isEmpty) {
-        return const GrowattError(GrowattErrorKind.plantNotFound,
-            'Nessun impianto trovato.');
+        return const GrowattError(
+            GrowattErrorKind.plantNotFound, 'Nessun impianto trovato.');
       }
 
       final first = dataList.first as Map<String, dynamic>;
@@ -217,7 +232,7 @@ class GrowattService {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 3 — Ottieni serial number del device
+  // STEP 3 — Ottieni serial number
   // POST /panel/getDevicesByPlantList  body: plantId=...&currPage=1
   // -------------------------------------------------------------------------
 
@@ -241,7 +256,6 @@ class GrowattService {
             'Nessun device trovato per plantId=$_plantId.');
       }
 
-      // Preferisci MIN inverter (deviceType=3 corrisponde a MIN in questo endpoint)
       final Map<String, dynamic> target = datas
           .cast<Map<String, dynamic>>()
           .firstWhere((d) => (d['deviceType']?.toString() ?? '') == '3',
@@ -256,12 +270,11 @@ class GrowattService {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 4 — Dati energetici del giorno
+  // STEP 4 — Dati energetici
   // POST /panel/min/getMinEnergyDayChart  body: sn=...&date=YYYY-MM-DD
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
-    // Login se non abbiamo ancora la sessione
     if (_sessionCookie == null) {
       final err = await _login();
       if (err != null) return err;
@@ -294,7 +307,6 @@ class GrowattService {
     debugPrint('[Growatt] POST /getMinEnergyDayChart status=${response.statusCode}');
     debugPrint('[Growatt] POST /getMinEnergyDayChart body=$rawBody');
 
-    // Sessione scaduta: ri-login al prossimo fetch
     if (response.statusCode == 302 || response.statusCode == 401) {
       _sessionCookie = null;
       _plantId = null;
@@ -312,8 +324,6 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // PARSER
-  // { "result": 1, "obj": { "eacToday": "12.5", "pac": "1230",
-  //   "etoGridToday": "3.2", "etoUserToday": "1.1", ... } }
   // -------------------------------------------------------------------------
 
   GrowattResult _parseEnergyData(String body) {
@@ -354,7 +364,6 @@ class GrowattService {
     }
   }
 
-  /// Invalida la sessione (es. dopo errore 401)
   void invalidateSession() {
     _sessionCookie = null;
     _plantId = null;
