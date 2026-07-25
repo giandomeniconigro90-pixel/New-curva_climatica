@@ -9,7 +9,8 @@
 //            Risposta: { "data": { "devices": [{"device_sn":"...","type":7,...}] } }
 //
 //  STEP 3 — POST /v1/device/tlx/tlx_data   (per type=7 MIN/TLX)
-//            body: device_sn, start_date, end_date, timezone_id
+//            Content-Type: application/json
+//            body JSON: { device_sn, start_date, end_date, timezone_id }
 //            Risposta: { "data": { "tlx": [{"eacToday":...,"pac":...}] } }
 //
 // Riferimento: https://www.showdoc.com.cn/262556420217021/8559849784929961
@@ -95,9 +96,16 @@ class GrowattService {
     http.Client? client,
   }) : _client = client ?? http.Client();
 
-  Map<String, String> get _headers => {
+  // Header per GET (nessun body)
+  Map<String, String> get _getHeaders => {
         'token': apiToken,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+      };
+
+  // Header per POST con body JSON
+  Map<String, String> get _postJsonHeaders => {
+        'token': apiToken,
+        'Content-Type': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
       };
 
@@ -118,7 +126,7 @@ class GrowattService {
     try {
       final uri = Uri.parse('$_baseUrl/v1/plant/list');
       final response = await _client
-          .get(uri, headers: _headers)
+          .get(uri, headers: _getHeaders)
           .timeout(const Duration(seconds: 15));
 
       final rawBody = _preview(response.body);
@@ -174,7 +182,7 @@ class GrowattService {
         queryParameters: {'plant_id': _plantId},
       );
       final response = await _client
-          .get(uri, headers: _headers)
+          .get(uri, headers: _getHeaders)
           .timeout(const Duration(seconds: 15));
 
       final rawBody = _preview(response.body);
@@ -218,7 +226,7 @@ class GrowattService {
         return GrowattError(GrowattErrorKind.parseError, 'device_sn non trovato. target=$target');
       }
 
-      debugPrint('[Growatt] deviceSn: $_deviceSn (type=${target['type']})');
+      debugPrint('[Growatt] deviceSn: $_deviceSn (type=${target[\'type\']})'); 
       return null;
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
@@ -227,9 +235,9 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // STEP 3 — POST /v1/device/tlx/tlx_data  (MIN/TLX inverter, type=7)
-  // body: device_sn, start_date, end_date, timezone_id
+  // Content-Type: application/json
+  // Body: { "device_sn": "...", "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "timezone_id": "Europe/Rome" }
   // Risposta: { "data": { "tlx": [ { "eacToday": 12.5, "pac": 1230, ... } ] }, "error_code": 0 }
-  // L'array tlx è ordinato per ora: l'ultimo elemento è il dato più recente.
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
@@ -250,13 +258,13 @@ class GrowattService {
     try {
       response = await _client.post(
         Uri.parse('$_baseUrl/v1/device/tlx/tlx_data'),
-        headers: _headers,
-        body: {
+        headers: _postJsonHeaders,
+        body: jsonEncode({
           'device_sn': _deviceSn!,
           'start_date': dateStr,
           'end_date': dateStr,
           'timezone_id': 'Europe/Rome',
-        },
+        }),
       ).timeout(const Duration(seconds: 15));
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
@@ -279,8 +287,8 @@ class GrowattService {
   // -------------------------------------------------------------------------
   // PARSER — /v1/device/tlx/tlx_data
   // L'array tlx contiene un record ogni 5 minuti.
-  // Prendiamo l'ultimo elemento (dato più recente del giorno).
-  // Campi: eacToday (kWh prodotti oggi), pac (W istantanei),
+  // Ultimo elemento = dato più recente del giorno.
+  // Campi: eacToday (kWh prodotti), pac (W istantanei),
   //        etoGridToday (kWh immessi), etoUserToday (kWh consumati da rete)
   // -------------------------------------------------------------------------
 
@@ -302,7 +310,6 @@ class GrowattService {
 
       final tlxList = dataObj['tlx'] as List<dynamic>?;
       if (tlxList == null || tlxList.isEmpty) {
-        // Nessun dato disponibile per oggi (es. notte o impianto spento)
         debugPrint('[Growatt] tlx list vuota — nessun dato per oggi');
         return GrowattOk(GrowattData(
           pvTodayKwh: 0,
@@ -313,7 +320,6 @@ class GrowattService {
         ));
       }
 
-      // Ultimo record = dato più aggiornato del giorno
       final last = tlxList.last as Map<String, dynamic>;
 
       final pvTodayKwh = _d(last['eacToday']);
