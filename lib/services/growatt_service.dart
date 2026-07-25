@@ -10,12 +10,12 @@
 //            Header: token: <API_TOKEN>
 //            Risposta: { "data": { "devices": [{"device_sn":"...","type":7,...}] } }
 //
-//  STEP 3 — GET /v1/device/{device_sn}/energy
+//  STEP 3 — GET /v1/device/{device_sn}/min_energy
 //            Header: token: <API_TOKEN>
-//            Risposta: { "data": { "eacToday":..., "pac":... }, "error_code": 0 }
+//            Risposta: { "data": { "eacToday":..., "pac":..., "etoGridToday":... }, "error_code": 0 }
 //
-// Riferimento: https://github.com/indykoning/PyPi_GrowattServer/blob/master/docs/openapiv1.md
-// (MIN methods — type 7 — usano GET /v1/device/{sn}/energy)
+// Riferimento: https://github.com/home-assistant/core/pull/149783
+// (MIN type 7 usa /min_energy, NON /energy)
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -228,9 +228,9 @@ class GrowattService {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 3 — GET /v1/device/{device_sn}/energy
-  // Endpoint ufficiale per MIN inverter (type 7)
-  // Ref: https://github.com/indykoning/PyPi_GrowattServer/blob/master/docs/openapiv1.md
+  // STEP 3 — GET /v1/device/{device_sn}/min_energy
+  // Endpoint specifico per MIN inverter (type 7) — diverso da /energy
+  // Ref: https://github.com/home-assistant/core/pull/149783
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
@@ -245,8 +245,8 @@ class GrowattService {
 
     http.Response response;
     try {
-      final uri = Uri.parse('$_baseUrl/v1/device/$_deviceSn/energy');
-      debugPrint('[Growatt] GET ${uri.path} (deviceSn=$_deviceSn)');
+      final uri = Uri.parse('$_baseUrl/v1/device/$_deviceSn/min_energy');
+      debugPrint('[Growatt] GET /v1/device/$_deviceSn/min_energy');
       response = await _client
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 15));
@@ -255,31 +255,23 @@ class GrowattService {
     }
 
     final rawBody = _preview(response.body);
-    debugPrint('[Growatt] GET /v1/device/$_deviceSn/energy status=${response.statusCode}');
-    debugPrint('[Growatt] GET /v1/device/$_deviceSn/energy body=$rawBody');
+    debugPrint('[Growatt] GET /v1/device/$_deviceSn/min_energy status=${response.statusCode}');
+    debugPrint('[Growatt] GET /v1/device/$_deviceSn/min_energy body=$rawBody');
 
     if (response.statusCode == 401 || response.statusCode == 403) {
       return const GrowattError(GrowattErrorKind.authFailed, 'Token API non valido o scaduto.');
     }
-    if (response.statusCode == 404) {
-      // 404 inatteso: logga il body completo per diagnostica
-      debugPrint('[Growatt] 404 body completo: ${response.body}');
-      return GrowattError(GrowattErrorKind.serverError,
-          'GET /v1/device/$_deviceSn/energy ha restituito 404. '
-          'body: ${response.body.isEmpty ? "(vuoto)" : response.body}');
-    }
     if (response.statusCode != 200) {
       return GrowattError(GrowattErrorKind.serverError,
-          '[energy HTTP ${response.statusCode}] $rawBody');
+          '[min_energy HTTP ${response.statusCode}] body: ${response.body.isEmpty ? "(vuoto)" : rawBody}');
     }
 
     return _parseEnergyData(response.body);
   }
 
   // -------------------------------------------------------------------------
-  // PARSER — /v1/device/{sn}/energy
-  // Struttura attesa:
-  // { "data": { "eacToday": 12.5, "pac": 1230, "etoGridToday": 3.2, ... }, "error_code": 0 }
+  // PARSER — /v1/device/{sn}/min_energy
+  // { "data": { "eacToday": 12.5, "pac": 1230, "etoGridToday": 3.2, "etoUserToday": 1.1, ... } }
   // -------------------------------------------------------------------------
 
   GrowattResult _parseEnergyData(String body) {
@@ -293,47 +285,41 @@ class GrowattService {
         );
       }
 
-      final dataObj = json['data'];
+      final dataField = json['data'];
 
-      // Struttura piatta: { "data": { "eacToday": ..., "pac": ... } }
-      if (dataObj is Map<String, dynamic>) {
-        return _extractFromMap(dataObj);
+      Map<String, dynamic>? obj;
+      if (dataField is Map<String, dynamic>) {
+        obj = dataField;
+      } else if (dataField is List && dataField.isNotEmpty) {
+        obj = dataField.last as Map<String, dynamic>;
       }
 
-      // Struttura lista: { "data": [ { "eacToday": ..., "pac": ... } ] }
-      if (dataObj is List && dataObj.isNotEmpty) {
-        return _extractFromMap(dataObj.last as Map<String, dynamic>);
+      if (obj == null) {
+        return GrowattError(GrowattErrorKind.parseError,
+            '"data" mancante o vuoto. body: ${_preview(body, 400)}');
       }
 
-      return GrowattError(GrowattErrorKind.parseError,
-          '"data" mancante o vuoto. body: ${_preview(body, 400)}');
+      final pvTodayKwh = _d(obj['eacToday'] ?? obj['etoday']);
+      final pvPowerW   = _d(obj['pac']);
+      final gridExport = _d(obj['etoGridToday'] ?? obj['export_energy']);
+      final gridImport = _d(obj['etoUserToday'] ?? obj['consume_energy']);
+
+      debugPrint('[Growatt] parsed: pv=$pvTodayKwh kWh, power=$pvPowerW W, '
+          'export=$gridExport kWh, import=$gridImport kWh');
+
+      return GrowattOk(GrowattData(
+        pvTodayKwh: pvTodayKwh,
+        pvPowerW: pvPowerW,
+        gridImportTodayKwh: gridImport,
+        gridExportTodayKwh: gridExport,
+        fetchedAt: DateTime.now().toUtc(),
+      ));
     } catch (e) {
       return GrowattError(
         GrowattErrorKind.parseError,
         'Parsing error: $e | body: ${_preview(body, 300)}',
       );
     }
-  }
-
-  GrowattOk _extractFromMap(Map<String, dynamic> obj) {
-    final pvTodayKwh = _d(obj['eacToday'] ?? obj['etoday']);
-    final pvPowerW   = _d(obj['pac']);
-    final gridExport = _d(obj['etoGridToday'] ?? obj['export_energy']);
-    final selfCons   = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
-    final gridImport = _d(obj['etoUserToday'] ?? obj['consume_energy']);
-    final netImport  = gridImport > 0 ? gridImport
-        : ((_d(obj['eUsedToday']) - selfCons).clamp(0.0, double.infinity));
-
-    debugPrint('[Growatt] parsed: pv=$pvTodayKwh kWh, power=$pvPowerW W, '
-        'export=$gridExport kWh, import=$netImport kWh');
-
-    return GrowattOk(GrowattData(
-      pvTodayKwh: pvTodayKwh,
-      pvPowerW: pvPowerW,
-      gridImportTodayKwh: netImport,
-      gridExportTodayKwh: gridExport,
-      fetchedAt: DateTime.now().toUtc(),
-    ));
   }
 
   void dispose() => _client.close();
