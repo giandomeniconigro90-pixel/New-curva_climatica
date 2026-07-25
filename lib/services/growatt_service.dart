@@ -1,17 +1,4 @@
 // lib/services/growatt_service.dart
-//
-// Integrazione Growatt cloud API per leggere i dati del fotovoltaico.
-//
-// Endpoint reali:
-//   POST /login                          → login, raccoglie Set-Cookie multipli
-//   POST /newTwoPlantAPI/getPlantData    → dati impianto oggi
-//
-// BUG FIX: http.Client di Dart consolida gli header duplicati con la
-// virgola (RFC 7230 §3.2.2), ma alcuni server Growatt richiedono che
-// JSESSIONID e SERVERID vengano inviati come cookie separati.
-// Usiamo response.headers che in Dart è case-insensitive e unisce
-// i valori con virgola. Splittiamo su virgola E punto-e-virgola per
-// estrarre tutti i token nome=valore.
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -86,10 +73,6 @@ class GrowattService {
 
   final int plantId;
   final http.Client _client;
-
-  /// Stringa cookie completa da inviare nell'header Cookie.
-  /// Contiene tutti i token ricevuti nei Set-Cookie del login,
-  /// es. "JSESSIONID=abc123; SERVERID=tomcat1"
   String? _sessionCookie;
 
   GrowattService({
@@ -99,38 +82,24 @@ class GrowattService {
 
   bool get isLoggedIn => _sessionCookie != null;
 
-  // -------------------------------------------------------------------------
-  // Estrae tutti i cookie nome=valore da un header set-cookie.
-  //
-  // Dart's http.Response.headers unisce gli header duplicati con ", ".
-  // Ogni direttiva Set-Cookie ha formato:
-  //   name=value; Path=/; HttpOnly[; altri attributi]
-  //
-  // Strategia: splittiamo su "; " per separare le direttive, poi
-  // teniamo solo i token che contengono "=" e non sono attributi noti
-  // (Path, HttpOnly, Secure, SameSite, Max-Age, Expires, Domain).
-  // -------------------------------------------------------------------------
+  // Estrae tutti i cookie nome=valore scartando gli attributi HTTP
   static String _extractCookies(String rawSetCookie) {
     final attributeNames = {
       'path', 'httponly', 'secure', 'samesite',
       'max-age', 'expires', 'domain',
     };
-
     final tokens = rawSetCookie.split(RegExp(r',(?=\s*\w+=)'));
     final cookiePairs = <String>{};
-
     for (final token in tokens) {
-      final parts = token.split(';');
-      for (final part in parts) {
+      for (final part in token.split(';')) {
         final trimmed = part.trim();
         final eqIdx = trimmed.indexOf('=');
         if (eqIdx <= 0) continue;
         final name = trimmed.substring(0, eqIdx).trim().toLowerCase();
         if (attributeNames.contains(name)) continue;
-        cookiePairs.add(trimmed.substring(0, trimmed.length)); // name=value originale
+        cookiePairs.add(trimmed);
       }
     }
-
     return cookiePairs.join('; ');
   }
 
@@ -164,28 +133,25 @@ class GrowattService {
       if (response.statusCode != 200) {
         return GrowattError(
           GrowattErrorKind.serverError,
-          'HTTP ${response.statusCode}',
+          'Login HTTP ${response.statusCode}',
         );
       }
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final result = body['result'] as int? ?? -1;
-
       if (result != 1) {
         return const GrowattError(
           GrowattErrorKind.authFailed,
-          'Credenziali non valide. Verifica username/email e password di Shine Phone.',
+          'Credenziali non valide.',
         );
       }
 
-      // Raccoglie TUTTI i Set-Cookie (JSESSIONID, SERVERID, ecc.)
       final rawCookie = response.headers['set-cookie'];
       debugPrint('[GrowattService] set-cookie raw: $rawCookie');
-
       if (rawCookie == null || rawCookie.isEmpty) {
         return const GrowattError(
           GrowattErrorKind.serverError,
-          'Login OK ma nessun cookie di sessione ricevuto.',
+          'Login OK ma nessun cookie ricevuto.',
         );
       }
 
@@ -193,10 +159,8 @@ class GrowattService {
       debugPrint('[GrowattService] cookie estratto: $_sessionCookie');
 
       return GrowattOk(GrowattData(
-        pvTodayKwh: 0,
-        pvPowerW: 0,
-        gridImportTodayKwh: 0,
-        gridExportTodayKwh: 0,
+        pvTodayKwh: 0, pvPowerW: 0,
+        gridImportTodayKwh: 0, gridExportTodayKwh: 0,
         fetchedAt: DateTime.now().toUtc(),
       ));
     } on Exception catch (e) {
@@ -206,18 +170,23 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // FETCH DATI OGGI
+  //
+  // MODALITÀ DEBUG: in caso di errore il messaggio contiene
+  // status HTTP + body RAW (fino a 600 char) così puoi incollarlo
+  // e capire esattamente cosa risponde il server.
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
     if (_sessionCookie == null) {
       return const GrowattError(
         GrowattErrorKind.sessionExpired,
-        'Sessione non attiva. Eseguire il login prima di fetchToday().',
+        'Sessione non attiva.',
       );
     }
 
+    http.Response? response;
     try {
-      final response = await _client.post(
+      response = await _client.post(
         Uri.parse('$_baseUrl/newTwoPlantAPI/getPlantData'),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -225,64 +194,63 @@ class GrowattService {
           'User-Agent': 'Mozilla/5.0',
           'Referer': '$_baseUrl/index',
         },
-        body: {
-          'plantId': plantId.toString(),
-        },
+        body: {'plantId': plantId.toString()},
       ).timeout(const Duration(seconds: 15));
-
-      debugPrint('[GrowattService] fetchToday status=${response.statusCode}');
-      final preview = response.body.length > 400
-          ? response.body.substring(0, 400)
-          : response.body;
-      debugPrint('[GrowattService] fetchToday body=$preview');
-
-      if (response.statusCode == 302) {
-        _sessionCookie = null;
-        return const GrowattError(
-          GrowattErrorKind.sessionExpired,
-          'Sessione scaduta (redirect 302). Eseguire nuovamente il login.',
-        );
-      }
-
-      if (response.statusCode != 200) {
-        return GrowattError(
-          GrowattErrorKind.serverError,
-          'HTTP ${response.statusCode}',
-        );
-      }
-
-      // Controlla result:-1 SOLO dopo aver verificato che il body sia JSON
-      if (response.body.contains('"result":-1')) {
-        _sessionCookie = null;
-        return const GrowattError(
-          GrowattErrorKind.sessionExpired,
-          'Sessione non riconosciuta dal server (result:-1). Eseguire nuovamente il login.',
-        );
-      }
-
-      return _parsePlantData(response.body);
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
     }
+
+    final status = response.statusCode;
+    // Tronca a 600 char ma mostra TUTTO nel messaggio di errore
+    final rawBody = response.body.length > 600
+        ? response.body.substring(0, 600)
+        : response.body;
+
+    debugPrint('[GrowattService] fetchToday status=$status');
+    debugPrint('[GrowattService] fetchToday body=$rawBody');
+
+    if (status == 302) {
+      _sessionCookie = null;
+      return GrowattError(
+        GrowattErrorKind.sessionExpired,
+        '[302] Redirect — cookie non accettato dal server.\n'
+        'cookie inviato: $_sessionCookie',
+      );
+    }
+
+    if (status != 200) {
+      return GrowattError(
+        GrowattErrorKind.serverError,
+        '[HTTP $status] body: $rawBody',
+      );
+    }
+
+    // result:-1 = sessione non riconosciuta
+    if (response.body.contains('"result":-1')) {
+      _sessionCookie = null;
+      return GrowattError(
+        GrowattErrorKind.sessionExpired,
+        '[result:-1] Server non riconosce la sessione.\n'
+        'cookie inviato: $_sessionCookie\n'
+        'body: $rawBody',
+      );
+    }
+
+    return _parsePlantData(response.body);
   }
 
   // -------------------------------------------------------------------------
   // PARSER
-  //
-  // Struttura attesa:
-  // { "result": 1, "obj": { "plantData": { "etoday": "12.5", ... } } }
-  // Se plantData non esiste, prova a leggere obj direttamente.
   // -------------------------------------------------------------------------
 
   GrowattResult _parsePlantData(String body) {
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
-
       final obj = json['obj'] as Map<String, dynamic>?;
       if (obj == null) {
         return GrowattError(
           GrowattErrorKind.parseError,
-          'Campo "obj" mancante. Body: ${body.substring(0, body.length.clamp(0, 300))}',
+          '"obj" mancante. body: ${body.substring(0, body.length.clamp(0, 400))}',
         );
       }
 
@@ -294,12 +262,12 @@ class GrowattService {
         return double.tryParse(v.toString()) ?? 0.0;
       }
 
-      final double pvTodayKwh = d(plantData['etoday']);
-      final double pvPowerKw  = d(plantData['currentPower']);
-      final double gridExport = d(plantData['etoGridToday']);
-      final double usedToday  = d(plantData['eUsedToday']);
-      final double selfCons   = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
-      final double gridImport = (usedToday - selfCons).clamp(0.0, double.infinity);
+      final pvTodayKwh = d(plantData['etoday']);
+      final pvPowerKw  = d(plantData['currentPower']);
+      final gridExport = d(plantData['etoGridToday']);
+      final usedToday  = d(plantData['eUsedToday']);
+      final selfCons   = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
+      final gridImport = (usedToday - selfCons).clamp(0.0, double.infinity);
 
       return GrowattOk(GrowattData(
         pvTodayKwh: pvTodayKwh,
@@ -311,7 +279,7 @@ class GrowattService {
     } catch (e) {
       return GrowattError(
         GrowattErrorKind.parseError,
-        'Errore parsing risposta Growatt: $e',
+        'Parsing error: $e',
       );
     }
   }
