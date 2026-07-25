@@ -1,39 +1,39 @@
 // lib/services/growatt_credentials_service.dart
 //
-// Salva e legge il token API Growatt in modo sicuro usando
-// flutter_secure_storage (Android Keystore / iOS Keychain).
-//
-// Il token NON viene mai scritto in chiaro su disco
-// né su SharedPreferences.
+// Salva e carica le credenziali Growatt (username + password)
+// usando flutter_secure_storage — mai in chiaro nel codice.
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class GrowattCredentialsService {
-  static const _keyToken = 'growatt_api_token';
+  static const _storage = FlutterSecureStorage();
+  static const _keyUsername = 'growatt_username';
+  static const _keyPassword = 'growatt_password';
 
-  static const _storage = FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
-  );
-
-  /// Salva l'API token nel keystore del dispositivo.
-  static Future<void> save({required String token}) async {
-    await _storage.write(key: _keyToken, value: token);
+  /// Salva username e password
+  static Future<void> save(String username, String password) async {
+    await _storage.write(key: _keyUsername, value: username);
+    await _storage.write(key: _keyPassword, value: password);
   }
 
-  /// Legge il token salvato.
-  /// Restituisce null se non è stato ancora inserito.
-  static Future<String?> load() async {
-    return _storage.read(key: _keyToken);
+  /// Carica le credenziali — restituisce null se non configurate
+  static Future<({String username, String password})?> load() async {
+    final username = await _storage.read(key: _keyUsername);
+    final password = await _storage.read(key: _keyPassword);
+    if (username == null || username.isEmpty ||
+        password == null || password.isEmpty) return null;
+    return (username: username, password: password);
   }
 
-  /// Cancella il token salvato (logout).
+  /// Elimina le credenziali salvate
   static Future<void> clear() async {
-    await _storage.delete(key: _keyToken);
+    await _storage.delete(key: _keyUsername);
+    await _storage.delete(key: _keyPassword);
   }
 
-  /// Restituisce true se il token è già stato salvato.
-  static Future<bool> hasToken() async {
-    final token = await load();
-    return token != null && token.isNotEmpty;
+  /// True se le credenziali sono già state configurate
+  static Future<bool> isConfigured() async {
+    final creds = await load();
+    return creds != null;
   }
 }

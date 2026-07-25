@@ -3,16 +3,10 @@
 // ChangeNotifier che gestisce il polling periodico dei dati Growatt.
 //
 // Ciclo di vita:
-//   1. All'avvio legge il token API da GrowattCredentialsService.
-//   2. Se esiste, fa subito un fetchToday() e avvia il timer (ogni 10 minuti).
+//   1. All'avvio legge username+password da GrowattCredentialsService.
+//   2. Se esistono, fa subito un fetchToday() e avvia il timer (ogni 10 minuti).
 //   3. Ad ogni tick aggiorna [data] e notifica i listener.
 //   4. dispose() cancella il timer e chiude il client HTTP.
-//
-// Uso in main.dart / ClimateCurveOfflineHome:
-//   ChangeNotifierProvider(
-//     create: (_) => GrowattNotifier()..init(),
-//     child: ...
-//   )
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -29,32 +23,33 @@ class GrowattNotifier extends ChangeNotifier {
   GrowattPollingState state = GrowattPollingState.idle;
   String? errorMessage;
 
-  /// Intervallo di polling (default 10 minuti)
   final Duration pollInterval;
 
   GrowattNotifier({this.pollInterval = const Duration(minutes: 10)});
 
   // -------------------------------------------------------------------------
-  // Init — chiamato una volta all'avvio
+  // Init
   // -------------------------------------------------------------------------
 
   Future<void> init() async {
-    final token = await GrowattCredentialsService.load();
-    if (token == null || token.isEmpty) {
+    final creds = await GrowattCredentialsService.load();
+    if (creds == null) {
       state = GrowattPollingState.notConfigured;
       notifyListeners();
       return;
     }
 
-    _service = GrowattService(apiToken: token);
+    _service = GrowattService(
+      username: creds.username,
+      password: creds.password,
+    );
 
-    // Fetch immediato poi avvia timer
     await _fetch();
     _timer = Timer.periodic(pollInterval, (_) => _fetch());
   }
 
   // -------------------------------------------------------------------------
-  // Fetch singolo
+  // Fetch
   // -------------------------------------------------------------------------
 
   Future<void> _fetch() async {
@@ -69,15 +64,11 @@ class GrowattNotifier extends ChangeNotifier {
       state = GrowattPollingState.ok;
       errorMessage = null;
     } else if (result is GrowattError) {
-      // Se token non valido, segnala subito senza retry
       if (result.kind == GrowattErrorKind.authFailed) {
         _timer?.cancel();
         _timer = null;
-        state = GrowattPollingState.error;
-        errorMessage = _describe(result);
-        notifyListeners();
-        return;
       }
+      // Sessione scaduta: il prossimo fetchToday() farà re-login automatico
       state = GrowattPollingState.error;
       errorMessage = _describe(result);
     }
@@ -85,11 +76,10 @@ class GrowattNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Forza un aggiornamento manuale immediato.
   Future<void> refresh() => _fetch();
 
   // -------------------------------------------------------------------------
-  // Riconfigura dopo aver salvato un nuovo token
+  // Riconfigura dopo aver salvato nuove credenziali
   // -------------------------------------------------------------------------
 
   Future<void> reconfigure() async {
@@ -110,13 +100,13 @@ class GrowattNotifier extends ChangeNotifier {
   String _describe(GrowattError e) {
     switch (e.kind) {
       case GrowattErrorKind.authFailed:
-        return 'Token non valido. Riconfigura in Impostazioni > Fotovoltaico.';
+        return 'Credenziali non valide. Riconfigura in Impostazioni > Fotovoltaico.';
       case GrowattErrorKind.networkError:
         return 'Nessuna connessione. Riprovo al prossimo aggiornamento.';
       case GrowattErrorKind.sessionExpired:
-        return 'Token scaduto. Rigenera il token su server.growatt.com.';
+        return 'Sessione rinnovata automaticamente.';
       case GrowattErrorKind.plantNotFound:
-        return 'Nessun impianto trovato per questo token.';
+        return 'Nessun impianto trovato per questo account.';
       default:
         return e.message;
     }

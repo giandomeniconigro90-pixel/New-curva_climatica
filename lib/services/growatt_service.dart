@@ -1,23 +1,27 @@
 // lib/services/growatt_service.dart
 //
-// Flusso OpenAPI Growatt (openapi.growatt.com):
+// Flusso autenticazione Growatt (server.growatt.com — web API):
 //
-//  STEP 1 — GET /v1/plant/list
-//            Header: token: <API_TOKEN>
-//            Risposta: { "data": { "plants": [{"plant_id":...}] }, "error_code": 0 }
+//  STEP 1 — POST https://server.growatt.com/login
+//            body form: account=<username>&password=<md5(password)>&validateCode=
+//            Risposta: cookie JSESSIONID + { "result": 1, "obj": { "id": ... } }
 //
-//  STEP 2 — GET /v1/device/list?plant_id={plantId}
-//            Header: token: <API_TOKEN>
-//            Risposta: { "data": { "devices": [{"device_sn":"...","type":7,...}] } }
+//  STEP 2 — POST https://server.growatt.com/index/getPlantListTitle
+//            Cookie: JSESSIONID=...
+//            Risposta: { "result": 1, "back": { "data": [{"id":"11037032",...}] } }
 //
-//  STEP 3 — GET /v1/device/{device_sn}/min_energy
-//            Header: token: <API_TOKEN>
-//            Risposta: { "data": { "eacToday":..., "pac":..., "etoGridToday":... }, "error_code": 0 }
+//  STEP 3 — POST https://server.growatt.com/panel/getDevicesByPlantList
+//            body form: plantId=11037032&currPage=1
+//            Risposta: { "result": 1, "obj": { "datas": [{"sn":"MVP1EZ5054",...}] } }
 //
-// Riferimento: https://github.com/home-assistant/core/pull/149783
-// (MIN type 7 usa /min_energy, NON /energy)
+//  STEP 4 — POST https://server.growatt.com/panel/min/getMinEnergyDayChart
+//            body form: sn=MVP1EZ5054&date=2026-07-25
+//            Risposta: { "result": 1, "obj": { "eacToday": "12.5", "pac": "1230", ... } }
+//
+// Riferimento: https://github.com/indykoning/PyPi_GrowattServer
 
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -85,25 +89,23 @@ enum GrowattErrorKind {
 // ---------------------------------------------------------------------------
 
 class GrowattService {
-  static const String _baseUrl = 'https://openapi.growatt.com';
+  static const String _baseUrl = 'https://server.growatt.com';
 
-  final String apiToken;
+  final String username;
+  final String password;
   final http.Client _client;
 
+  String? _sessionCookie;
   String? _plantId;
   String? _deviceSn;
 
   GrowattService({
-    required this.apiToken,
+    required this.username,
+    required this.password,
     http.Client? client,
   }) : _client = client ?? http.Client();
 
-  Map<String, String> get _headers => {
-        'token': apiToken,
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
-      };
-
-  String _preview(String s, [int max = 800]) =>
+  String _preview(String s, [int max = 600]) =>
       s.length > max ? s.substring(0, max) : s;
 
   double _d(dynamic v) {
@@ -112,53 +114,101 @@ class GrowattService {
     return double.tryParse(v.toString()) ?? 0.0;
   }
 
+  /// MD5 della password come richiesto da Growatt
+  String _md5(String input) {
+    return md5.convert(utf8.encode(input)).toString();
+  }
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+        if (_sessionCookie != null) 'Cookie': _sessionCookie!,
+      };
+
   // -------------------------------------------------------------------------
-  // STEP 1 — GET /v1/plant/list
+  // STEP 1 — Login e ottenimento cookie di sessione
+  // POST /login  body: account=<user>&password=<md5>&validateCode=
+  // -------------------------------------------------------------------------
+
+  Future<GrowattResult?> _login() async {
+    try {
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/login'),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+        },
+        body: {
+          'account': username,
+          'password': _md5(password),
+          'validateCode': '',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      debugPrint('[Growatt] POST /login status=${response.statusCode}');
+      debugPrint('[Growatt] POST /login body=${_preview(response.body)}');
+
+      if (response.statusCode != 200) {
+        return GrowattError(GrowattErrorKind.authFailed,
+            'Login HTTP ${response.statusCode}');
+      }
+
+      // Estrai cookie JSESSIONID dall'header Set-Cookie
+      final setCookie = response.headers['set-cookie'] ?? '';
+      final match = RegExp(r'JSESSIONID=([^;]+)').firstMatch(setCookie);
+      if (match == null) {
+        return const GrowattError(GrowattErrorKind.authFailed,
+            'JSESSIONID non trovato nella risposta di login.');
+      }
+      _sessionCookie = 'JSESSIONID=${match.group(1)}';
+      debugPrint('[Growatt] session cookie: $_sessionCookie');
+
+      // Verifica result
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      final result = json['result'] as int? ?? 0;
+      if (result != 1) {
+        _sessionCookie = null;
+        return GrowattError(GrowattErrorKind.authFailed,
+            'Login fallito: result=$result msg=${json["msg"]}');
+      }
+
+      return null;
+    } on Exception catch (e) {
+      return GrowattError(GrowattErrorKind.networkError, e.toString());
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // STEP 2 — Ottieni plantId
+  // POST /index/getPlantListTitle
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _fetchPlantId() async {
     try {
-      final uri = Uri.parse('$_baseUrl/v1/plant/list');
-      final response = await _client
-          .get(uri, headers: _headers)
-          .timeout(const Duration(seconds: 15));
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/index/getPlantListTitle'),
+        headers: _headers,
+        body: {},
+      ).timeout(const Duration(seconds: 15));
 
-      final rawBody = _preview(response.body);
-      debugPrint('[Growatt] GET /v1/plant/list status=${response.statusCode}');
-      debugPrint('[Growatt] GET /v1/plant/list body=$rawBody');
+      debugPrint('[Growatt] POST /getPlantListTitle status=${response.statusCode}');
+      debugPrint('[Growatt] POST /getPlantListTitle body=${_preview(response.body)}');
 
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        return const GrowattError(GrowattErrorKind.authFailed, 'Token API non valido o scaduto.');
-      }
-      if (response.statusCode != 200) {
-        return GrowattError(GrowattErrorKind.serverError, '[plant/list HTTP ${response.statusCode}] $rawBody');
+      if (response.statusCode == 302 || response.statusCode == 401) {
+        return const GrowattError(GrowattErrorKind.sessionExpired, 'Sessione scaduta.');
       }
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final errorCode = json['error_code'] as int? ?? -1;
-      if (errorCode != 0) {
-        return GrowattError(GrowattErrorKind.authFailed, 'error_code=$errorCode msg=${json["error_msg"]}');
+      final back = json['back'] as Map<String, dynamic>?;
+      final dataList = back?['data'] as List<dynamic>?;
+
+      if (dataList == null || dataList.isEmpty) {
+        return const GrowattError(GrowattErrorKind.plantNotFound,
+            'Nessun impianto trovato.');
       }
 
-      List<dynamic>? plantList;
-      final dataField = json['data'];
-      if (dataField is Map<String, dynamic>) {
-        plantList = dataField['plants'] as List<dynamic>?;
-      } else if (dataField is List<dynamic>) {
-        plantList = dataField;
-      }
-
-      if (plantList == null || plantList.isEmpty) {
-        return const GrowattError(GrowattErrorKind.plantNotFound, 'Nessun impianto trovato per questo token.');
-      }
-
-      final first = plantList.first as Map<String, dynamic>;
-      _plantId = (first['plant_id'] ?? first['plantId'])?.toString();
-
-      if (_plantId == null || _plantId!.isEmpty) {
-        return GrowattError(GrowattErrorKind.parseError, 'plant_id non trovato. plants[0]=$first');
-      }
-
+      final first = dataList.first as Map<String, dynamic>;
+      _plantId = (first['id'] ?? first['plantId'])?.toString();
       debugPrint('[Growatt] plantId: $_plantId');
       return null;
     } on Exception catch (e) {
@@ -167,60 +217,38 @@ class GrowattService {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 2 — GET /v1/device/list?plant_id={plantId}
+  // STEP 3 — Ottieni serial number del device
+  // POST /panel/getDevicesByPlantList  body: plantId=...&currPage=1
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _fetchDeviceSn() async {
     try {
-      final uri = Uri.parse('$_baseUrl/v1/device/list').replace(
-        queryParameters: {'plant_id': _plantId},
-      );
-      final response = await _client
-          .get(uri, headers: _headers)
-          .timeout(const Duration(seconds: 15));
+      final response = await _client.post(
+        Uri.parse('$_baseUrl/panel/getDevicesByPlantList'),
+        headers: _headers,
+        body: {'plantId': _plantId!, 'currPage': '1'},
+      ).timeout(const Duration(seconds: 15));
 
-      final rawBody = _preview(response.body);
-      debugPrint('[Growatt] GET /v1/device/list?plant_id=$_plantId status=${response.statusCode}');
-      debugPrint('[Growatt] GET /v1/device/list body=$rawBody');
-
-      if (response.statusCode == 401 || response.statusCode == 403) {
-        return const GrowattError(GrowattErrorKind.authFailed, 'Token API non valido o scaduto.');
-      }
-      if (response.statusCode != 200) {
-        return GrowattError(GrowattErrorKind.serverError, '[device/list HTTP ${response.statusCode}] $rawBody');
-      }
+      debugPrint('[Growatt] POST /getDevicesByPlantList status=${response.statusCode}');
+      debugPrint('[Growatt] POST /getDevicesByPlantList body=${_preview(response.body)}');
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
-      final errorCode = json['error_code'] as int? ?? -1;
-      if (errorCode != 0) {
-        return GrowattError(GrowattErrorKind.serverError, 'error_code=$errorCode msg=${json["error_msg"]}');
+      final obj = json['obj'] as Map<String, dynamic>?;
+      final datas = obj?['datas'] as List<dynamic>?;
+
+      if (datas == null || datas.isEmpty) {
+        return GrowattError(GrowattErrorKind.plantNotFound,
+            'Nessun device trovato per plantId=$_plantId.');
       }
 
-      List<dynamic>? deviceList;
-      final dataField = json['data'];
-      if (dataField is Map<String, dynamic>) {
-        deviceList = (dataField['devices'] ?? dataField['device']) as List<dynamic>?;
-      } else if (dataField is List<dynamic>) {
-        deviceList = dataField;
-      }
-
-      if (deviceList == null || deviceList.isEmpty) {
-        return GrowattError(GrowattErrorKind.plantNotFound, 'Nessun device trovato per plantId=$_plantId.');
-      }
-
-      // Preferisci il device di tipo 7 (MIN inverter), fallback al primo
-      final Map<String, dynamic> target = deviceList
+      // Preferisci MIN inverter (deviceType=3 corrisponde a MIN in questo endpoint)
+      final Map<String, dynamic> target = datas
           .cast<Map<String, dynamic>>()
-          .firstWhere((d) => (d['type'] as int? ?? 0) == 7,
-              orElse: () => deviceList!.first as Map<String, dynamic>);
+          .firstWhere((d) => (d['deviceType']?.toString() ?? '') == '3',
+              orElse: () => datas.first as Map<String, dynamic>);
 
-      _deviceSn = (target['device_sn'] ?? target['deviceSn'] ?? target['sn'])?.toString();
-
-      if (_deviceSn == null || _deviceSn!.isEmpty) {
-        return GrowattError(GrowattErrorKind.parseError, 'device_sn non trovato. target=$target');
-      }
-
-      debugPrint('[Growatt] deviceSn: $_deviceSn (type=${target["type"]})');
+      _deviceSn = (target['sn'] ?? target['deviceSn'])?.toString();
+      debugPrint('[Growatt] deviceSn: $_deviceSn (deviceType=${target["deviceType"]})');
       return null;
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
@@ -228,12 +256,16 @@ class GrowattService {
   }
 
   // -------------------------------------------------------------------------
-  // STEP 3 — GET /v1/device/{device_sn}/min_energy
-  // Endpoint specifico per MIN inverter (type 7) — diverso da /energy
-  // Ref: https://github.com/home-assistant/core/pull/149783
+  // STEP 4 — Dati energetici del giorno
+  // POST /panel/min/getMinEnergyDayChart  body: sn=...&date=YYYY-MM-DD
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
+    // Login se non abbiamo ancora la sessione
+    if (_sessionCookie == null) {
+      final err = await _login();
+      if (err != null) return err;
+    }
     if (_plantId == null) {
       final err = await _fetchPlantId();
       if (err != null) return err;
@@ -243,66 +275,66 @@ class GrowattService {
       if (err != null) return err;
     }
 
+    final today = DateTime.now();
+    final dateStr =
+        '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
     http.Response response;
     try {
-      final uri = Uri.parse('$_baseUrl/v1/device/$_deviceSn/min_energy');
-      debugPrint('[Growatt] GET /v1/device/$_deviceSn/min_energy');
-      response = await _client
-          .get(uri, headers: _headers)
-          .timeout(const Duration(seconds: 15));
+      response = await _client.post(
+        Uri.parse('$_baseUrl/panel/min/getMinEnergyDayChart'),
+        headers: _headers,
+        body: {'sn': _deviceSn!, 'date': dateStr},
+      ).timeout(const Duration(seconds: 15));
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
     }
 
     final rawBody = _preview(response.body);
-    debugPrint('[Growatt] GET /v1/device/$_deviceSn/min_energy status=${response.statusCode}');
-    debugPrint('[Growatt] GET /v1/device/$_deviceSn/min_energy body=$rawBody');
+    debugPrint('[Growatt] POST /getMinEnergyDayChart status=${response.statusCode}');
+    debugPrint('[Growatt] POST /getMinEnergyDayChart body=$rawBody');
 
-    if (response.statusCode == 401 || response.statusCode == 403) {
-      return const GrowattError(GrowattErrorKind.authFailed, 'Token API non valido o scaduto.');
+    // Sessione scaduta: ri-login al prossimo fetch
+    if (response.statusCode == 302 || response.statusCode == 401) {
+      _sessionCookie = null;
+      _plantId = null;
+      _deviceSn = null;
+      return const GrowattError(GrowattErrorKind.sessionExpired,
+          'Sessione scaduta, verrà rinnovata al prossimo aggiornamento.');
     }
     if (response.statusCode != 200) {
       return GrowattError(GrowattErrorKind.serverError,
-          '[min_energy HTTP ${response.statusCode}] body: ${response.body.isEmpty ? "(vuoto)" : rawBody}');
+          '[getMinEnergyDayChart HTTP ${response.statusCode}] $rawBody');
     }
 
     return _parseEnergyData(response.body);
   }
 
   // -------------------------------------------------------------------------
-  // PARSER — /v1/device/{sn}/min_energy
-  // { "data": { "eacToday": 12.5, "pac": 1230, "etoGridToday": 3.2, "etoUserToday": 1.1, ... } }
+  // PARSER
+  // { "result": 1, "obj": { "eacToday": "12.5", "pac": "1230",
+  //   "etoGridToday": "3.2", "etoUserToday": "1.1", ... } }
   // -------------------------------------------------------------------------
 
   GrowattResult _parseEnergyData(String body) {
     try {
       final json = jsonDecode(body) as Map<String, dynamic>;
-      final errorCode = json['error_code'] as int? ?? -1;
-      if (errorCode != 0) {
-        return GrowattError(
-          GrowattErrorKind.serverError,
-          'error_code=$errorCode msg=${json["error_msg"]} | body: ${_preview(body, 300)}',
-        );
+      final result = json['result'] as int? ?? 0;
+      if (result != 1) {
+        return GrowattError(GrowattErrorKind.serverError,
+            'result=$result | body: ${_preview(body, 300)}');
       }
 
-      final dataField = json['data'];
-
-      Map<String, dynamic>? obj;
-      if (dataField is Map<String, dynamic>) {
-        obj = dataField;
-      } else if (dataField is List && dataField.isNotEmpty) {
-        obj = dataField.last as Map<String, dynamic>;
-      }
-
+      final obj = json['obj'] as Map<String, dynamic>?;
       if (obj == null) {
         return GrowattError(GrowattErrorKind.parseError,
-            '"data" mancante o vuoto. body: ${_preview(body, 400)}');
+            '"obj" mancante. body: ${_preview(body, 400)}');
       }
 
       final pvTodayKwh = _d(obj['eacToday'] ?? obj['etoday']);
       final pvPowerW   = _d(obj['pac']);
-      final gridExport = _d(obj['etoGridToday'] ?? obj['export_energy']);
-      final gridImport = _d(obj['etoUserToday'] ?? obj['consume_energy']);
+      final gridExport = _d(obj['etoGridToday'] ?? obj['epvtoGridToday']);
+      final gridImport = _d(obj['etoUserToday'] ?? obj['etouserToday']);
 
       debugPrint('[Growatt] parsed: pv=$pvTodayKwh kWh, power=$pvPowerW W, '
           'export=$gridExport kWh, import=$gridImport kWh');
@@ -320,6 +352,13 @@ class GrowattService {
         'Parsing error: $e | body: ${_preview(body, 300)}',
       );
     }
+  }
+
+  /// Invalida la sessione (es. dopo errore 401)
+  void invalidateSession() {
+    _sessionCookie = null;
+    _plantId = null;
+    _deviceSn = null;
   }
 
   void dispose() => _client.close();
