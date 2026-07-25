@@ -143,7 +143,7 @@ class GrowattService {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       final errorCode = json['error_code'] as int? ?? -1;
       if (errorCode != 0) {
-        return GrowattError(GrowattErrorKind.authFailed, 'error_code=$errorCode msg=${json['error_msg']}');
+        return GrowattError(GrowattErrorKind.authFailed, 'error_code=$errorCode msg=${json["error_msg"]}');
       }
 
       List<dynamic>? plantList;
@@ -199,7 +199,7 @@ class GrowattService {
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       final errorCode = json['error_code'] as int? ?? -1;
       if (errorCode != 0) {
-        return GrowattError(GrowattErrorKind.serverError, 'error_code=$errorCode msg=${json['error_msg']}');
+        return GrowattError(GrowattErrorKind.serverError, 'error_code=$errorCode msg=${json["error_msg"]}');
       }
 
       List<dynamic>? deviceList;
@@ -226,7 +226,7 @@ class GrowattService {
         return GrowattError(GrowattErrorKind.parseError, 'device_sn non trovato. target=$target');
       }
 
-      debugPrint('[Growatt] deviceSn: $_deviceSn (type=${target[\'type\']})'); 
+      debugPrint('[Growatt] deviceSn: $_deviceSn (type=${target["type"]})');
       return null;
     } on Exception catch (e) {
       return GrowattError(GrowattErrorKind.networkError, e.toString());
@@ -299,7 +299,7 @@ class GrowattService {
       if (errorCode != 0) {
         return GrowattError(
           GrowattErrorKind.serverError,
-          'error_code=$errorCode msg=${json['error_msg']} | body: ${_preview(body, 300)}',
+          'error_code=$errorCode msg=${json["error_msg"]} | body: ${_preview(body, 300)}',
         );
       }
 
