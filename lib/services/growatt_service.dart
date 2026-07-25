@@ -2,20 +2,16 @@
 //
 // Integrazione Growatt cloud API per leggere i dati del fotovoltaico.
 //
-// Endpoint reali utilizzati (documentazione community Growatt):
-//   POST /login                                      → login + JSESSIONID
-//   POST /newTwoPlantAPI/getPlantData                → dati impianto oggi
-//   POST /panel/plant/getPlantData (DEPRECATO/404)   → non usare
+// Endpoint reali:
+//   POST /login                          → login, raccoglie Set-Cookie multipli
+//   POST /newTwoPlantAPI/getPlantData    → dati impianto oggi
 //
-// Dati disponibili:
-//   • Produzione PV oggi (kWh)            → GrowattData.pvTodayKwh
-//   • Potenza PV istantanea (W)            → GrowattData.pvPowerW
-//   • Energia importata da rete oggi (kWh) → GrowattData.gridImportTodayKwh
-//   • Energia esportata in rete oggi (kWh) → GrowattData.gridExportTodayKwh
-//   • Autoconsumo oggi (kWh)               → GrowattData.selfConsumptionTodayKwh
-//
-// NOTA SICUREZZA: non hardcodare mai username/password nel codice.
-// Usare flutter_secure_storage per persistere le credenziali.
+// BUG FIX: http.Client di Dart consolida gli header duplicati con la
+// virgola (RFC 7230 §3.2.2), ma alcuni server Growatt richiedono che
+// JSESSIONID e SERVERID vengano inviati come cookie separati.
+// Usiamo response.headers che in Dart è case-insensitive e unisce
+// i valori con virgola. Splittiamo su virgola E punto-e-virgola per
+// estrarre tutti i token nome=valore.
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
@@ -26,23 +22,14 @@ import 'package:http/http.dart' as http;
 // ---------------------------------------------------------------------------
 
 class GrowattData {
-  /// Produzione fotovoltaica totale oggi (kWh)
   final double pvTodayKwh;
-
-  /// Potenza fotovoltaica istantanea (W)
   final double pvPowerW;
-
-  /// Energia importata dalla rete oggi (kWh)
   final double gridImportTodayKwh;
-
-  /// Energia esportata in rete oggi (kWh)
   final double gridExportTodayKwh;
 
-  /// Autoconsumo oggi = produzione - esportazione (kWh)
   double get selfConsumptionTodayKwh =>
       (pvTodayKwh - gridExportTodayKwh).clamp(0.0, double.infinity);
 
-  /// Timestamp dell'ultimo aggiornamento (UTC)
   final DateTime fetchedAt;
 
   const GrowattData({
@@ -95,13 +82,14 @@ enum GrowattErrorKind {
 
 class GrowattService {
   static const String _baseUrl = 'https://server.growatt.com';
-
-  /// Plant ID dell'impianto Nigro — SantAgata Bolognese, 6000W
   static const int defaultPlantId = 11037032;
 
   final int plantId;
   final http.Client _client;
 
+  /// Stringa cookie completa da inviare nell'header Cookie.
+  /// Contiene tutti i token ricevuti nei Set-Cookie del login,
+  /// es. "JSESSIONID=abc123; SERVERID=tomcat1"
   String? _sessionCookie;
 
   GrowattService({
@@ -110,6 +98,41 @@ class GrowattService {
   }) : _client = client ?? http.Client();
 
   bool get isLoggedIn => _sessionCookie != null;
+
+  // -------------------------------------------------------------------------
+  // Estrae tutti i cookie nome=valore da un header set-cookie.
+  //
+  // Dart's http.Response.headers unisce gli header duplicati con ", ".
+  // Ogni direttiva Set-Cookie ha formato:
+  //   name=value; Path=/; HttpOnly[; altri attributi]
+  //
+  // Strategia: splittiamo su "; " per separare le direttive, poi
+  // teniamo solo i token che contengono "=" e non sono attributi noti
+  // (Path, HttpOnly, Secure, SameSite, Max-Age, Expires, Domain).
+  // -------------------------------------------------------------------------
+  static String _extractCookies(String rawSetCookie) {
+    final attributeNames = {
+      'path', 'httponly', 'secure', 'samesite',
+      'max-age', 'expires', 'domain',
+    };
+
+    final tokens = rawSetCookie.split(RegExp(r',(?=\s*\w+=)'));
+    final cookiePairs = <String>{};
+
+    for (final token in tokens) {
+      final parts = token.split(';');
+      for (final part in parts) {
+        final trimmed = part.trim();
+        final eqIdx = trimmed.indexOf('=');
+        if (eqIdx <= 0) continue;
+        final name = trimmed.substring(0, eqIdx).trim().toLowerCase();
+        if (attributeNames.contains(name)) continue;
+        cookiePairs.add(trimmed.substring(0, trimmed.length)); // name=value originale
+      }
+    }
+
+    return cookiePairs.join('; ');
+  }
 
   // -------------------------------------------------------------------------
   // LOGIN
@@ -135,6 +158,9 @@ class GrowattService {
         },
       ).timeout(const Duration(seconds: 15));
 
+      debugPrint('[GrowattService] login status=${response.statusCode}');
+      debugPrint('[GrowattService] login headers=${response.headers}');
+
       if (response.statusCode != 200) {
         return GrowattError(
           GrowattErrorKind.serverError,
@@ -152,16 +178,20 @@ class GrowattService {
         );
       }
 
-      final setCookie = response.headers['set-cookie'];
-      if (setCookie == null) {
+      // Raccoglie TUTTI i Set-Cookie (JSESSIONID, SERVERID, ecc.)
+      final rawCookie = response.headers['set-cookie'];
+      debugPrint('[GrowattService] set-cookie raw: $rawCookie');
+
+      if (rawCookie == null || rawCookie.isEmpty) {
         return const GrowattError(
           GrowattErrorKind.serverError,
           'Login OK ma nessun cookie di sessione ricevuto.',
         );
       }
-      _sessionCookie = setCookie.split(';').first.trim();
 
-      debugPrint('[GrowattService] Login OK — sessione attiva.');
+      _sessionCookie = _extractCookies(rawCookie);
+      debugPrint('[GrowattService] cookie estratto: $_sessionCookie');
+
       return GrowattOk(GrowattData(
         pvTodayKwh: 0,
         pvPowerW: 0,
@@ -176,16 +206,6 @@ class GrowattService {
 
   // -------------------------------------------------------------------------
   // FETCH DATI OGGI
-  //
-  // Endpoint corretto: POST /newTwoPlantAPI/getPlantData
-  // Body form: plantId=<id>
-  // Risposta: { "result": 1, "obj": { "plantData": { ... } } }
-  //
-  // Campi rilevanti in obj.plantData:
-  //   etoday        → kWh prodotti oggi
-  //   currentPower  → kW istantanei (moltiplicare ×1000 per W)
-  //   etoGridToday  → kWh esportati in rete oggi
-  //   eUsedToday    → kWh consumati oggi
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
@@ -211,14 +231,16 @@ class GrowattService {
       ).timeout(const Duration(seconds: 15));
 
       debugPrint('[GrowattService] fetchToday status=${response.statusCode}');
-      debugPrint('[GrowattService] fetchToday body=${response.body.substring(0, response.body.length.clamp(0, 300))}');
+      final preview = response.body.length > 400
+          ? response.body.substring(0, 400)
+          : response.body;
+      debugPrint('[GrowattService] fetchToday body=$preview');
 
-      if (response.statusCode == 302 ||
-          response.body.contains('"result":-1')) {
+      if (response.statusCode == 302) {
         _sessionCookie = null;
         return const GrowattError(
           GrowattErrorKind.sessionExpired,
-          'Sessione scaduta. Eseguire nuovamente il login.',
+          'Sessione scaduta (redirect 302). Eseguire nuovamente il login.',
         );
       }
 
@@ -226,6 +248,15 @@ class GrowattService {
         return GrowattError(
           GrowattErrorKind.serverError,
           'HTTP ${response.statusCode}',
+        );
+      }
+
+      // Controlla result:-1 SOLO dopo aver verificato che il body sia JSON
+      if (response.body.contains('"result":-1')) {
+        _sessionCookie = null;
+        return const GrowattError(
+          GrowattErrorKind.sessionExpired,
+          'Sessione non riconosciuta dal server (result:-1). Eseguire nuovamente il login.',
         );
       }
 
@@ -238,18 +269,9 @@ class GrowattService {
   // -------------------------------------------------------------------------
   // PARSER
   //
-  // La risposta di /newTwoPlantAPI/getPlantData ha struttura:
-  // {
-  //   "result": 1,
-  //   "obj": {
-  //     "plantData": {
-  //       "etoday": "12.5",
-  //       "currentPower": "1.23",   ← kW
-  //       "etoGridToday": "3.2",
-  //       "eUsedToday": "9.3"
-  //     }
-  //   }
-  // }
+  // Struttura attesa:
+  // { "result": 1, "obj": { "plantData": { "etoday": "12.5", ... } } }
+  // Se plantData non esiste, prova a leggere obj direttamente.
   // -------------------------------------------------------------------------
 
   GrowattResult _parsePlantData(String body) {
@@ -260,26 +282,24 @@ class GrowattService {
       if (obj == null) {
         return GrowattError(
           GrowattErrorKind.parseError,
-          'Campo "obj" mancante. Risposta: ${body.substring(0, body.length.clamp(0, 200))}',
+          'Campo "obj" mancante. Body: ${body.substring(0, body.length.clamp(0, 300))}',
         );
       }
 
-      // /newTwoPlantAPI/getPlantData annida i dati in obj.plantData
       final plantData = (obj['plantData'] as Map<String, dynamic>?) ?? obj;
 
-      double _d(dynamic v) {
+      double d(dynamic v) {
         if (v == null) return 0.0;
         if (v is num) return v.toDouble();
         return double.tryParse(v.toString()) ?? 0.0;
       }
 
-      final double pvTodayKwh    = _d(plantData['etoday']);
-      final double pvPowerKw     = _d(plantData['currentPower']); // kW
-      final double gridExport    = _d(plantData['etoGridToday']);
-      final double usedToday     = _d(plantData['eUsedToday']);
-      // gridImport = consumo - (produzione - esportazione)
-      final double selfCons      = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
-      final double gridImport    = (usedToday - selfCons).clamp(0.0, double.infinity);
+      final double pvTodayKwh = d(plantData['etoday']);
+      final double pvPowerKw  = d(plantData['currentPower']);
+      final double gridExport = d(plantData['etoGridToday']);
+      final double usedToday  = d(plantData['eUsedToday']);
+      final double selfCons   = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
+      final double gridImport = (usedToday - selfCons).clamp(0.0, double.infinity);
 
       return GrowattOk(GrowattData(
         pvTodayKwh: pvTodayKwh,
@@ -296,11 +316,5 @@ class GrowattService {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // DISPOSE
-  // -------------------------------------------------------------------------
-
-  void dispose() {
-    _client.close();
-  }
+  void dispose() => _client.close();
 }
