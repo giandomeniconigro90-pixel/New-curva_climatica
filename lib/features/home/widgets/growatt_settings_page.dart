@@ -1,15 +1,14 @@
 // lib/features/home/widgets/growatt_settings_page.dart
 //
-// Schermata di configurazione credenziali Growatt.
+// Schermata di configurazione API Token Growatt.
 // Accessibile dalle impostazioni dell'app.
 //
 // Flusso:
-//   1. Utente inserisce username (o email) + password Shine Phone
-//   2. Tap "Connetti" → login() → se OK salva con GrowattCredentialsService
+//   1. Utente incolla l'API Token generato su server.growatt.com
+//      → Settings → API Token
+//   2. Tap "Connetti" → fetchToday() con il token → se OK salva con
+//      GrowattCredentialsService
 //   3. Da quel momento GrowattService può fare fetchToday() automaticamente
-//
-// fix: il campo username accetta sia email (mario@example.com)
-//      che username puro (es. "mariobianchi") — Growatt supporta entrambi.
 
 import 'package:flutter/material.dart';
 import '../../../services/growatt_credentials_service.dart';
@@ -25,10 +24,9 @@ class GrowattSettingsPage extends StatefulWidget {
 
 class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameCtrl = TextEditingController();
-  final _passwordCtrl = TextEditingController();
+  final _tokenCtrl = TextEditingController();
 
-  bool _obscurePassword = true;
+  bool _obscureToken = true;
   bool _isLoading = false;
   bool _isConnected = false;
 
@@ -37,22 +35,20 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
   @override
   void initState() {
     super.initState();
-    _loadSavedCredentials();
+    _loadSavedToken();
   }
 
   @override
   void dispose() {
-    _usernameCtrl.dispose();
-    _passwordCtrl.dispose();
+    _tokenCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _loadSavedCredentials() async {
-    final creds = await GrowattCredentialsService.load();
-    if (creds != null && mounted) {
+  Future<void> _loadSavedToken() async {
+    final token = await GrowattCredentialsService.load();
+    if (token != null && mounted) {
       setState(() {
-        _usernameCtrl.text = creds.username;
-        _passwordCtrl.text = creds.password;
+        _tokenCtrl.text = token;
         _isConnected = true;
       });
     }
@@ -62,30 +58,7 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _isLoading = true);
 
-    final service = GrowattService();
-    final loginResult = await service.login(
-      username: _usernameCtrl.text.trim(),
-      password: _passwordCtrl.text,
-    );
-
-    if (!mounted) return;
-
-    if (loginResult is GrowattError) {
-      setState(() => _isLoading = false);
-      AppToast.show(
-        _errorMessage(loginResult),
-        context: context,
-        level: ToastLevel.error,
-      );
-      return;
-    }
-
-    // Login OK — salva credenziali e fai subito un fetch di test
-    await GrowattCredentialsService.save(
-      username: _usernameCtrl.text.trim(),
-      password: _passwordCtrl.text,
-    );
-
+    final service = GrowattService(apiToken: _tokenCtrl.text.trim());
     final fetchResult = await service.fetchToday();
     service.dispose();
 
@@ -93,6 +66,7 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
     setState(() => _isLoading = false);
 
     if (fetchResult is GrowattOk) {
+      await GrowattCredentialsService.save(token: _tokenCtrl.text.trim());
       setState(() {
         _isConnected = true;
         _lastData = fetchResult.data;
@@ -103,11 +77,10 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
         level: ToastLevel.success,
       );
     } else if (fetchResult is GrowattError) {
-      setState(() => _isConnected = true); // login OK anche se fetch fallisce
       AppToast.show(
-        'Login OK ma fetch dati fallito: ${_errorMessage(fetchResult)}',
+        _errorMessage(fetchResult),
         context: context,
-        level: ToastLevel.warning,
+        level: ToastLevel.error,
       );
     }
   }
@@ -118,8 +91,7 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
     setState(() {
       _isConnected = false;
       _lastData = null;
-      _usernameCtrl.clear();
-      _passwordCtrl.clear();
+      _tokenCtrl.clear();
     });
     AppToast.show('Account Growatt rimosso.', context: context, level: ToastLevel.info);
   }
@@ -127,13 +99,13 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
   String _errorMessage(GrowattError e) {
     switch (e.kind) {
       case GrowattErrorKind.authFailed:
-        return 'Credenziali errate. Verifica username/email e password Shine Phone.';
+        return 'Token non valido. Verifica su server.growatt.com → Settings → API Token.';
       case GrowattErrorKind.networkError:
         return 'Nessuna connessione. Controlla la rete e riprova.';
       case GrowattErrorKind.sessionExpired:
-        return 'Sessione scaduta. Riconnetti.';
+        return 'Token scaduto. Rigenera il token su server.growatt.com.';
       case GrowattErrorKind.plantNotFound:
-        return 'Impianto non trovato. Verifica il Plant ID.';
+        return 'Nessun impianto trovato per questo token.';
       default:
         return e.message;
     }
@@ -158,16 +130,18 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
             _ConnectionStatusCard(isConnected: _isConnected, data: _lastData),
             const SizedBox(height: 28),
 
-            // ── Form credenziali ─────────────────────────────────────────
+            // ── Istruzioni ───────────────────────────────────────────────
             Text(
-              'Account Shine Phone',
+              'API Token Growatt',
               style: theme.textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 4),
             Text(
-              'Inserisci le stesse credenziali che usi per accedere al sito Growatt o all\'app Shine Phone. Puoi usare sia la email che lo username. Le credenziali vengono salvate in modo cifrato nel keystore del dispositivo.',
+              'Incolla il token generato su server.growatt.com → '
+              'Settings → API Token. Il token viene salvato in modo '
+              'cifrato nel keystore del dispositivo.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colors.onSurface.withOpacity(0.6),
               ),
@@ -176,48 +150,30 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
 
             Form(
               key: _formKey,
-              child: Column(
-                children: [
-                  // USERNAME — accetta sia email che username puro
-                  TextFormField(
-                    controller: _usernameCtrl,
-                    keyboardType: TextInputType.text,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Username o Email Shine Phone',
-                      prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
-                      hintText: 'es. mario.bianchi oppure mario@example.com',
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Inserisci lo username o la email';
-                      }
-                      return null; // accetta qualsiasi stringa non vuota
-                    },
+              child: TextFormField(
+                controller: _tokenCtrl,
+                obscureText: _obscureToken,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: InputDecoration(
+                  labelText: 'API Token',
+                  prefixIcon: const Icon(Icons.vpn_key_outlined),
+                  border: const OutlineInputBorder(),
+                  hintText: 'Incolla qui il tuo API Token',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureToken
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: () =>
+                        setState(() => _obscureToken = !_obscureToken),
                   ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordCtrl,
-                    obscureText: _obscurePassword,
-                    decoration: InputDecoration(
-                      labelText: 'Password Shine Phone',
-                      prefixIcon: const Icon(Icons.lock_outline),
-                      border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: Icon(_obscurePassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined),
-                        onPressed: () =>
-                            setState(() => _obscurePassword = !_obscurePassword),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return 'Inserisci la password';
-                      return null;
-                    },
-                  ),
-                ],
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return 'Inserisci il token API';
+                  }
+                  return null;
+                },
               ),
             ),
             const SizedBox(height: 24),
@@ -249,8 +205,8 @@ class _GrowattSettingsPageState extends State<GrowattSettingsPage> {
 
             const SizedBox(height: 32),
 
-            // ── Info Plant ID ────────────────────────────────────────────
-            _PlantIdInfoCard(),
+            // ── Info API Token ───────────────────────────────────────────
+            _ApiTokenInfoCard(),
           ],
         ),
       ),
@@ -313,7 +269,7 @@ class _ConnectionStatusCard extends StatelessWidget {
   }
 }
 
-class _PlantIdInfoCard extends StatelessWidget {
+class _ApiTokenInfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -330,14 +286,15 @@ class _PlantIdInfoCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Plant ID configurato',
+                    'Come ottenere il token',
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Plant ID: ${GrowattService.defaultPlantId}\n'
-                    'Impianto: Nigro — SantAgata Bolognese\n'
-                    'Capacità: 6000 W',
+                    '1. Vai su server.growatt.com\n'
+                    '2. Accedi con il tuo account\n'
+                    '3. Settings → API Token → Generate\n'
+                    '4. Copia il token e incollalo qui sopra',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
