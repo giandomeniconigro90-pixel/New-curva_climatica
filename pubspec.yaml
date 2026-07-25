@@ -52,6 +52,9 @@ dependencies:
   # SICUREZZA — credenziali Growatt cifrate nel keystore del dispositivo
   flutter_secure_storage: ^9.2.2
 
+  # CRYPTO — MD5 password per login Growatt
+  crypto: ^3.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
