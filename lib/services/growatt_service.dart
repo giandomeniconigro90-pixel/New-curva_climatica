@@ -4,7 +4,7 @@
 //
 //  STEP 1 — GET /v1/plant/list
 //            Header: token: <API_TOKEN>
-//            Restituisce la lista impianti con plantId
+//            Risposta reale: { "data": { "plants": [...], "count": 1 }, "error_code": 0 }
 //
 //  STEP 2 — GET /v1/plant/{plantId}/devices
 //            Header: token: <API_TOKEN>
@@ -116,7 +116,7 @@ class GrowattService {
   // -------------------------------------------------------------------------
   // STEP 1 — Recupera il primo plantId
   // GET /v1/plant/list
-  // Risposta: { "data": [ { "plant_id": "...", ... } ], "error_code": 0 }
+  // Risposta reale: { "data": { "plants": [ { "plant_id": 11037032, ... } ], "count": 1 }, "error_code": 0 }
   // -------------------------------------------------------------------------
 
   Future<GrowattResult?> _fetchPlantId() async {
@@ -152,21 +152,30 @@ class GrowattService {
         );
       }
 
-      final dataList = json['data'] as List<dynamic>?;
-      if (dataList == null || dataList.isEmpty) {
+      // La risposta reale ha: { "data": { "plants": [...], "count": N } }
+      // Supporta anche il formato flat { "data": [...] } per compatibilità futura
+      List<dynamic>? plantList;
+      final dataField = json['data'];
+      if (dataField is Map<String, dynamic>) {
+        plantList = dataField['plants'] as List<dynamic>?;
+      } else if (dataField is List<dynamic>) {
+        plantList = dataField;
+      }
+
+      if (plantList == null || plantList.isEmpty) {
         return const GrowattError(
           GrowattErrorKind.plantNotFound,
           'Nessun impianto trovato per questo token.',
         );
       }
 
-      final first = dataList.first as Map<String, dynamic>;
+      final first = plantList.first as Map<String, dynamic>;
       _plantId = (first['plant_id'] ?? first['plantId'])?.toString();
 
       if (_plantId == null || _plantId!.isEmpty) {
         return GrowattError(
           GrowattErrorKind.parseError,
-          'plant_id non trovato. data[0]=$first',
+          'plant_id non trovato. plants[0]=$first',
         );
       }
 
@@ -216,15 +225,23 @@ class GrowattService {
         );
       }
 
-      final dataList = json['data'] as List<dynamic>?;
-      if (dataList == null || dataList.isEmpty) {
+      // Supporta sia { "data": [...] } che { "data": { "devices": [...] } }
+      List<dynamic>? deviceList;
+      final dataField = json['data'];
+      if (dataField is List<dynamic>) {
+        deviceList = dataField;
+      } else if (dataField is Map<String, dynamic>) {
+        deviceList = (dataField['devices'] ?? dataField['data']) as List<dynamic>?;
+      }
+
+      if (deviceList == null || deviceList.isEmpty) {
         return GrowattError(
           GrowattErrorKind.plantNotFound,
           'Nessun device trovato per plantId=$_plantId.',
         );
       }
 
-      final first = dataList.first as Map<String, dynamic>;
+      final first = deviceList.first as Map<String, dynamic>;
       _deviceSn = (first['device_sn'] ?? first['deviceSn'] ?? first['sn'])?.toString();
 
       if (_deviceSn == null || _deviceSn!.isEmpty) {
@@ -248,7 +265,6 @@ class GrowattService {
   // -------------------------------------------------------------------------
 
   Future<GrowattResult> fetchToday() async {
-    // Risolvi plantId e deviceSn se non ancora in cache
     if (_plantId == null) {
       final err = await _fetchPlantId();
       if (err != null) return err;
@@ -264,8 +280,7 @@ class GrowattService {
 
     http.Response response;
     try {
-      final uri = Uri.parse(
-          '$_baseUrl/v1/device/$_deviceSn/energy?date=$dateStr');
+      final uri = Uri.parse('$_baseUrl/v1/device/$_deviceSn/energy?date=$dateStr');
       response = await _client
           .get(uri, headers: _headers)
           .timeout(const Duration(seconds: 15));
@@ -317,10 +332,10 @@ class GrowattService {
       }
 
       final pvTodayKwh = _d(obj['etoday']);
-      final pvPowerW = _d(obj['pac']);
+      final pvPowerW   = _d(obj['pac']);
       final gridExport = _d(obj['etoGridToday'] ?? obj['export_energy']);
-      final usedToday = _d(obj['eUsedToday'] ?? obj['consume_energy']);
-      final selfCons = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
+      final usedToday  = _d(obj['eUsedToday'] ?? obj['consume_energy']);
+      final selfCons   = (pvTodayKwh - gridExport).clamp(0.0, double.infinity);
       final gridImport = (usedToday - selfCons).clamp(0.0, double.infinity);
 
       debugPrint('[Growatt] parsed: pv=$pvTodayKwh kWh, power=$pvPowerW W');
